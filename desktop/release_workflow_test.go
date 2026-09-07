@@ -66,6 +66,19 @@ func TestReleaseWorkflowRepackagesSignedPortablePayload(t *testing.T) {
 	}
 }
 
+func TestReleaseFrontendGateGeneratesNativeBindings(t *testing.T) {
+	workflow := readDesktopReleaseWorkflow(t)
+	gate := workflowSection(workflow, "  cache-guard:", "  build:")
+	generate := strings.Index(gate, "wails generate module -tags webkit2_41")
+	tests := strings.Index(gate, "npm run test:all")
+	if generate < 0 || tests <= generate {
+		t.Fatal("fresh-checkout frontend tests require generated Wails bindings first")
+	}
+	if !strings.Contains(gate, "libwebkit2gtk-4.1-dev") {
+		t.Fatal("binding generation must use the installed Linux WebKit toolchain")
+	}
+}
+
 func TestReleaseWorkflowValidatesExistingAnnotatedTagBeforePublish(t *testing.T) {
 	workflow := readDesktopReleaseWorkflow(t)
 	section := workflowSection(workflow, "- name: Validate stable tag target", "# Canary is R2-only")

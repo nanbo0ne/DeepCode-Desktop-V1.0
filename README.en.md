@@ -1,6 +1,6 @@
 [简体中文](README.md) | **English**
 
-# O.R.C.A for Windows
+# O.R.C.A. for Windows
 
 **O.R.C.A.** stands for **Open Reasoning & Computing Agent**. It is an open-source agent workspace for real work, bringing multi-model conversations, software engineering, research and documents, computer control, local models, memory, and automation into one inspectable, pausable, recoverable application.
 

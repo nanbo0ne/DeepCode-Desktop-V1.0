@@ -69,6 +69,8 @@ The NSIS embedded CRC matched the independent offline calculation, and a one-byt
 
 The source-frozen frontend tests ran on Node 22.23.2. Production frontend/Wails packaging, root Go tests, all desktop Go packages, and diff whitespace checks passed. The final native process exposed the correct window title, but the external helper's last accessibility snapshot lacked child labels and its screenshot was occluded. That attempt is not counted as another full native interaction pass.
 
+The first release CI run caught a missing Wails binding-generation step in the fresh-checkout frontend gate; publishing was blocked and the step was added. Development dependency advisories were addressed through compatible lockfile updates; `npm audit` then reported zero known vulnerabilities. Legacy PDF fixtures are explicitly binary so checkout cannot change their byte offsets.
+
 ## Remaining Boundaries
 
 No clean Windows VM, full local-model download, GPU inference, real financial action, or UAC bypass was performed. Native multi-monitor DPI and full Computer Use input acceptance remain hardware-dependent checks. Remote bot accounts other than the supplied model provider are not configured for live testing. Release notes must retain these distinctions and the unsigned-Windows warning.

@@ -1,6 +1,6 @@
 **简体中文** | [English](README.en.md)
 
-# O.R.C.A for Windows
+# O.R.C.A. for Windows
 
 **O.R.C.A.**（**Open Reasoning & Computing Agent**）是一套面向真实工作的开源 AI Agent。它把多模型对话、代码工程、资料处理、桌面操作、本地模型、记忆与自动化放进同一个可检查、可暂停、可恢复的工作区。
 

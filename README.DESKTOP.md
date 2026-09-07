@@ -1,4 +1,4 @@
-# O.R.C.A Desktop
+# O.R.C.A. Desktop
 
 O.R.C.A. Desktop is the graphical workspace for **Open Reasoning & Computing Agent**. It provides Assistant and Coding conversations, the fixed Orca control entry, multi-provider models, tools, files, projects, sessions, memory, MCP, Skills, artifacts, automation, and inspectable execution history.
 

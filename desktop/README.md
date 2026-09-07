@@ -1,4 +1,4 @@
-# O.R.C.A Desktop (Wails shell)
+# O.R.C.A. Desktop (Wails shell)
 
 A native desktop window around the O.R.C.A Go kernel. The same
 transport-agnostic `control.Controller` that backs the chat TUI and the HTTP/SSE
