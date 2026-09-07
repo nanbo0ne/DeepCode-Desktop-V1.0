@@ -11,7 +11,7 @@ Validation record for v3.0.2. This document records the tested source and local 
 - [x] Complete context-panel and browser workflow regression checks.
 - [x] Verify installer directory selection, cleanup scope, and pinned dependencies.
 - [x] Run source-frozen frontend, Go, layout, and Windows package checks.
-- [ ] Publish the verified version and confirm hosted downloads.
+- [x] Publish the verified version and confirm hosted downloads (network limits below).
 
 ## Real Provider Scenarios
 
@@ -73,6 +73,18 @@ The source-frozen frontend tests ran on Node 22.23.2. Production frontend/Wails 
 The first release CI run caught a missing Wails binding-generation step in the fresh-checkout frontend gate; publishing was blocked and the step was added. Development dependency advisories were addressed through compatible lockfile updates; `npm audit` then reported zero known vulnerabilities. Legacy PDF fixtures are explicitly binary so checkout cannot change their byte offsets.
 
 Subsequent fresh-platform checks caught Windows packaging's absent parent directory and installer contract tests depending on an untracked Windows-generated include. Both were fixed without removing the native test gates. The public release is created only after all platform jobs succeed.
+
+## Published Release
+
+[Release v3.0.2](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.2) was published at `2026-09-07T15:43:14Z` from commit `84af88dbcbc2c1ecceb807c6b57f12dedfc42c83`. [Workflow 34138943240](https://github.com/nanbo0ne/O.R.C.A-for-Windows/actions/runs/34138943240) passed the frontend gate and all three native platform builds/tests. The R2 job's success is not evidence of a mirror upload: unconfigured signing/mirror steps are skipped.
+
+The ten GitHub assets include Windows compatibility aliases and `SHA256SUMS.txt`. The missing checksum asset was added without replacing binaries or moving the tag. Future releases now generate and verify that manifest before publication, covered by script execution and workflow-order tests. This packaging-only follow-up does not change the released application.
+
+Six final assets were downloaded from GitHub, checked against GitHub's SHA-256 digests, and placed in the local `dist/desktop-v3.0.2` directory. The final installer passed the independent NSIS CRC calculation and archive extraction. Its `Orca.exe` exactly matches the portable ZIP, including version `3.0.2.0`; the Node payload matches its pinned digest. The Windows application remains unsigned.
+
+The same six files were transferred to the Mac mini over its authenticated LAN SSH connection and hash-checked before and after staging. The [download site](https://orca.aichat.diy/) was switched atomically to v3.0.2; the old page and release directories were preserved. Only the O.R.C.A. version, download links, and corresponding bilingual version text changed.
+
+Public verification confirmed all six download endpoints and the five binary content lengths. The page, bilingual copy, and checksum manifest matched local bytes. Installer range `0-1023` returned HTTP 206 and matching bytes; 1,986,560 bytes of a separate full GET also matched the GitHub asset. A distant range attempt timed out, and the slow full public re-download was stopped before completion. Full-file SHA-256 is verified on GitHub downloads, local deliverables, and server storage, not on a completed public mirror GET. Prefer the GitHub link if the mirror is slow.
 
 ## Remaining Boundaries
 
