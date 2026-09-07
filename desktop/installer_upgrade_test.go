@@ -15,11 +15,7 @@ func readWindowsInstallerSource(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tools, err := os.ReadFile(filepath.Join("build", "windows", "installer", "wails_tools.nsh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(body) + "\n" + string(tools)
+	return string(body)
 }
 
 func TestWindowsInstallerUpgradeAndUninstallContracts(t *testing.T) {
@@ -30,7 +26,6 @@ func TestWindowsInstallerUpgradeAndUninstallContracts(t *testing.T) {
 		`!define ORCA_INSTALLDIR_SENTINEL "$LOCALAPPDATA\Programs\O.R.C.A for Windows.__nsis_default__"`,
 		`InstallDir "${ORCA_INSTALLDIR_SENTINEL}"`,
 		`StrCmp $INSTDIR "${ORCA_INSTALLDIR_SENTINEL}" use_compat_install_dir install_dir_done`,
-		`RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"`,
 		`!define REQUEST_EXECUTION_LEVEL "user"`,
 		`ManifestDPIAware true`,
 		`Call orca.closeTargetProcesses`,
@@ -46,6 +41,11 @@ func TestWindowsInstallerUpgradeAndUninstallContracts(t *testing.T) {
 		if !strings.Contains(script, want) {
 			t.Fatalf("installer is missing %q", want)
 		}
+	}
+	userLevel := strings.Index(script, `!define REQUEST_EXECUTION_LEVEL "user"`)
+	include := strings.Index(script, `!include "wails_tools.nsh"`)
+	if userLevel < 0 || include <= userLevel {
+		t.Fatal("the user execution level must override Wails before its generated include")
 	}
 
 	if strings.Contains(script, `taskkill.exe" /IM`) {

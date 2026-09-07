@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -103,6 +105,36 @@ func TestWindowsPackagingPrepOnlySkipsApplicationBuild(t *testing.T) {
 	prepEnd := strings.Index(script[prepStart:], "fi")
 	if prepEnd < 0 || strings.Contains(script[prepStart:prepStart+prepEnd], "wails build") {
 		t.Fatal("prep-only mode must exit before the Wails build")
+	}
+}
+
+func TestWindowsPackagingCreatesFreshPayloadParent(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	body, err := os.ReadFile("../scripts/desktop-build.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	start := strings.Index(script, "resolve_absolute_path()")
+	end := strings.Index(script, "\tlocal node_arch node_archive")
+	if start < 0 || end <= start {
+		t.Fatal("cannot locate packaging directory preparation")
+	}
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "desktop", "build", "windows", "installer"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bash, "--noprofile", "--norc", "-s")
+	cmd.Env = append(os.Environ(), "ROOT="+filepath.ToSlash(root), "os=windows")
+	cmd.Stdin = strings.NewReader("set -eu\n" + script[start:end] + "}\nprepare_windows_installer_resources\n")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fresh packaging preparation: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(filepath.Join(root, "desktop", "build", "windows", "installer-go", "payload")); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -88,6 +88,8 @@ prepare_windows_installer_resources() {
 	local payload="$ROOT/desktop/build/windows/installer-go/payload"
 	mkdir -p "$res"
 	assert_within_dir "$res" "$ROOT/desktop/build/windows"
+	assert_within_dir "$ROOT/desktop/build/windows/installer-go" "$ROOT/desktop/build/windows"
+	mkdir -p "$ROOT/desktop/build/windows/installer-go"
 	assert_within_dir "$payload" "$ROOT/desktop/build/windows/installer-go"
 	mkdir -p "$payload"
 
