@@ -749,7 +749,7 @@ func (a *Agent) finalReadinessCheck() finalReadinessCheck {
 		if command == "" {
 			continue
 		}
-		if !a.evidence.HasSuccessfulCommandAfter(command, writer) && !a.evidence.HasSuccessfulVerificationAfter(writer) {
+		if !a.evidence.HasSuccessfulCommandAfter(command, writer) {
 			out.missingProjectChecks++
 			missing = append(missing, fmt.Sprintf("run %q from %s after the latest write", command, finalReadinessCheckSource(check)))
 		}

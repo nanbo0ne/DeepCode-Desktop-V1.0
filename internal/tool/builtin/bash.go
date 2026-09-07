@@ -68,11 +68,27 @@ func cachedBashShellPATH(ctx context.Context) string {
 // zero or negative means no tool-local cap, while parent context cancellation
 // still kills the process tree.
 type bash struct {
-	sb        sandbox.Spec
-	shell     sandbox.Shell
-	workDir   string
-	timeout   time.Duration
-	hostSteer string
+	sb          sandbox.Spec
+	shell       sandbox.Shell
+	workDir     string
+	timeout     time.Duration
+	hostSteer   string
+	environment []string
+}
+
+// BindBashEnvironment snapshots one workspace's environment during assembly.
+// The registered builtin and other workspaces remain unchanged.
+func BindBashEnvironment(reg *tool.Registry, env []string) {
+	t, ok := reg.Get("bash")
+	if !ok {
+		return
+	}
+	b, ok := t.(bash)
+	if !ok {
+		return
+	}
+	b.environment = append([]string{}, env...)
+	reg.Add(b)
 }
 
 func (bash) Name() string { return "bash" }
@@ -145,7 +161,7 @@ func (b bash) Execute(ctx context.Context, args json.RawMessage) (string, error)
 	command := rewriteWindowsShutdownCommand(sh, p.Command)
 	// Wrap in the OS sandbox when configured; otherwise argv is just the shell.
 	argv, _ := sandbox.Command(b.sb, sh, command)
-	cmdEnv := bashCommandEnv(ctx)
+	cmdEnv := bashEnvironment(ctx, b.environment)
 
 	if p.RunInBackground {
 		jm, ok := jobs.FromContext(ctx)
@@ -371,7 +387,14 @@ func commandPreview(cmd string) string {
 }
 
 func bashCommandEnv(ctx context.Context) []string {
-	env := os.Environ()
+	return bashEnvironment(ctx, nil)
+}
+
+func bashEnvironment(ctx context.Context, base []string) []string {
+	env := append([]string(nil), base...)
+	if base == nil {
+		env = os.Environ()
+	}
 	if runtime.GOOS == "windows" {
 		return env
 	}

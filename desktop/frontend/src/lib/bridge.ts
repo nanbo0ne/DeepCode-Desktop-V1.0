@@ -2426,7 +2426,7 @@ function makeMockApp(): AppBindings {
     async CompleteOnboarding() { settings.computerUseFullAccessApproved = false; },
     async ConnectProviderPreset(_presetID: string, _apiKey: string) { return settings.providers[0]?.models ?? []; },
     async GetHardwareProfile() {
-      return { platform: "browser", supported: false, gpus: [], memoryTotalMiB: 0, memoryFreeMiB: 0, cpuLogicalCores: 0, diskFreeBytes: 0, recommendedRuntime: "", recommendedModel: "" };
+      return { platform: "browser", supported: false, gpus: [], gpuDetectionFailed: false, memoryTotalMiB: 0, memoryFreeMiB: 0, cpuLogicalCores: 0, diskFreeBytes: 0, recommendedRuntime: "", recommendedModel: "" };
     },
     async GetLocalAICatalog() {
       return { supported: false, platform: "browser", models: [], runtimes: [], installedModels: [], downloads: [], status: { state: "unavailable", supported: false, installed: false }, hardware: await this.GetHardwareProfile(), modelsDirectory: "" };

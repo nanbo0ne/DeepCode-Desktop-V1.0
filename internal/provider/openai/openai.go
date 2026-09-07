@@ -202,24 +202,35 @@ func (c *client) streamWithReconnect(ctx context.Context, resp *http.Response, n
 	defer close(out)
 	for attempt := 0; ; attempt++ {
 		emitted, err := c.readStream(ctx, resp, out)
-		if err == nil {
+		if err == nil || ctx.Err() != nil {
 			return
 		}
 		if !provider.IsConnReset(err) {
-			out <- provider.Chunk{Type: provider.ChunkError, Err: err}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: err}) {
+				return
+			}
 			return
 		}
 		if emitted {
-			out <- provider.Chunk{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: err}}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: err}}) {
+				return
+			}
 			return
 		}
 		if attempt >= maxStreamReconnects {
-			out <- provider.Chunk{Type: provider.ChunkError, Err: err}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: err}) {
+				return
+			}
+			return
+		}
+		if ctx.Err() != nil {
 			return
 		}
 		next, rerr := provider.SendWithRetry(ctx, c.http, c.name, c.keyEnv, newReq)
 		if rerr != nil {
-			out <- provider.Chunk{Type: provider.ChunkError, Err: rerr}
+			if ctx.Err() == nil {
+				_ = sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: rerr})
+			}
 			return
 		}
 		resp = next
@@ -293,8 +304,8 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 	}
 	switch {
 	case c.deepseek:
-		// DeepSeek's CoT is controlled by `thinking` (always on) plus
-		// `reasoning_effort` for depth. We never disable thinking for DeepSeek.
+		// Ordinary turns keep thinking enabled; isolated host classifiers can
+		// opt out without mutating the active conversation's provider settings.
 		out.Thinking = &thinkingMode{Type: "enabled"}
 	case c.minimax:
 		// M3 uses a single `thinking.type` field with two valid values:
@@ -306,6 +317,12 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		}
 		out.Thinking = &thinkingMode{Type: t}
 		out.ReasoningEffort = ""
+	}
+	if req.DisableThinking {
+		out.ReasoningEffort = ""
+		if c.deepseek || c.minimax {
+			out.Thinking = &thinkingMode{Type: "disabled"}
+		}
 	}
 	return out
 }
@@ -397,7 +414,9 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			u := normaliseUsage(sr.Usage)
 			u.FinishReason = lastFinishReason
 			emitted = true
-			out <- provider.Chunk{Type: provider.ChunkUsage, Usage: u}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkUsage, Usage: u}) {
+				return emitted, ctx.Err()
+			}
 		}
 		if len(sr.Choices) == 0 {
 			continue
@@ -406,17 +425,23 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		delta := sr.Choices[0].Delta
 		if delta.ReasoningContent != "" {
 			emitted = true
-			out <- provider.Chunk{Type: provider.ChunkReasoning, Text: delta.ReasoningContent}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: delta.ReasoningContent}) {
+				return emitted, ctx.Err()
+			}
 		}
 		if delta.Content != "" {
 			r, txt := think.push(delta.Content)
 			if r != "" {
 				emitted = true
-				out <- provider.Chunk{Type: provider.ChunkReasoning, Text: r}
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: r}) {
+					return emitted, ctx.Err()
+				}
 			}
 			if txt != "" {
 				emitted = true
-				out <- provider.Chunk{Type: provider.ChunkText, Text: txt}
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkText, Text: txt}) {
+					return emitted, ctx.Err()
+				}
 			}
 		}
 		for _, tc := range delta.ToolCalls {
@@ -439,7 +464,9 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			if !started[tc.Index] && cur.Name != "" {
 				started[tc.Index] = true
 				emitted = true
-				out <- provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: cur.ID, Name: cur.Name}}
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: cur.ID, Name: cur.Name}}) {
+					return emitted, ctx.Err()
+				}
 			}
 		}
 	}
@@ -459,10 +486,14 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 	if r, txt := think.flush(); r != "" || txt != "" {
 		if r != "" {
-			out <- provider.Chunk{Type: provider.ChunkReasoning, Text: r}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: r}) {
+				return emitted, ctx.Err()
+			}
 		}
 		if txt != "" {
-			out <- provider.Chunk{Type: provider.ChunkText, Text: txt}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkText, Text: txt}) {
+				return emitted, ctx.Err()
+			}
 		}
 	}
 
@@ -475,10 +506,23 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			// an empty tool_call_id collapses multi-tool turns downstream.
 			tc.ID = fmt.Sprintf("call_%d", idx)
 		}
-		out <- provider.Chunk{Type: provider.ChunkToolCall, ToolCall: tc}
+		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCall, ToolCall: tc}) {
+			return emitted, ctx.Err()
+		}
 	}
-	out <- provider.Chunk{Type: provider.ChunkDone}
+	if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkDone}) {
+		return emitted, ctx.Err()
+	}
 	return emitted, nil
+}
+
+func sendChunk(ctx context.Context, out chan<- provider.Chunk, chunk provider.Chunk) bool {
+	select {
+	case out <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // normaliseUsage folds the two cache-hit shapes the OpenAI-compatible ecosystem

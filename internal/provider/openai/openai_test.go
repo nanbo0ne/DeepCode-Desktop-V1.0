@@ -367,6 +367,19 @@ func TestBuildRequestForwardsReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestIsolatedClassifierDisablesThinkingWithoutChangingChat(t *testing.T) {
+	for _, c := range []*client{{deepseek: true, effort: "max"}, {minimax: true, effort: "adaptive"}, {effort: "high"}} {
+		req := c.buildRequest(provider.Request{DisableThinking: true, MaxTokens: 256})
+		if req.ReasoningEffort != "" || ((c.deepseek || c.minimax) && (req.Thinking == nil || req.Thinking.Type != "disabled")) {
+			t.Fatalf("classifier reasoning not disabled: %+v", req)
+		}
+		ordinary := c.buildRequest(provider.Request{})
+		if c.deepseek && (ordinary.Thinking.Type != "enabled" || ordinary.ReasoningEffort != "max") {
+			t.Fatal("classifier changed chat reasoning")
+		}
+	}
+}
+
 func TestBuildRequestDeepSeekThinking(t *testing.T) {
 	for _, tc := range []struct {
 		name          string

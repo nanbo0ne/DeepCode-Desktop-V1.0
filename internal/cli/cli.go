@@ -158,36 +158,49 @@ func configureCLIThemeFromConfigNoProbe() {
 // passes false so the session UI is reachable before a key is set. sink receives
 // the agent's typed event stream — runAgent passes a TextSink that renders to
 // stdout, the TUI passes an event-channel sink so events become tea.Msgs.
-func setup(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink) (*control.Controller, error) {
+func setup(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, workspaceRoot string) (*control.Controller, error) {
 	return boot.Build(ctx, boot.Options{
-		Model:      modelName,
-		MaxSteps:   maxStepsOverride,
-		RequireKey: requireKey,
-		Sink:       sink,
+		Model:         modelName,
+		MaxSteps:      maxStepsOverride,
+		RequireKey:    requireKey,
+		Sink:          sink,
+		WorkspaceRoot: workspaceRoot,
 	})
 }
 
 // setupQuiet is like setup but suppresses plugin subprocess stderr output.
 // Used during model switch inside a bubbletea session to prevent plugin logs
 // from corrupting the TUI's terminal raw mode.
-func setupQuiet(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink) (*control.Controller, error) {
+func setupQuiet(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, workspaceRoot string) (*control.Controller, error) {
 	return boot.Build(ctx, boot.Options{
-		Model:      modelName,
-		MaxSteps:   maxStepsOverride,
-		RequireKey: requireKey,
-		Sink:       sink,
-		Stderr:     io.Discard,
+		Model:         modelName,
+		MaxSteps:      maxStepsOverride,
+		RequireKey:    requireKey,
+		Sink:          sink,
+		Stderr:        io.Discard,
+		WorkspaceRoot: workspaceRoot,
 	})
+}
+
+func chdirToRoot(dir string) (string, error) {
+	if dir == "" {
+		return "", nil
+	}
+	root, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Chdir(root); err != nil {
+		return "", err
+	}
+	return root, nil
 }
 
 // chdirTo honours --dir: it switches the working directory before anything reads
 // it, so config discovery, the sandbox root, and file tools all resolve from the
 // chosen project root. Returns 2 (already reported) on failure, 0 otherwise.
 func chdirTo(dir string) int {
-	if dir == "" {
-		return 0
-	}
-	if err := os.Chdir(dir); err != nil {
+	if _, err := chdirToRoot(dir); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
@@ -217,8 +230,10 @@ func runAgent(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if rc := chdirTo(*dir); rc != 0 {
-		return rc
+	workspaceRoot, err := chdirToRoot(*dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return 2
 	}
 	cfg, _ := config.Load()
 	configureCLIThemeFromConfigForTTYOutput()
@@ -255,7 +270,7 @@ func runAgent(args []string) int {
 		sink = metrics
 	}
 	sink = withNotifications(sink, cfg)
-	ctrl, err := setup(ctx, *model, *maxSteps, true, sink)
+	ctrl, err := setup(ctx, *model, *maxSteps, true, sink, workspaceRoot)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
@@ -326,7 +341,7 @@ func runServe(args []string) int {
 
 	ctx := context.Background()
 	bc := serve.NewBroadcaster()
-	ctrl, err := setup(ctx, *model, *maxSteps, true, bc)
+	ctrl, err := setup(ctx, *model, *maxSteps, true, bc, "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
@@ -372,8 +387,10 @@ func chatREPL(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if rc := chdirTo(*dir); rc != 0 {
-		return rc
+	workspaceRoot, err := chdirToRoot(*dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return 2
 	}
 	cfg, err := config.Load()
 	if err == nil {
@@ -413,7 +430,7 @@ func chatREPL(args []string) int {
 
 	var sink event.Sink = &eventSink{ch: eventCh}
 	sink = withNotifications(sink, cfg)
-	ctrl, err := setup(ctx, *model, *maxSteps, false, sink)
+	ctrl, err := setup(ctx, *model, *maxSteps, false, sink, workspaceRoot)
 	if err != nil && errors.Is(err, boot.ErrUnknownModel) && isInteractive() && config.SourcePath() == "" {
 		// True first run whose default model can't resolve: guide setup, then retry.
 		// With a config present, fall through to the descriptive error — re-running
@@ -422,7 +439,7 @@ func chatREPL(args []string) int {
 		if rc := interactiveSetup(defaultConfigTarget(), defaultEnvTarget()); rc != 0 {
 			return rc
 		}
-		ctrl, err = setup(ctx, *model, *maxSteps, false, sink)
+		ctrl, err = setup(ctx, *model, *maxSteps, false, sink, workspaceRoot)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -486,7 +503,7 @@ func chatREPL(args []string) int {
 	// runModelSubcommand performs the swap on the live copy. The same stable sink
 	// feeds the new controller, so events keep flowing to this TUI.
 	m.buildController = func(ref string, carry []provider.Message, resumePath string) (*control.Controller, error) {
-		c, err := setupQuiet(ctx, ref, *maxSteps, false, sink)
+		c, err := setupQuiet(ctx, ref, *maxSteps, false, sink, workspaceRoot)
 		if err != nil {
 			return nil, err
 		}

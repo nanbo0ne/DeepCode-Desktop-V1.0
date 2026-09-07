@@ -97,16 +97,15 @@ The Linux artifact links against WebKitGTK 4.1 (`-tags webkit2_41`), so it needs
 git tag desktop-v1.1.0 && git push origin desktop-v1.1.0
 ```
 
-The app checks `latest.json` on startup (R2 first, GitHub as fallback) and shows
-an update banner when a newer version is published; **Settings → Software update**
-has a manual check. Self-update behavior by platform:
+The current app checks GitHub for the latest desktop release on startup and in
+**Settings → Software update**. The update button opens the release download
+page on all platforms. It does not download, verify or install an update in the
+background. Windows users run the downloaded per-user NSIS installer to upgrade;
+macOS and Linux users replace their installation using the matching package.
 
-- **Linux / Windows** — download, verify the minisign signature, then update in
-  place: Linux replaces the binary and relaunches; Windows runs the per-user NSIS
-  installer (no admin rights needed).
-- **macOS** — *not* self-updating yet. The build is unsigned/un-notarized, so an
-  in-place swap would be blocked by Gatekeeper; the banner links to the download
-  page for a manual update instead.
+The manifest/signature helpers and stable/canary publication tooling remain in
+the repository, but are not the active in-app update path. A local validation
+build is not published until the release process is explicitly authorized.
 
 ### Platform signing and first launch
 

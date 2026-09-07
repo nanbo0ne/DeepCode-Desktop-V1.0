@@ -21,8 +21,9 @@ func (p *classifierProvider) Stream(ctx context.Context, req provider.Request) (
 	if p.err != nil {
 		return nil, p.err
 	}
-	ch := make(chan provider.Chunk, 1)
+	ch := make(chan provider.Chunk, 2)
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: p.text}
+	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
 }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(resolve(testDir, "../styles.css"), "utf8");
+const app = readFileSync(resolve(testDir, "../App.tsx"), "utf8");
 
 let passed = 0;
 let failed = 0;
@@ -54,6 +55,16 @@ function finalDeclaration(selector: string, property: string): string | undefine
 }
 
 console.log("\ncommand palette css");
+
+ok(
+  !/setPaletteOpen\(\(cur\)[\s\S]{0,120}openPalette\(/.test(app),
+  "palette shortcut does not run side effects from a React state updater",
+);
+ok(
+  app.includes("if (!paletteOpen && !e.repeat) void openPalette();") &&
+    app.includes("[openPalette, paletteOpen]"),
+  "palette shortcut observes the latest open state and ignores held-key repeats",
+);
 
 eq(
   finalDeclaration(".palette__item", "display"),

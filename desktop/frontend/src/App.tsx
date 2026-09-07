@@ -1432,7 +1432,12 @@ export default function App() {
         await applyPendingRuntimePrefs(activeTabId);
       }
       await applyGoal(trimmed);
-      send(trimmed, `/goal ${trimmed}`);
+      try {
+        await send(trimmed, `/goal ${trimmed}`);
+      } catch {
+        // send already records the failed optimistic turn; this callback is
+        // also used by the goal-mode toggle, which cannot await a Promise.
+      }
     },
     [activeTabId, applyGoal, applyPendingRuntimePrefs, send],
   );
@@ -1451,7 +1456,7 @@ export default function App() {
       await setControllerAskWorkflow(askWorkflowEnabledRef.current);
       await setControllerStepThinking(stepThinkingEnabledRef.current);
       if (nextGoal.trim()) await setControllerGoal(nextGoal);
-      send(trimmed, submitText.trim());
+      await send(trimmed, submitText.trim());
     },
     [activeTabId, applyPendingRuntimePrefs, askWorkflowEnabled, collaborationMode, goal, send, setControllerAskWorkflow, setControllerCollaborationMode, setControllerGoal, setControllerStepThinking, setControllerToolApprovalMode, stepThinkingEnabled, toolApprovalMode],
   );
@@ -1591,7 +1596,7 @@ export default function App() {
     if (!pendingPlanRevision || state.running) return;
     const text = pendingPlanRevision;
     setPendingPlanRevision(null);
-    send(text);
+    void send(text).catch(() => {});
   }, [pendingPlanRevision, send, state.running]);
 
   useEffect(() => {
@@ -1663,7 +1668,7 @@ export default function App() {
         if (activeTabId) {
           await applyPendingRuntimePrefs(activeTabId);
         }
-        send(trimmed, submitText.trim());
+        await send(trimmed, submitText.trim());
         return;
       }
       if (collaborationModeRef.current === "goal" && !goalRef.current.trim()) {
@@ -1671,7 +1676,7 @@ export default function App() {
           await applyPendingRuntimePrefs(activeTabId);
         }
         await applyGoal(trimmed);
-        send(trimmed, `/goal ${submitText.trim()}`);
+        await send(trimmed, `/goal ${submitText.trim()}`);
         return;
       }
       if (runningRef.current || Boolean(activeTabId && promptModeSwitchingRef.current[activeTabId])) {
@@ -2207,17 +2212,14 @@ export default function App() {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setPaletteOpen((cur) => {
-          if (!cur) void openPalette();
-          return cur;
-        });
+        if (!paletteOpen && !e.repeat) void openPalette();
       } else if (e.key === "Escape") {
         setPaletteOpen(false);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openPalette]);
+  }, [openPalette, paletteOpen]);
   const paletteItems = useMemo<PaletteItem[]>(() => {
     const cmds: PaletteItem[] = [
       { id: "cmd-new", group: t("palette.group.commands"), title: t("palette.cmd.newSession"), keywords: ["new", "新建"], run: () => void handleNewTab() },
@@ -2965,6 +2967,7 @@ export default function App() {
               transientDismissSignal={transientOverlayDismissSignal}
             />
             <StatusBar
+              uiStyle={desktopUIStyle}
               context={state.context}
               usage={state.usage}
               balance={state.balance}

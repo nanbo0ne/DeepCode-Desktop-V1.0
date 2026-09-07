@@ -200,10 +200,10 @@ func (a *App) startDesktopBotGateway(cfg *config.Config) {
 			return a.decideBotContinuity(ctx, modelName, previous, currentMessage)
 		},
 		RegisterExternalSink: a.conversationBroker.RegisterSourceSink,
-		ExternalApprove: func(id string, allow bool) bool {
-			return a.conversationBroker.Approve(id, allow, false, false)
+		ExternalApproveForSource: func(sourceID, id string, allow bool) bot.ResponseRouteResult {
+			return a.conversationBroker.ApproveForSource(sourceID, id, allow, false, false)
 		},
-		ExternalAnswer:          a.conversationBroker.Answer,
+		ExternalAnswerForSource: a.conversationBroker.AnswerForSource,
 		ExternalStop:            a.conversationBroker.CancelActive,
 		SharedAutomationSession: true,
 	}, adapters, logger)

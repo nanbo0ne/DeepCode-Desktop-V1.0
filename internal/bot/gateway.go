@@ -19,28 +19,30 @@ import (
 
 // GatewayConfig configures the multi-channel IM bot gateway.
 type GatewayConfig struct {
-	Model                string
-	PromptMode           string
-	MemoryProfile        string
-	MaxSteps             int
-	WorkspaceRoot        string
-	Allowlist            AllowlistConfig
-	Enabled              map[Platform]bool
-	Debounce             time.Duration
-	SessionLister        botSessionLister
-	CreateSession        SessionCreator
-	BuildSession         botControllerFactory
-	MirrorEvent          EventMirror
-	MirrorUser           UserMirror
-	AfterTurn            AfterTurnHook
-	ContinuityDecider    ContinuityDecider
-	RestoreSession       SessionRestorer
-	GuideSent            map[Platform]bool
-	AfterGuideSent       GuideSentHook
-	RegisterExternalSink ExternalSinkRegistrar
-	ExternalApprove      ExternalApprovalRouter
-	ExternalAnswer       ExternalAnswerRouter
-	ExternalStop         ExternalStopRouter
+	Model                    string
+	PromptMode               string
+	MemoryProfile            string
+	MaxSteps                 int
+	WorkspaceRoot            string
+	Allowlist                AllowlistConfig
+	Enabled                  map[Platform]bool
+	Debounce                 time.Duration
+	SessionLister            botSessionLister
+	CreateSession            SessionCreator
+	BuildSession             botControllerFactory
+	MirrorEvent              EventMirror
+	MirrorUser               UserMirror
+	AfterTurn                AfterTurnHook
+	ContinuityDecider        ContinuityDecider
+	RestoreSession           SessionRestorer
+	GuideSent                map[Platform]bool
+	AfterGuideSent           GuideSentHook
+	RegisterExternalSink     ExternalSinkRegistrar
+	ExternalApprove          ExternalApprovalRouter
+	ExternalAnswer           ExternalAnswerRouter
+	ExternalApproveForSource ExternalSourceApprovalRouter
+	ExternalAnswerForSource  ExternalSourceAnswerRouter
+	ExternalStop             ExternalStopRouter
 	// SharedAutomationSession makes every remote channel use one logical
 	// automation segment. Selecting or creating a segment switches all remotes
 	// together, while the desktop may still render older segments as history.
@@ -95,8 +97,21 @@ type ContinuityDecider func(ctx context.Context, previous SessionChoice, current
 type SessionRestorer func(ctx context.Context, remoteKey string, msg InboundMessage) (SessionChoice, bool, error)
 type GuideSentHook func(platform Platform) error
 type ExternalSinkRegistrar func(sourceID string, sink event.Sink) func()
-type ExternalApprovalRouter func(id string, allow bool) bool
-type ExternalAnswerRouter func(id string, answers []event.AskAnswer) bool
+
+// ResponseRouteResult distinguishes an unowned prompt from an owned prompt
+// that was rejected, so callers never fall back after an authorization failure.
+type ResponseRouteResult uint8
+
+const (
+	ResponseNotOwned ResponseRouteResult = iota
+	ResponseRejected
+	ResponseConsumed
+)
+
+type ExternalApprovalRouter func(id string, allow bool) ResponseRouteResult
+type ExternalAnswerRouter func(id string, answers []event.AskAnswer) ResponseRouteResult
+type ExternalSourceApprovalRouter func(sourceID, id string, allow bool) ResponseRouteResult
+type ExternalSourceAnswerRouter func(sourceID, id string, answers []event.AskAnswer) ResponseRouteResult
 type ExternalStopRouter func(sourceID string) bool
 
 type remoteMode string
@@ -646,11 +661,15 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, r
 			_ = gw.sendText(ctx, adapter, msg, "用法：/approve <id>")
 			return
 		}
-		if gw.cfg.ExternalApprove != nil && gw.cfg.ExternalApprove(parts[1], true) {
+		state, ok := gw.controllerState(key, hasSession)
+		switch routed := gw.routeApproval(state, parts[1], true); routed {
+		case ResponseConsumed:
 			_ = gw.sendText(ctx, adapter, msg, "已批准。")
 			return
+		case ResponseRejected:
+			_ = gw.sendText(ctx, adapter, msg, "该批准请求不属于当前来源或已失效。")
+			return
 		}
-		state, ok := gw.controllerState(key, hasSession)
 		if ok {
 			state.ctrl.Approve(parts[1], true, false, false)
 			_ = gw.sendText(ctx, adapter, msg, "已批准。")
@@ -664,11 +683,15 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, r
 			_ = gw.sendText(ctx, adapter, msg, "用法：/deny <id>")
 			return
 		}
-		if gw.cfg.ExternalApprove != nil && gw.cfg.ExternalApprove(parts[1], false) {
+		state, ok := gw.controllerState(key, hasSession)
+		switch routed := gw.routeApproval(state, parts[1], false); routed {
+		case ResponseConsumed:
 			_ = gw.sendText(ctx, adapter, msg, "已拒绝。")
 			return
+		case ResponseRejected:
+			_ = gw.sendText(ctx, adapter, msg, "该拒绝请求不属于当前来源或已失效。")
+			return
 		}
-		state, ok := gw.controllerState(key, hasSession)
 		if ok {
 			state.ctrl.Approve(parts[1], false, false, false)
 			_ = gw.sendText(ctx, adapter, msg, "已拒绝。")
@@ -691,14 +714,19 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, r
 		rawAnswer := strings.TrimSpace(strings.Join(parts[2:], " "))
 		gw.mu.Lock()
 		questions := state.pendingAsks[askID]
-		delete(state.pendingAsks, askID)
 		gw.mu.Unlock()
 		answers := parseAskAnswers(questions, rawAnswer)
-		if gw.cfg.ExternalAnswer != nil && gw.cfg.ExternalAnswer(askID, answers) {
+		switch routed := gw.routeAnswer(state, askID, answers); routed {
+		case ResponseConsumed:
+			gw.deletePendingAsk(key, askID, state)
 			_ = gw.sendText(ctx, adapter, msg, "已提交回答。")
+			return
+		case ResponseRejected:
+			_ = gw.sendText(ctx, adapter, msg, "该回答请求不属于当前来源或已失效。")
 			return
 		}
 		state.ctrl.AnswerQuestion(askID, answers)
+		gw.deletePendingAsk(key, askID, state)
 		_ = gw.sendText(ctx, adapter, msg, "已提交回答。")
 
 	case strings.HasPrefix(msg.Text, "/status"):
@@ -726,6 +754,40 @@ func (gw *BotGateway) controllerState(key string, hasSession bool) (*sessionStat
 	defer gw.mu.Unlock()
 	state, ok := gw.controllers[key]
 	return state, ok && state != nil && state.ctrl != nil
+}
+
+func (gw *BotGateway) routeApproval(state *sessionState, id string, allow bool) ResponseRouteResult {
+	if gw.cfg.ExternalApproveForSource != nil {
+		if state == nil {
+			return ResponseNotOwned
+		}
+		return gw.cfg.ExternalApproveForSource(state.sourceID, id, allow)
+	}
+	if gw.cfg.ExternalApprove != nil {
+		return gw.cfg.ExternalApprove(id, allow)
+	}
+	return ResponseNotOwned
+}
+
+func (gw *BotGateway) routeAnswer(state *sessionState, id string, answers []event.AskAnswer) ResponseRouteResult {
+	if gw.cfg.ExternalAnswerForSource != nil {
+		if state == nil {
+			return ResponseNotOwned
+		}
+		return gw.cfg.ExternalAnswerForSource(state.sourceID, id, answers)
+	}
+	if gw.cfg.ExternalAnswer != nil {
+		return gw.cfg.ExternalAnswer(id, answers)
+	}
+	return ResponseNotOwned
+}
+
+func (gw *BotGateway) deletePendingAsk(key, id string, state *sessionState) {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	if current := gw.controllers[key]; current == state {
+		delete(state.pendingAsks, id)
+	}
 }
 
 func botHelpText() string {

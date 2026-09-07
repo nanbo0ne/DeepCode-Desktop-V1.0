@@ -174,6 +174,13 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 	if err != nil {
 		return "", err
 	}
+	for _, act := range actions {
+		if act.Kind == "mcp" {
+			if err := config.ValidatePlugin(act.entry); err != nil {
+				return "", newErr(ErrInvalidManifest, "%s: %v", act.Name, err)
+			}
+		}
+	}
 	planID := computePlanID(req, actions)
 	if len(actions) == 0 {
 		out := response{

@@ -80,6 +80,21 @@ func TestLedgerReportsFinalReadinessReceiptsAfterWriter(t *testing.T) {
 	}
 }
 
+func TestLedgerNamedCommandMatcherDoesNotAcceptReadOrDiffReceipt(t *testing.T) {
+	ledger := NewLedger()
+	ledger.Record(Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"changed.go"}})
+	writer, ok := ledger.LatestSuccessfulWriterIndex()
+	if !ok {
+		t.Fatal("expected latest successful writer")
+	}
+	ledger.Record(Receipt{ToolName: "read_file", Success: true, Read: true, Paths: []string{"changed.go"}})
+	ledger.Record(Receipt{ToolName: "bash", Success: true, Command: "git diff --check"})
+
+	if ledger.HasSuccessfulCommandAfter("go test ./...", writer) {
+		t.Fatal("named command matcher accepted unrelated read/diff receipts")
+	}
+}
+
 func TestLedgerResetClearsTurnReceipts(t *testing.T) {
 	ledger := NewLedger()
 	ledger.Record(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."})

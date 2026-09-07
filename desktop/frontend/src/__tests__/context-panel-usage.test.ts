@@ -1,6 +1,11 @@
 // Run: tsx src/__tests__/context-panel-usage.test.ts
 
-import { computeContextPanelUsage } from "../lib/contextPanelUsage";
+import {
+  computeContextPanelUsage,
+  contextPanelCurrencySymbol,
+  formatContextPanelMoney,
+  resolveContextPanelRequestCount,
+} from "../lib/contextPanelUsage";
 
 let passed = 0;
 let failed = 0;
@@ -174,6 +179,35 @@ eq(
   eq(got.currentPromptTokens, 5900, "keeps current prompt tokens for the context-window bar after compaction");
   eq(got.usedTokens, 6000, "uses recalculated compacted context usage after compaction");
 }
+
+eq(
+  resolveContextPanelRequestCount({
+    usedTokens: 0,
+    windowTokens: 1000,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    reasoningTokens: 0,
+    cacheHitTokens: 0,
+    cacheMissTokens: 0,
+    requestCount: undefined,
+    readFiles: [{ path: "a.ts", turn: 1, time: 1 }],
+    changedFiles: [{ path: "b.ts", turns: [1], sources: [] }],
+  }, undefined),
+  0,
+  "does not derive request count from referenced files",
+);
+
+eq(
+  resolveContextPanelRequestCount(undefined, { used: 0, window: 1000, sessionTokens: 0, requestCount: 7 }),
+  7,
+  "falls back to the context snapshot request count",
+);
+
+eq(contextPanelCurrencySymbol("USD"), "$", "formats known currency codes with their symbols");
+eq(formatContextPanelMoney(1.25, "CAD"), "CAD 1.25", "does not relabel an unsupported currency as yuan");
+eq(formatContextPanelMoney(1.25), "1.25", "does not invent a currency when none is supplied");
+eq(formatContextPanelMoney(Number.NaN, "USD"), "-", "does not render a non-finite cost");
 
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);
 if (failed > 0) process.exit(1);

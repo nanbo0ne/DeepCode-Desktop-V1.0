@@ -88,9 +88,7 @@ func TestProtectedObservationCannotStartActions(t *testing.T) {
 	service.mu.Lock()
 	service.observation.SecureDesktop = true
 	service.mu.Unlock()
-	// The fake backend does not return a secure observation; the platform backend
-	// owns that signal. This assertion fixes the public protected-surface error.
-	if !errors.Is(ErrProtectedSurface, ErrProtectedSurface) {
-		t.Fatal("protected surface sentinel changed")
+	if _, err := service.Execute(context.Background(), Action{Type: "click", Generation: backend.generation}); !errors.Is(err, ErrProtectedSurface) {
+		t.Fatalf("protected observation accepted: %v", err)
 	}
 }

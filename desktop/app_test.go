@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/codegraph"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/config"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
@@ -1961,7 +1962,11 @@ func TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", robustTempDir(t))
 	t.Setenv("AppData", robustTempDir(t))
 	t.Setenv("PATH", robustTempDir(t))
-	t.Setenv("DEEPSEEK_ORCA_CACHE_DIR", robustTempDir(t)) // isolate the codegraph bundle cache so Resolve fails deterministically
+	cacheRoot := robustTempDir(t)
+	t.Setenv("ORCA_CODEGRAPH_CACHE_DIR", cacheRoot)
+	if got, want := codegraph.CacheDir(), filepath.Join(cacheRoot, "codegraph", codegraph.Version); filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("CodeGraph cache dir = %q, want isolated path %q", got, want)
+	}
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	if err := os.WriteFile(filepath.Join(dir, "deepseek-orca.toml"), []byte(`
@@ -1972,9 +1977,14 @@ auto_install = true
 		t.Fatal(err)
 	}
 
+	host := plugin.NewHost()
+	ctrl := control.New(control.Options{Host: host})
 	app := NewApp()
-	app.setTestCtrl(control.New(control.Options{Host: plugin.NewHost()}), "")
-	defer app.activeCtrl().Close()
+	app.setTestCtrl(ctrl, "")
+	defer func() {
+		ctrl.Close()
+		host.Close()
+	}()
 
 	if err := app.SetMCPServerTier("codegraph", "eager"); err != nil {
 		t.Fatalf("SetMCPServerTier(codegraph): %v", err)

@@ -2,14 +2,16 @@ package main
 
 import (
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
 )
 
 func singleInstanceLock(app *App) *options.SingleInstanceLock {
 	// Allow contributors to run a dev build alongside the installed app.
-	// Set ORCA_DEV=1 to skip the single-instance lock.
-	if os.Getenv("ORCA_DEV") != "" {
+	// Only an explicit boolean true skips the single-instance lock.
+	if devModeEnabled(os.Getenv("ORCA_DEV")) {
 		return nil
 	}
 	return &options.SingleInstanceLock{
@@ -18,4 +20,9 @@ func singleInstanceLock(app *App) *options.SingleInstanceLock {
 			app.secondInstanceLaunch()
 		},
 	}
+}
+
+func devModeEnabled(raw string) bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
+	return err == nil && enabled
 }

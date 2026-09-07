@@ -46,6 +46,7 @@ function normalizeHardware(value: unknown, platform: string, supported: boolean)
         backend: text(gpu.backend, "unknown"),
       } satisfies HardwareGPU;
     }),
+    gpuDetectionFailed: bool(source.gpuDetectionFailed),
     memoryTotalMiB: number(source.memoryTotalMiB),
     memoryFreeMiB: number(source.memoryFreeMiB),
     cpuLogicalCores: number(source.cpuLogicalCores),

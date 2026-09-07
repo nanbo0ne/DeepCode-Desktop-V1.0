@@ -80,15 +80,20 @@ type persistedState struct {
 }
 
 type Manager struct {
-	mu        sync.Mutex
-	root      string
-	models    string
-	runtimes  string
-	downloads string
-	tasks     map[string]*DownloadTask
-	cancels   map[string]context.CancelFunc
-	emit      func(DownloadTask)
-	client    *http.Client
+	mu                sync.Mutex
+	root              string
+	models            string
+	runtimes          string
+	downloads         string
+	tasks             map[string]*DownloadTask
+	generations       map[string]uint64
+	cancels           map[string]context.CancelFunc
+	cancelGenerations map[string]uint64
+	workerDone        map[string]chan struct{}
+	emit              func(DownloadTask)
+	client            *http.Client
+	diskFree          func(string) int64
+	resolveArtifacts  func(TaskKind, string) ([]Artifact, bool)
 }
 
 func DefaultRoot() string {
@@ -120,8 +125,17 @@ func NewManagerWithModels(root, models string, emit func(DownloadTask)) *Manager
 	}
 	m := &Manager{
 		root: root, models: models, runtimes: filepath.Join(root, "runtimes"), downloads: filepath.Join(root, "downloads"),
-		tasks: map[string]*DownloadTask{}, cancels: map[string]context.CancelFunc{}, emit: emit,
-		client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConns: 8, IdleConnTimeout: 60 * time.Second}},
+		tasks: map[string]*DownloadTask{}, generations: map[string]uint64{}, cancels: map[string]context.CancelFunc{}, cancelGenerations: map[string]uint64{}, workerDone: map[string]chan struct{}{}, emit: emit,
+		client:   &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConns: 8, IdleConnTimeout: 60 * time.Second}},
+		diskFree: diskFreeBytes,
+	}
+	m.resolveArtifacts = func(kind TaskKind, id string) ([]Artifact, bool) {
+		if kind == TaskModel {
+			spec, ok := ModelByID(id)
+			return spec.Artifacts, ok
+		}
+		spec, ok := RuntimeByID(id)
+		return spec.Artifacts, ok
 	}
 	_ = os.MkdirAll(m.downloads, 0o755)
 	m.loadState()
@@ -182,10 +196,12 @@ func (m *Manager) start(kind TaskKind, targetID, label string, artifacts []Artif
 		}
 	}
 	m.tasks[task.ID] = task
+	m.generations[task.ID] = 1
 	m.saveStateLocked()
+	snapshot := *task
 	m.mu.Unlock()
-	m.launch(task.ID)
-	return *task, nil
+	m.launch(task.ID, 1)
+	return snapshot, nil
 }
 
 func (m *Manager) Pause(id string) error {
@@ -200,6 +216,7 @@ func (m *Manager) Pause(id string) error {
 		return nil
 	}
 	task.State, task.UpdatedAt = TaskPaused, time.Now().UnixMilli()
+	m.generations[id]++
 	cancel := m.cancels[id]
 	m.saveStateLocked()
 	copy := *task
@@ -223,9 +240,11 @@ func (m *Manager) Resume(id string) error {
 		return nil
 	}
 	task.State, task.Error, task.UpdatedAt = TaskQueued, "", time.Now().UnixMilli()
+	m.generations[id]++
+	generation := m.generations[id]
 	m.saveStateLocked()
 	m.mu.Unlock()
-	m.launch(id)
+	m.launch(id, generation)
 	return nil
 }
 
@@ -236,7 +255,12 @@ func (m *Manager) Cancel(id string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("download task %q not found", id)
 	}
+	if task.State != TaskQueued && task.State != TaskDownloading && task.State != TaskPaused && task.State != TaskVerifying && task.State != TaskInstalling {
+		m.mu.Unlock()
+		return nil
+	}
 	task.State, task.UpdatedAt = TaskCancelled, time.Now().UnixMilli()
+	m.generations[id]++
 	cancel := m.cancels[id]
 	m.saveStateLocked()
 	copy := *task
@@ -248,50 +272,90 @@ func (m *Manager) Cancel(id string) error {
 	return nil
 }
 
-func (m *Manager) launch(id string) {
+func (m *Manager) launch(id string, generation uint64) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	m.mu.Lock()
+	if m.generations[id] != generation {
+		m.mu.Unlock()
+		cancel()
+		close(done)
+		return
+	}
+	waitFor := m.workerDone[id]
 	m.cancels[id] = cancel
+	m.cancelGenerations[id] = generation
+	m.workerDone[id] = done
 	m.mu.Unlock()
 	go func() {
-		err := m.run(ctx, id)
-		m.mu.Lock()
-		delete(m.cancels, id)
-		task := m.tasks[id]
-		if task != nil && err != nil && task.State != TaskPaused && task.State != TaskCancelled {
-			task.State, task.Error, task.UpdatedAt = TaskFailed, err.Error(), time.Now().UnixMilli()
+		var err error
+		defer func() {
+			close(done)
+			m.finishWorker(id, generation, done, err)
+		}()
+		if waitFor != nil {
+			select {
+			case <-waitFor:
+			case <-ctx.Done():
+				return
+			}
 		}
-		m.saveStateLocked()
-		var copy DownloadTask
-		if task != nil {
-			copy = *task
+		if ctx.Err() != nil {
+			return
 		}
-		m.mu.Unlock()
-		if task != nil {
-			m.publish(copy)
-		}
+		err = m.run(ctx, id, generation)
 	}()
 }
 
-func (m *Manager) run(ctx context.Context, id string) error {
+func (m *Manager) finishWorker(id string, generation uint64, done chan struct{}, err error) {
+	m.mu.Lock()
+	if m.workerDone[id] != done {
+		m.mu.Unlock()
+		return
+	}
+	delete(m.workerDone, id)
+	if m.cancelGenerations[id] == generation {
+		delete(m.cancels, id)
+		delete(m.cancelGenerations, id)
+	}
+	task := m.tasks[id]
+	var publishTask DownloadTask
+	shouldPublish := false
+	if task != nil && m.generations[id] == generation && err != nil && task.State != TaskPaused && task.State != TaskCancelled {
+		task.State, task.Error, task.UpdatedAt = TaskFailed, err.Error(), time.Now().UnixMilli()
+		publishTask = *task
+		shouldPublish = true
+	}
+	if task != nil && m.generations[id] == generation {
+		m.saveStateLocked()
+	}
+	m.mu.Unlock()
+	if shouldPublish {
+		m.publish(publishTask)
+	}
+}
+
+var errRunSuperseded = errors.New("download run superseded")
+
+func (m *Manager) run(ctx context.Context, id string, generation uint64) error {
 	m.mu.Lock()
 	task := m.tasks[id]
 	if task == nil {
 		m.mu.Unlock()
 		return fmt.Errorf("task disappeared")
 	}
+	if m.generations[id] != generation || task.State != TaskQueued {
+		m.mu.Unlock()
+		return nil
+	}
 	task.State, task.UpdatedAt = TaskDownloading, time.Now().UnixMilli()
 	kind, targetID := task.Kind, task.TargetID
 	m.saveStateLocked()
 	m.mu.Unlock()
 
-	var artifacts []Artifact
-	if kind == TaskModel {
-		spec, _ := ModelByID(targetID)
-		artifacts = spec.Artifacts
-	} else {
-		spec, _ := RuntimeByID(targetID)
-		artifacts = spec.Artifacts
+	artifacts, ok := m.resolveArtifacts(kind, targetID)
+	if !ok {
+		return fmt.Errorf("unknown download target %q", targetID)
 	}
 	taskDir := filepath.Join(m.downloads, id)
 	if err := os.MkdirAll(taskDir, 0o755); err != nil {
@@ -304,13 +368,18 @@ func (m *Manager) run(ctx context.Context, id string) error {
 			completed += artifact.Size
 			continue
 		}
-		if err := m.downloadArtifact(ctx, id, artifact, part, completed); err != nil {
+		if err := m.downloadArtifactRun(ctx, id, generation, artifact, part, completed); err != nil {
 			return err
 		}
 		completed += artifact.Size
 	}
-	m.setTaskState(id, TaskVerifying, "")
+	if !m.transitionTask(id, generation, TaskDownloading, TaskVerifying, "") {
+		return errRunSuperseded
+	}
 	for _, artifact := range artifacts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if ok, err := fileMatches(filepath.Join(taskDir, artifact.Name+".part"), artifact); !ok {
 			if err == nil {
 				err = fmt.Errorf("checksum mismatch")
@@ -318,37 +387,30 @@ func (m *Manager) run(ctx context.Context, id string) error {
 			return fmt.Errorf("verify %s: %w", artifact.Name, err)
 		}
 	}
-	m.setTaskState(id, TaskInstalling, "")
+	if !m.transitionTask(id, generation, TaskVerifying, TaskInstalling, "") {
+		return errRunSuperseded
+	}
 	if kind == TaskModel {
-		if err := m.installModel(targetID, taskDir, artifacts); err != nil {
+		if err := m.installModel(ctx, id, generation, targetID, taskDir, artifacts); err != nil {
 			return err
 		}
-	} else if err := m.installRuntime(targetID, taskDir, artifacts); err != nil {
+	} else if err := m.installRuntime(ctx, id, generation, targetID, taskDir, artifacts); err != nil {
 		return err
-	}
-	m.mu.Lock()
-	if task = m.tasks[id]; task != nil {
-		task.State, task.Error, task.DownloadedBytes, task.BytesPerSecond, task.ETASeconds, task.UpdatedAt = TaskCompleted, "", task.TotalBytes, 0, 0, time.Now().UnixMilli()
-	}
-	m.saveStateLocked()
-	var copy DownloadTask
-	if task != nil {
-		copy = *task
-	}
-	m.mu.Unlock()
-	if task != nil {
-		m.publish(copy)
 	}
 	return nil
 }
 
 func (m *Manager) downloadArtifact(ctx context.Context, id string, artifact Artifact, part string, completed int64) error {
+	return m.downloadArtifactRun(ctx, id, 0, artifact, part, completed)
+}
+
+func (m *Manager) downloadArtifactRun(ctx context.Context, id string, generation uint64, artifact Artifact, part string, completed int64) error {
 	var lastErr error
 	for _, source := range artifact.Sources {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := m.downloadFrom(ctx, id, source, artifact, part, completed); err == nil {
+		if err := m.downloadFromRun(ctx, id, generation, source, artifact, part, completed); err == nil {
 			return nil
 		} else {
 			lastErr = err
@@ -358,6 +420,10 @@ func (m *Manager) downloadArtifact(ctx context.Context, id string, artifact Arti
 }
 
 func (m *Manager) downloadFrom(ctx context.Context, id, source string, artifact Artifact, part string, completed int64) error {
+	return m.downloadFromRun(ctx, id, 0, source, artifact, part, completed)
+}
+
+func (m *Manager) downloadFromRun(ctx context.Context, id string, generation uint64, source string, artifact Artifact, part string, completed int64) error {
 	if err := os.MkdirAll(filepath.Dir(part), 0o755); err != nil {
 		return err
 	}
@@ -415,7 +481,7 @@ func (m *Manager) downloadFrom(ctx context.Context, id, source string, artifact 
 			if deltaSec > 0 {
 				speed = int64(float64(written-lastBytes) / deltaSec)
 			}
-			m.updateProgress(id, artifact.Name, source, completed+written, speed)
+			m.updateProgressForRun(id, generation, artifact.Name, source, completed+written, speed)
 			lastTick, lastBytes = now, written
 		}
 		if readErr == io.EOF {
@@ -435,9 +501,17 @@ func (m *Manager) downloadFrom(ctx context.Context, id, source string, artifact 
 }
 
 func (m *Manager) updateProgress(id, artifact, source string, downloaded, speed int64) {
+	m.updateProgressForRun(id, 0, artifact, source, downloaded, speed)
+}
+
+func (m *Manager) updateProgressForRun(id string, generation uint64, artifact, source string, downloaded, speed int64) {
 	m.mu.Lock()
 	task := m.tasks[id]
 	if task == nil {
+		m.mu.Unlock()
+		return
+	}
+	if generation != 0 && (m.generations[id] != generation || task.State != TaskDownloading) {
 		m.mu.Unlock()
 		return
 	}
@@ -453,36 +527,79 @@ func (m *Manager) updateProgress(id, artifact, source string, downloaded, speed 
 	m.publish(copy)
 }
 
-func (m *Manager) setTaskState(id string, state TaskState, errText string) {
+func (m *Manager) transitionTask(id string, generation uint64, expected, state TaskState, errText string) bool {
 	m.mu.Lock()
-	if task := m.tasks[id]; task != nil {
+	if task := m.tasks[id]; task != nil && m.generations[id] == generation && task.State == expected {
 		task.State, task.Error, task.UpdatedAt = state, errText, time.Now().UnixMilli()
 		copy := *task
 		m.saveStateLocked()
 		m.mu.Unlock()
 		m.publish(copy)
-		return
+		return true
 	}
 	m.mu.Unlock()
+	return false
 }
 
-func (m *Manager) installModel(id, taskDir string, artifacts []Artifact) error {
+func (m *Manager) installModel(ctx context.Context, taskID string, generation uint64, id, taskDir string, artifacts []Artifact) error {
 	target := filepath.Join(m.models, id)
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	stage := target + ".installing"
+	_ = os.RemoveAll(stage)
+	if err := os.MkdirAll(stage, 0o755); err != nil {
 		return err
 	}
 	for _, artifact := range artifacts {
+		if err := ctx.Err(); err != nil {
+			_ = os.RemoveAll(stage)
+			return err
+		}
 		source := filepath.Join(taskDir, artifact.Name+".part")
-		dest := filepath.Join(target, artifact.Name)
-		if err := promoteFile(source, dest); err != nil {
+		dest := filepath.Join(stage, artifact.Name)
+		if err := copyFile(source, dest); err != nil {
+			_ = os.RemoveAll(stage)
 			return err
 		}
 	}
 	spec, _ := ModelByID(id)
-	return writeJSONAtomic(filepath.Join(target, "installation.json"), ModelInstallation{ID: id, Name: spec.Name, Path: target, InstalledAt: time.Now().UTC(), Vision: spec.Vision, ToolUse: spec.ToolUse})
+	if err := writeJSONAtomic(filepath.Join(stage, "installation.json"), ModelInstallation{ID: id, Name: spec.Name, Path: target, InstalledAt: time.Now().UTC(), Vision: spec.Vision, ToolUse: spec.ToolUse}); err != nil {
+		_ = os.RemoveAll(stage)
+		return err
+	}
+
+	// Commit the prepared directory only while this generation is still the
+	// installing run. A cancellation that wins this lock leaves both the old
+	// model and the download parts untouched.
+	m.mu.Lock()
+	if !m.currentRunLocked(taskID, generation, TaskInstalling) || ctx.Err() != nil {
+		m.mu.Unlock()
+		_ = os.RemoveAll(stage)
+		return errRunSuperseded
+	}
+	backup := target + ".previous-" + fmt.Sprint(time.Now().UnixNano())
+	if _, err := os.Stat(target); err == nil {
+		if err := os.Rename(target, backup); err != nil {
+			m.mu.Unlock()
+			_ = os.RemoveAll(stage)
+			return err
+		}
+	}
+	if err := os.Rename(stage, target); err != nil {
+		_ = os.Rename(backup, target)
+		m.mu.Unlock()
+		_ = os.RemoveAll(stage)
+		return err
+	}
+	completed, ok := m.markCompletedLocked(taskID, generation)
+	m.mu.Unlock()
+	_ = os.RemoveAll(backup)
+	if !ok {
+		return errRunSuperseded
+	}
+	m.publish(completed)
+	return nil
 }
 
-func (m *Manager) installRuntime(id, taskDir string, artifacts []Artifact) error {
+func (m *Manager) installRuntime(ctx context.Context, taskID string, generation uint64, id, taskDir string, artifacts []Artifact) error {
 	target := filepath.Join(m.runtimes, id)
 	stage := target + ".installing"
 	_ = os.RemoveAll(stage)
@@ -490,6 +607,10 @@ func (m *Manager) installRuntime(id, taskDir string, artifacts []Artifact) error
 		return err
 	}
 	for _, artifact := range artifacts {
+		if err := ctx.Err(); err != nil {
+			_ = os.RemoveAll(stage)
+			return err
+		}
 		if err := extractZip(filepath.Join(taskDir, artifact.Name+".part"), stage); err != nil {
 			_ = os.RemoveAll(stage)
 			return err
@@ -501,20 +622,54 @@ func (m *Manager) installRuntime(id, taskDir string, artifacts []Artifact) error
 		return err
 	}
 	rel, _ := filepath.Rel(stage, server)
-	backup := target + ".previous"
-	_ = os.RemoveAll(backup)
+	spec, _ := RuntimeByID(id)
+	if err := writeJSONAtomic(filepath.Join(stage, "installation.json"), RuntimeInstallation{ID: id, Backend: spec.Backend, Version: spec.Version, Path: target, ServerPath: filepath.Join(target, rel), InstalledAt: time.Now().UTC()}); err != nil {
+		_ = os.RemoveAll(stage)
+		return err
+	}
+	m.mu.Lock()
+	if !m.currentRunLocked(taskID, generation, TaskInstalling) || ctx.Err() != nil {
+		m.mu.Unlock()
+		_ = os.RemoveAll(stage)
+		return errRunSuperseded
+	}
+	backup := target + ".previous-" + fmt.Sprint(time.Now().UnixNano())
 	if _, err := os.Stat(target); err == nil {
 		if err := os.Rename(target, backup); err != nil {
+			m.mu.Unlock()
+			_ = os.RemoveAll(stage)
 			return err
 		}
 	}
 	if err := os.Rename(stage, target); err != nil {
 		_ = os.Rename(backup, target)
+		m.mu.Unlock()
+		_ = os.RemoveAll(stage)
 		return err
 	}
+	completed, ok := m.markCompletedLocked(taskID, generation)
+	m.mu.Unlock()
 	_ = os.RemoveAll(backup)
-	spec, _ := RuntimeByID(id)
-	return writeJSONAtomic(filepath.Join(target, "installation.json"), RuntimeInstallation{ID: id, Backend: spec.Backend, Version: spec.Version, Path: target, ServerPath: filepath.Join(target, rel), InstalledAt: time.Now().UTC()})
+	if !ok {
+		return errRunSuperseded
+	}
+	m.publish(completed)
+	return nil
+}
+
+func (m *Manager) currentRunLocked(id string, generation uint64, state TaskState) bool {
+	task := m.tasks[id]
+	return task != nil && m.generations[id] == generation && task.State == state
+}
+
+func (m *Manager) markCompletedLocked(id string, generation uint64) (DownloadTask, bool) {
+	task := m.tasks[id]
+	if task == nil || m.generations[id] != generation || task.State != TaskInstalling {
+		return DownloadTask{}, false
+	}
+	task.State, task.Error, task.DownloadedBytes, task.BytesPerSecond, task.ETASeconds, task.UpdatedAt = TaskCompleted, "", task.TotalBytes, 0, 0, time.Now().UnixMilli()
+	m.saveStateLocked()
+	return *task, true
 }
 
 func (m *Manager) InstalledModels() []ModelInstallation {
@@ -584,9 +739,41 @@ func (m *Manager) UninstallRuntime() error {
 }
 
 func (m *Manager) ensureDiskSpace(required int64) error {
-	profile := DetectHardware(m.root)
-	if profile.DiskFreeBytes > 0 && profile.DiskFreeBytes < required {
-		return fmt.Errorf("insufficient disk space: need %.1f GB including safety margin, have %.1f GB", float64(required)/(1<<30), float64(profile.DiskFreeBytes)/(1<<30))
+	free := m.diskFree
+	if free == nil {
+		free = diskFreeBytes
+	}
+	paths := []string{m.downloads}
+	if strings.TrimSpace(m.models) != "" {
+		paths = append(paths, m.models)
+	}
+	return ensureDiskSpaceForPaths(required, paths, free, func(path string) string {
+		volume := strings.ToLower(filepath.VolumeName(filepath.Clean(path)))
+		if volume != "" {
+			return volume
+		}
+		return string(filepath.Separator)
+	})
+}
+
+func ensureDiskSpaceForPaths(required int64, paths []string, free func(string) int64, volume func(string) string) error {
+	if required <= 0 || free == nil || volume == nil {
+		return nil
+	}
+	checked := map[string]string{}
+	for _, path := range paths {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		key := volume(path)
+		if _, seen := checked[key]; seen {
+			continue
+		}
+		checked[key] = path
+		available := free(path)
+		if available > 0 && available < required {
+			return fmt.Errorf("insufficient disk space on %s: need %.1f GB including safety margin, have %.1f GB", path, float64(required)/(1<<30), float64(available)/(1<<30))
+		}
 	}
 	return nil
 }
@@ -639,6 +826,30 @@ func fileMatches(path string, artifact Artifact) (bool, error) {
 		return false, err
 	}
 	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), artifact.SHA256), nil
+}
+
+func copyFile(source, target string) error {
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func promoteFile(source, target string) error {

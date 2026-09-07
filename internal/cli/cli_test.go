@@ -54,6 +54,30 @@ func TestChdirTo(t *testing.T) {
 	}
 }
 
+func TestChdirToRootReturnsExplicitAbsoluteRoot(t *testing.T) {
+	parent := t.TempDir()
+	nested := filepath.Join(parent, "nested")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(parent)
+
+	got, err := chdirToRoot("nested")
+	if err != nil {
+		t.Fatalf("chdirToRoot: %v", err)
+	}
+	want, err := filepath.Abs(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("workspace root = %q, want %q", got, want)
+	}
+	if cwd, err := os.Getwd(); err != nil || filepath.Clean(cwd) != filepath.Clean(want) {
+		t.Fatalf("cwd = %q, %v; want %q", cwd, err, want)
+	}
+}
+
 func TestReserveNativeScrollbackFrameWritesOnlyNewlines(t *testing.T) {
 	var b bytes.Buffer
 	reserveNativeScrollbackFrame(&b, 3)

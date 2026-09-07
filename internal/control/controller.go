@@ -149,7 +149,6 @@ type Controller struct {
 	approvals       map[string]pendingApproval
 	asks            map[string]pendingAsk
 	granted         map[string]bool
-	nextID          int
 	// turn counts model turns this session, passed to hooks in their payload.
 	turn int
 	// approvedPlanAutoApproveTools auto-allows writer tool calls without prompting.
@@ -276,6 +275,15 @@ func (c *Controller) Paused() bool {
 type pendingAsk struct {
 	questions []event.AskQuestion
 	reply     chan []event.AskAnswer
+}
+
+// promptSequence is shared by every Controller in the process. Prompt IDs
+// cross the desktop/bot boundary, so a per-controller counter could route a
+// response to the wrong session.
+var promptSequence atomic.Uint64
+
+func nextPromptID() string {
+	return strconv.FormatUint(promptSequence.Add(1), 10)
 }
 
 const (
@@ -1440,8 +1448,7 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	defer c.promptMu.Unlock()
 
 	c.mu.Lock()
-	c.nextID++
-	id := strconv.Itoa(c.nextID)
+	id := nextPromptID()
 	reply := make(chan []event.AskAnswer, 1)
 	c.asks[id] = pendingAsk{questions: questions, reply: reply}
 	c.mu.Unlock()
@@ -3199,8 +3206,7 @@ func (c *Controller) requestApproval(ctx context.Context, tool, subject string) 
 		c.mu.Unlock()
 		return true, false, nil
 	}
-	c.nextID++
-	id := strconv.Itoa(c.nextID)
+	id := nextPromptID()
 	reply := make(chan approvalReply, 1)
 	c.approvals[id] = pendingApproval{tool: tool, subject: subject, autoDrain: c.autoApprovalWouldAllowLocked(tool, subject), reply: reply}
 	c.mu.Unlock()

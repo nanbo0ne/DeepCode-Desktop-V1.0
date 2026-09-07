@@ -10,11 +10,13 @@ O.R.C.A. 不绑定单一模型，也不把所有任务塞进同一种对话：�
 
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
-| Windows x64 | [安装器](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [便携版](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-for-Windows-windows-amd64.zip) | 完整支持本地 AI 与 Computer Use |
-| macOS | [Universal DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-macos-universal.dmg) | 支持 Intel 与 Apple Silicon |
-| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu |
+| Windows x64 | [安装器](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [便携版](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-for-Windows-windows-amd64.zip) | 完整支持本地 AI 与 Computer Use |
+| macOS | [Universal DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-macos-universal.dmg) | 支持 Intel 与 Apple Silicon |
+| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu |
 
-[查看 O.R.C.A. v3.0.1 的全部文件、校验信息和更新说明](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.1)
+[查看 O.R.C.A. v3.0.2 的全部文件、校验信息和更新说明](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.2)
+
+[本版验证记录与尚未覆盖的场景](docs/audits/2026-09-07-real-usage-release.md)
 
 Windows 安装器支持原位升级、开始菜单/桌面快捷方式和可选的安装后启动。卸载默认保留用户数据与本地模型。应用只提示可用更新，不会未经确认自动下载安装。
 
@@ -73,7 +75,7 @@ Windows 安装器支持原位升级、开始菜单/桌面快捷方式和可选�
 - 支持粘贴、拖放或引用 PNG、JPEG、WebP、GIF 和常用文档。
 - 每个模型记录独立的视觉能力；自动模式优先使用已确认支持图片的当前模型或视觉 Subagent。
 - DeepSeek Vision Exp 可承担截图、OCR、图表和视觉 Agent 任务；纯文本模型不会被错误标记为可识图。
-- 内置产物工具可创建、编辑、预览和重新验证 DOCX、XLSX、PPTX 与 PDF。
+- 内置产物工具可创建、结构化编辑和重新验证 DOCX、XLSX、PPTX 与 PDF；视觉预览需要可用的真实渲染器，缺少依赖时明确提示，不生成占位预览冒充文档。
 - 生成的产物带结构化 sidecar，便于后续可靠修改；无法保证保真度的第三方复杂文件会明确提示限制。
 
 ### Windows 本地 AI
@@ -101,7 +103,7 @@ Windows 安装器支持原位升级、开始菜单/桌面快捷方式和可选�
 - 提供 Ask、自动审批和完全访问等权限策略，并保留宿主 deny 规则与工作区写入边界。
 - 自动审批可使用独立模型请求判断风险；分类请求不带历史、工具、图片和秘密字段。高风险进入人工审批，分类异常沿用既有自动审批回退并留下警告 telemetry。
 - API Key 使用本地凭据配置，每个供应商预设拥有独立密钥槽，不写入会话消息。
-- 消息和附件只会发送给当前明确选择的 Provider；使用自定义中转前应自行确认其隐私与计费规则。
+- 消息与任务所需附件会发送给当前模型，以及实际启用的视觉模型或 Subagent；风险复核只发送脱敏操作摘要。不同角色可以配置不同 Provider，使用前请确认各自的隐私与计费规则。
 - 会话、配置、日志、缓存、本地模型和下载任务分别存放，便于备份和清理。
 
 ### 界面与可访问性
@@ -123,7 +125,7 @@ Windows 安装器支持原位升级、开始菜单/桌面快捷方式和可选�
 
 ## 配置与迁移
 
-V3 使用 `orca.toml`、项目目录 `.orca/`、项目说明 `ORCA.md` 和 `ORCA_*` 环境变量。用户数据位于平台对应的 O.R.C.A. 数据目录；Windows 默认根目录为 `%LOCALAPPDATA%\O.R.C.A\`。
+V3 项目配置使用 `orca.toml`、项目目录 `.orca/`、项目说明 `ORCA.md` 和 `ORCA_*` 环境变量。Windows 全局配置为 `%APPDATA%\orca\config.toml`，凭据、会话和迁移记录等也保存在 `%APPDATA%\orca\`；本地运行器、模型和下载状态使用 `%LOCALAPPDATA%\O.R.C.A\`。备份时应同时保留这两个目录和项目内的 `.orca/`。
 
 从 V2 升级时会读取旧配置、会话、附件、Provider、密钥、记忆、Skill、MCP、费用和 telemetry，并在原子迁移成功后只写新目录。旧目录保留为备份；项目中已由 Git 跟踪的旧说明文件不会被擅自改名。配置版本为 V11。
 

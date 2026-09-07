@@ -974,6 +974,7 @@ export interface HardwareProfile {
   platform: string;
   supported: boolean;
   gpus: HardwareGPU[];
+  gpuDetectionFailed: boolean;
   memoryTotalMiB: number;
   memoryFreeMiB: number;
   cpuLogicalCores: number;

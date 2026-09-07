@@ -92,8 +92,9 @@ UninstPage custom un.DeleteDataPage un.DeleteDataPageLeave
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\O.R.C.A-for-Windows-windows-${ARCH}-installer.exe" # Name of the installer's file.
 !define ORCA_DEFAULT_INSTALLDIR "$LOCALAPPDATA\Programs\O.R.C.A for Windows"
+!define ORCA_INSTALLDIR_SENTINEL "$LOCALAPPDATA\Programs\O.R.C.A for Windows.__nsis_default__"
 InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation" # Reuse the previous install path on update; .onInit falls back to the default on first install.
-InstallDir "${ORCA_DEFAULT_INSTALLDIR}" # Per-user install location (no admin rights required).
+InstallDir "${ORCA_INSTALLDIR_SENTINEL}" # .onInit replaces this sentinel when no /D or registry path exists.
 ShowInstDetails show # This will always show the installation details.
 
 ####
@@ -108,7 +109,7 @@ ShowInstDetails show # This will always show the installation details.
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION}"
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
-    WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" "$\"$SYSDIR\cmd.exe$\" /c $\"$INSTDIR\uninstall.bat$\""
+    WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
     # Persist the resolved install path so a subsequent update picks it up
     # via InstallDirRegKey above. Without this, every release would force the
     # user back to %LOCALAPPDATA%\Programs\DeepSeek-Orca even if they had moved
@@ -132,6 +133,50 @@ Function .onInit
    !insertmacro wails.checkArchitecture
    SetShellVarContext current
 
+   ; NSIS consumes /D before $CMDLINE is exposed, so use a compile-time
+   ; sentinel to distinguish "no /D" from an explicit path. /D therefore keeps
+   ; its documented highest priority even when it equals the normal default.
+   StrCmp $INSTDIR "${ORCA_INSTALLDIR_SENTINEL}" use_compat_install_dir install_dir_done
+
+use_compat_install_dir:
+   StrCpy $INSTDIR "${ORCA_DEFAULT_INSTALLDIR}"
+   ClearErrors
+   ReadRegStr $0 HKCU "${UNINST_KEY}" "InstallLocation"
+   IfErrors current_display_icon
+   StrCmp $0 "" current_display_icon
+   StrCpy $INSTDIR $0
+   Goto install_dir_done
+
+current_display_icon:
+   ClearErrors
+   ReadRegStr $0 HKCU "${UNINST_KEY}" "DisplayIcon"
+   IfErrors legacy_install_dir
+   StrCmp $0 "" legacy_install_dir
+   ${GetParent} "$0" $INSTDIR
+   StrCmp $INSTDIR "" legacy_install_dir install_dir_done
+
+legacy_install_dir:
+   ; V2 used a separate uninstall key. Reuse its path for an in-place upgrade.
+   ClearErrors
+   ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "InstallLocation"
+   IfErrors legacy_display_icon
+   StrCmp $0 "" legacy_display_icon
+   StrCpy $INSTDIR $0
+   Goto install_dir_done
+
+legacy_display_icon:
+   ClearErrors
+   ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "DisplayIcon"
+   IfErrors install_dir_default
+   StrCmp $0 "" install_dir_default
+   ${GetParent} "$0" $INSTDIR
+   StrCmp $INSTDIR "" install_dir_default install_dir_done
+
+install_dir_default:
+   StrCpy $INSTDIR "${ORCA_DEFAULT_INSTALLDIR}"
+
+install_dir_done:
+
    ; First installs create a desktop shortcut by default. Upgrades preserve the
    ; user's existing choice, including a shortcut they deliberately removed.
    StrCpy $CreateDesktopShortcut ${BST_CHECKED}
@@ -140,42 +185,78 @@ Function .onInit
    IfErrors shortcut_choice_done
    StrCmp $1 "" shortcut_choice_done
    IfFileExists "$DESKTOP\${INFO_PRODUCTNAME}.lnk" shortcut_choice_done 0
+   IfFileExists "$DESKTOP\O.R.C.A for Windows.lnk" shortcut_choice_done 0
    StrCpy $CreateDesktopShortcut ${BST_UNCHECKED}
 
 shortcut_choice_done:
+FunctionEnd
 
-   ; InstallDirRegKey leaves $INSTDIR empty when the InstallLocation value is
-   ; missing. Older installers still wrote DisplayIcon, so use its parent folder
-   ; as a compatibility bridge before falling back to the per-user default.
-   StrCmp $INSTDIR "" 0 done
-   ClearErrors
-   ReadRegStr $0 HKCU "${UNINST_KEY}" "DisplayIcon"
-   IfErrors fallback
-   StrCmp $0 "" fallback
-   ${GetParent} "$0" $INSTDIR
-   StrCmp $INSTDIR "" fallback done
+Function orca.closeTargetProcesses
+    InitPluginsDir
+    FileOpen $0 "$PLUGINSDIR\orca-close-processes.ps1" w
+    FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'$\r$\n"
+    FileWrite $0 "$$targetDir = [IO.Path]::GetFullPath($$args[0])$\r$\n"
+    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'))$\r$\n"
+    FileWrite $0 "$$names = @('Orca', 'deepseek-orca-desktop', 'node')$\r$\n"
+    FileWrite $0 "function Get-TargetProcesses { @(Get-Process -Name $$names -ErrorAction SilentlyContinue | Where-Object { try { $$path = $$_.Path; $$path -and ($$targetPaths -contains [IO.Path]::GetFullPath($$path)) } catch { $$false } }) }$\r$\n"
+    FileWrite $0 "foreach ($$process in @(Get-TargetProcesses)) { if ($$process.MainWindowHandle -ne 0) { [void]$$process.CloseMainWindow() } }$\r$\n"
+    FileWrite $0 "$$deadline = [DateTime]::UtcNow.AddSeconds(5)$\r$\n"
+    FileWrite $0 "do { $$alive = @(Get-TargetProcesses); if ($$alive.Count -eq 0) { exit 0 }; Start-Sleep -Milliseconds 250 } while ([DateTime]::UtcNow -lt $$deadline)$\r$\n"
+    FileWrite $0 "exit 2$\r$\n"
+    FileClose $0
 
-fallback:
-   ; V2 used a separate uninstall key. Reuse its install directory for an
-   ; in-place upgrade so users do not end up with two desktop installations.
-   ClearErrors
-   ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "InstallLocation"
-   IfErrors legacy_display_icon
-   StrCmp $0 "" legacy_display_icon 0
-   StrCpy $INSTDIR $0
-   Goto done
+close_target_processes_retry:
+    nsExec::ExecToStack /TIMEOUT=8000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\orca-close-processes.ps1" "$INSTDIR"'
+    Pop $1
+    Pop $0
+    StrCmp $1 "0" close_target_processes_done
+    IfSilent close_target_processes_silent_failed close_target_processes_prompt
 
-legacy_display_icon:
-   ClearErrors
-   ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "DisplayIcon"
-   IfErrors legacy_default
-   StrCmp $0 "" legacy_default
-   ${GetParent} "$0" $INSTDIR
-   StrCmp $INSTDIR "" legacy_default done
+close_target_processes_prompt:
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${INFO_PRODUCTNAME} is still running from the selected install folder. Close it and click Retry, or cancel the operation." IDRETRY close_target_processes_retry
+    Goto close_target_processes_failed
 
-legacy_default:
-   StrCpy $INSTDIR "${ORCA_DEFAULT_INSTALLDIR}"
-done:
+close_target_processes_silent_failed:
+    SetErrorLevel 66
+
+close_target_processes_failed:
+    Abort
+
+close_target_processes_done:
+FunctionEnd
+
+Function un.orca.closeTargetProcesses
+    InitPluginsDir
+    FileOpen $0 "$PLUGINSDIR\orca-close-processes.ps1" w
+    FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'$\r$\n"
+    FileWrite $0 "$$targetDir = [IO.Path]::GetFullPath($$args[0])$\r$\n"
+    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'))$\r$\n"
+    FileWrite $0 "$$names = @('Orca', 'deepseek-orca-desktop', 'node')$\r$\n"
+    FileWrite $0 "function Get-TargetProcesses { @(Get-Process -Name $$names -ErrorAction SilentlyContinue | Where-Object { try { $$path = $$_.Path; $$path -and ($$targetPaths -contains [IO.Path]::GetFullPath($$path)) } catch { $$false } }) }$\r$\n"
+    FileWrite $0 "foreach ($$process in @(Get-TargetProcesses)) { if ($$process.MainWindowHandle -ne 0) { [void]$$process.CloseMainWindow() } }$\r$\n"
+    FileWrite $0 "$$deadline = [DateTime]::UtcNow.AddSeconds(5)$\r$\n"
+    FileWrite $0 "do { $$alive = @(Get-TargetProcesses); if ($$alive.Count -eq 0) { exit 0 }; Start-Sleep -Milliseconds 250 } while ([DateTime]::UtcNow -lt $$deadline)$\r$\n"
+    FileWrite $0 "exit 2$\r$\n"
+    FileClose $0
+
+un_close_target_processes_retry:
+    nsExec::ExecToStack /TIMEOUT=8000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\orca-close-processes.ps1" "$INSTDIR"'
+    Pop $1
+    Pop $0
+    StrCmp $1 "0" un_close_target_processes_done
+    IfSilent un_close_target_processes_silent_failed un_close_target_processes_prompt
+
+un_close_target_processes_prompt:
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${INFO_PRODUCTNAME} is still running from the selected install folder. Close it and click Retry, or cancel the operation." IDRETRY un_close_target_processes_retry
+    Goto un_close_target_processes_failed
+
+un_close_target_processes_silent_failed:
+    SetErrorLevel 66
+
+un_close_target_processes_failed:
+    Abort
+
+un_close_target_processes_done:
 FunctionEnd
 
 Function InstallOptionsPage
@@ -205,22 +286,24 @@ FunctionEnd
 Section
     !insertmacro wails.setShellContext
 
-    DetailPrint "Closing running ${INFO_PRODUCTNAME}..."
-    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "${PRODUCT_EXECUTABLE}" /T /F'
-    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "deepseek-orca-desktop.exe" /T /F'
-    Sleep 1000
+    DetailPrint "Closing running ${INFO_PRODUCTNAME} from the selected install folder..."
+    Call orca.closeTargetProcesses
 
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
+    Delete "$INSTDIR\uninstall.bat"
 
     !insertmacro wails.files
     File /oname=node.exe "..\installer-go\payload\node.exe"
-    File /oname=uninstall.bat "resources\uninstall.bat"
+    File /oname=LICENSE.node.txt "..\installer-go\payload\LICENSE.node.txt"
     SetOutPath "$INSTDIR\codegraph"
     File /r "..\installer-go\payload\codegraph\*.*"
     SetOutPath "$INSTDIR"
 
+    Delete "$SMPROGRAMS\O.R.C.A for Windows.lnk"
+    Delete "$SMPROGRAMS\Uninstall O.R.C.A for Windows.lnk"
+    Delete "$DESKTOP\O.R.C.A for Windows.lnk"
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     ${If} $CreateDesktopShortcut == ${BST_CHECKED}
         CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -235,18 +318,34 @@ Section
     Delete "$SMPROGRAMS\DeepSeek-Orca.lnk"
     Delete "$DESKTOP\DeepSeek-Orca.lnk"
     !insertmacro orca.writeUninstaller
+
+    ; Retire V2 only when this install actually replaced its executable folder.
+    ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "InstallLocation"
+    StrCmp $0 "" 0 legacy_cleanup_check
+    ReadRegStr $0 HKCU "${LEGACY_UNINST_KEY}" "DisplayIcon"
+    StrCmp $0 "" legacy_cleanup_done
+    ${GetParent} "$0" $0
+legacy_cleanup_check:
+    GetFullPathName $0 "$0"
+    GetFullPathName $1 "$INSTDIR"
+    StrCmp $0 $1 0 legacy_cleanup_done
+    Delete "$INSTDIR\deepseek-orca-desktop.exe"
+    Delete "$SMPROGRAMS\Uninstall DeepSeek-Orca.lnk"
+    DeleteRegKey HKCU "${LEGACY_UNINST_KEY}"
+legacy_cleanup_done:
 SectionEnd
 
 Section "uninstall"
     !insertmacro wails.setShellContext
 
-    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "${PRODUCT_EXECUTABLE}" /F'
-    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "deepseek-orca-desktop.exe" /F'
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    Call un.orca.closeTargetProcesses
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$SMPROGRAMS\Uninstall ${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\O.R.C.A for Windows.lnk"
+    Delete "$SMPROGRAMS\Uninstall O.R.C.A for Windows.lnk"
+    Delete "$DESKTOP\O.R.C.A for Windows.lnk"
     Delete "$SMPROGRAMS\DeepSeek-Orca.lnk"
     Delete "$DESKTOP\DeepSeek-Orca.lnk"
 
@@ -254,7 +353,9 @@ Section "uninstall"
     !insertmacro wails.unassociateCustomProtocols
 
     ${If} $DeleteSavedData == ${BST_CHECKED}
+        RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath with saved data
         RMDir /r "$AppData\deepseek-orca"
+        RMDir /r "$AppData\orca"
         RMDir /r "$LocalAppData\deepseek-orca"
         RMDir /r "$Profile\.deepseek-orca"
         RMDir /r "$AppData\O.R.C.A"
@@ -265,14 +366,13 @@ Section "uninstall"
 
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
     Delete "$INSTDIR\node.exe"
+    Delete "$INSTDIR\LICENSE.node.txt"
     RMDir /r "$INSTDIR\codegraph"
     !insertmacro orca.deleteUninstaller
 
-    ${If} $DeleteSavedData == ${BST_CHECKED}
-        RMDir /r "$INSTDIR"
-    ${Else}
-        RMDir "$INSTDIR"
-    ${EndIf}
+    ; Never recursively remove a user-selected install directory: it may contain
+    ; unrelated files. Known app-owned entries above are removed explicitly.
+    RMDir "$INSTDIR"
 SectionEnd
 
 Function un.DeleteDataPage
@@ -282,7 +382,7 @@ Function un.DeleteDataPage
         Abort
     ${EndIf}
 
-    ${NSD_CreateLabel} 0 0 100% 24u "Remove saved O.R.C.A data?"
+    ${NSD_CreateLabel} 0 0 100% 24u "Remove saved O.R.C.A. data?"
     Pop $0
     ${NSD_CreateCheckbox} 0 32u 100% 24u "Delete configuration, conversations, memory, cache, and other saved data. This cannot be undone."
     Pop $DeleteSavedDataCheckbox

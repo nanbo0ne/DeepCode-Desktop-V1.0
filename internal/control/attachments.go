@@ -30,6 +30,12 @@ var safeAttachmentExt = regexp.MustCompile(`^\.[a-z0-9]{1,12}$`)
 // .orca/attachments and returns its repo-relative path for @referencing.
 // origName supplies only the extension; the stored name is generated.
 func SaveAttachmentDataURL(origName, dataURL string) (string, error) {
+	return SaveAttachmentDataURLAt(".", origName, dataURL)
+}
+
+// SaveAttachmentDataURLAt stores an attachment under workspaceRoot without
+// changing the process working directory.
+func SaveAttachmentDataURLAt(workspaceRoot, origName, dataURL string) (string, error) {
 	const marker = ";base64,"
 	i := strings.Index(dataURL, marker)
 	if !strings.HasPrefix(dataURL, "data:") || i < 0 {
@@ -46,26 +52,33 @@ func SaveAttachmentDataURL(origName, dataURL string) (string, error) {
 	if !safeAttachmentExt.MatchString(ext) {
 		ext = ".bin"
 	}
-	if err := ensureAttachmentRoot(); err != nil {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
 		return "", err
 	}
-	rel, f, err := createAttachmentFile(ext)
+	rel, f, err := createAttachmentFileAt(root, ext)
 	if err != nil {
 		return "", err
 	}
 	if _, err := f.Write(raw); err != nil {
 		_ = f.Close()
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
 	return filepath.ToSlash(rel), nil
 }
 
 func SaveImageDataURL(dataURL string) (string, error) {
+	return SaveImageDataURLAt(".", dataURL)
+}
+
+// SaveImageDataURLAt stores an image under workspaceRoot without changing the
+// process working directory.
+func SaveImageDataURLAt(workspaceRoot, dataURL string) (string, error) {
 	const prefix = "data:"
 	const marker = ";base64,"
 	if !strings.HasPrefix(dataURL, prefix) {
@@ -80,10 +93,16 @@ func SaveImageDataURL(dataURL string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("decode pasted image: %w", err)
 	}
-	return SaveImageBytes(mime, raw)
+	return SaveImageBytesAt(workspaceRoot, mime, raw)
 }
 
 func SaveImageBytes(declaredMime string, raw []byte) (string, error) {
+	return SaveImageBytesAt(".", declaredMime, raw)
+}
+
+// SaveImageBytesAt stores an image under workspaceRoot without changing the
+// process working directory.
+func SaveImageBytesAt(workspaceRoot, declaredMime string, raw []byte) (string, error) {
 	if len(raw) == 0 || len(raw) > maxImageAttachmentBytes {
 		return "", fmt.Errorf("pasted image must be between 1 byte and 10 MB")
 	}
@@ -95,30 +114,37 @@ func SaveImageBytes(declaredMime string, raw []byte) (string, error) {
 		return "", fmt.Errorf("unsupported image type: %s", declaredMime)
 	}
 	ext := imageExt(mime)
-	if err := ensureAttachmentRoot(); err != nil {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
 		return "", err
 	}
-	rel, f, err := createAttachmentFile(ext)
+	rel, f, err := createAttachmentFileAt(root, ext)
 	if err != nil {
 		return "", err
 	}
 	if n, err := f.Write(raw); err != nil {
 		_ = f.Close()
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	} else if n != len(raw) {
 		_ = f.Close()
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", io.ErrShortWrite
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
 	return filepath.ToSlash(rel), nil
 }
 
 func SaveImageFile(path string) (string, error) {
+	return SaveImageFileAt(path, ".")
+}
+
+// SaveImageFileAt copies an image into workspaceRoot without changing the
+// process working directory.
+func SaveImageFileAt(path, workspaceRoot string) (string, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return "", err
@@ -153,7 +179,7 @@ func SaveImageFile(path string) (string, error) {
 	} else if !os.SameFile(opened, after) || after.Size() != opened.Size() {
 		return "", fmt.Errorf("pasted image changed while reading")
 	}
-	return SaveImageBytes("", raw)
+	return SaveImageBytesAt(workspaceRoot, "", raw)
 }
 
 // SnapshotImageFile copies a workspace image into that workspace's attachment
@@ -163,29 +189,7 @@ func SnapshotImageFile(path, workspaceRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	root := strings.TrimSpace(workspaceRoot)
-	if root == "" {
-		root = "."
-	}
-	rel := attachmentPath(imageExt(mime))
-	abs := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return "", err
-	}
-	f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return "", err
-	}
-	if _, err := f.Write(raw); err != nil {
-		_ = f.Close()
-		_ = os.Remove(abs)
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(abs)
-		return "", err
-	}
-	return filepath.ToSlash(rel), nil
+	return writeAttachmentAt(workspaceRoot, imageExt(mime), raw)
 }
 
 func readImageFile(path string) ([]byte, string, error) {
@@ -213,6 +217,12 @@ func readImageFile(path string) ([]byte, string, error) {
 }
 
 func SaveAttachmentFile(path string) (string, error) {
+	return SaveAttachmentFileAt(path, ".")
+}
+
+// SaveAttachmentFileAt copies a file into workspaceRoot without changing the
+// process working directory.
+func SaveAttachmentFileAt(path, workspaceRoot string) (string, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return "", err
@@ -251,39 +261,46 @@ func SaveAttachmentFile(path string) (string, error) {
 	if !safeAttachmentExt.MatchString(ext) {
 		ext = ".bin"
 	}
-	if err := ensureAttachmentRoot(); err != nil {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
 		return "", err
 	}
-	rel, dst, err := createAttachmentFile(ext)
+	rel, dst, err := createAttachmentFileAt(root, ext)
 	if err != nil {
 		return "", err
 	}
 	if _, err := dst.Write(raw); err != nil {
 		_ = dst.Close()
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
 	if err := dst.Close(); err != nil {
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
 	return filepath.ToSlash(rel), nil
 }
 
 func SaveClipboardImage() (string, error) {
+	return SaveClipboardImageAt(".")
+}
+
+// SaveClipboardImageAt stores the native clipboard image under workspaceRoot
+// without changing the process working directory.
+func SaveClipboardImageAt(workspaceRoot string) (string, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		return saveDarwinClipboardImage()
+		return saveDarwinClipboardImage(workspaceRoot)
 	case "windows":
-		return saveWindowsClipboardImage()
+		return saveWindowsClipboardImage(workspaceRoot)
 	case "linux":
-		return saveLinuxClipboardImage()
+		return saveLinuxClipboardImage(workspaceRoot)
 	default:
 		return "", fmt.Errorf("clipboard image paste is not supported on %s yet", runtime.GOOS)
 	}
 }
 
-func saveWindowsClipboardImage() (string, error) {
+func saveWindowsClipboardImage(workspaceRoot string) (string, error) {
 	// Windows PowerShell 5.1 (preinstalled) reaches the GUI clipboard; pwsh (Core)
 	// lacks Get-Clipboard -Format Image, so invoke powershell.exe. The PNG is
 	// returned as base64 on stdout so no temp file is involved.
@@ -306,24 +323,30 @@ $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
 	if err != nil {
 		return "", fmt.Errorf("decode clipboard image: %w", err)
 	}
-	return SaveImageBytes("", raw)
+	return SaveImageBytesAt(workspaceRoot, "", raw)
 }
 
-func saveLinuxClipboardImage() (string, error) {
+func saveLinuxClipboardImage(workspaceRoot string) (string, error) {
 	// Wayland (wl-paste) then X11 (xclip); both write image bytes to stdout.
 	for _, c := range [][]string{
 		{"wl-paste", "--type", "image/png", "--no-newline"},
 		{"xclip", "-selection", "clipboard", "-t", "image/png", "-o"},
 	} {
 		if out, err := exec.Command(c[0], c[1:]...).Output(); err == nil && len(out) > 0 {
-			return SaveImageBytes("", out)
+			return SaveImageBytesAt(workspaceRoot, "", out)
 		}
 	}
 	return "", fmt.Errorf("clipboard image paste needs wl-paste (Wayland) or xclip (X11)")
 }
 
 func ImageDataURL(path string) (string, error) {
-	clean, err := cleanAttachmentPath(path)
+	return ImageDataURLAt(path, ".")
+}
+
+// ImageDataURLAt reads an image attachment relative to workspaceRoot without
+// changing the process working directory.
+func ImageDataURLAt(path, workspaceRoot string) (string, error) {
+	clean, err := cleanAttachmentPathAt(path, workspaceRoot)
 	if err != nil {
 		return "", err
 	}
@@ -369,8 +392,16 @@ func ImageDataURL(path string) (string, error) {
 }
 
 func cleanAttachmentPath(path string) (string, error) {
+	return cleanAttachmentPathAt(path, ".")
+}
+
+func cleanAttachmentPathAt(path, workspaceRoot string) (string, error) {
 	if filepath.IsAbs(path) {
 		return "", fmt.Errorf("attachment path must be relative")
+	}
+	rootDir, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
+		return "", err
 	}
 	clean := filepath.Clean(filepath.FromSlash(path))
 	root := filepath.Join(".orca", "attachments")
@@ -382,14 +413,16 @@ func cleanAttachmentPath(path string) (string, error) {
 		return "", fmt.Errorf("attachment path is outside .orca/attachments")
 	}
 	if root == filepath.Join(".orca", "attachments") {
-		if err := ensureAttachmentRoot(); err != nil {
+		if err := ensureAttachmentRootAt(rootDir); err != nil {
 			return "", err
 		}
 	}
-	if err := rejectSymlinkComponents(clean, root); err != nil {
+	absoluteRoot := filepath.Join(rootDir, root)
+	absolutePath := filepath.Join(rootDir, clean)
+	if err := rejectSymlinkComponents(absolutePath, absoluteRoot); err != nil {
 		return "", err
 	}
-	return clean, nil
+	return absolutePath, nil
 }
 
 func rejectSymlinkComponents(path, root string) error {
@@ -418,7 +451,15 @@ func rejectSymlinkComponents(path, root string) error {
 }
 
 func ensureAttachmentRoot() error {
-	root := filepath.Join(".orca", "attachments")
+	return ensureAttachmentRootAt(".")
+}
+
+func ensureAttachmentRootAt(workspaceRoot string) error {
+	rootDir, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(rootDir, ".orca", "attachments")
 	if info, err := os.Lstat(root); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("attachment directory must not be a symlink")
@@ -443,32 +484,29 @@ func ensureAttachmentRoot() error {
 	return nil
 }
 
-func saveDarwinClipboardImage() (string, error) {
+func saveDarwinClipboardImage(workspaceRoot string) (string, error) {
 	for _, class := range []string{"PNGf", "JPEG"} {
-		if rel, err := saveDarwinClipboardClass(class); err == nil {
+		if rel, err := saveDarwinClipboardClass(class, workspaceRoot); err == nil {
 			return rel, nil
 		}
 	}
 	return "", fmt.Errorf("clipboard does not contain a supported image")
 }
 
-func saveDarwinClipboardClass(class string) (string, error) {
-	if err := ensureAttachmentRoot(); err != nil {
+func saveDarwinClipboardClass(class, workspaceRoot string) (string, error) {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
 		return "", err
 	}
-	rel, f, err := createAttachmentFile(".bin")
+	rel, f, err := createAttachmentFileAt(root, ".bin")
 	if err != nil {
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(rel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(rel)))
 		return "", err
 	}
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		_ = os.Remove(rel)
-		return "", err
-	}
+	abs := filepath.Join(root, filepath.FromSlash(rel))
 	script := fmt.Sprintf(`
 set outPath to POSIX file %q
 try
@@ -487,17 +525,74 @@ on error errMsg
 	end try
 	error errMsg
 end try
-`, abs, class)
+	`, abs, class)
 	if out, err := exec.Command("osascript", "-e", script).CombinedOutput(); err != nil {
-		_ = os.Remove(rel)
+		_ = os.Remove(abs)
 		return "", fmt.Errorf("read clipboard image: %s", strings.TrimSpace(string(out)))
 	}
-	raw, err := os.ReadFile(rel)
-	_ = os.Remove(rel)
+	raw, err := os.ReadFile(abs)
+	_ = os.Remove(abs)
 	if err != nil {
 		return "", err
 	}
-	return SaveImageBytes("", raw)
+	return SaveImageBytesAt(root, "", raw)
+}
+
+func createAttachmentFileAt(workspaceRoot, ext string) (string, *os.File, error) {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := ensureAttachmentRootAt(root); err != nil {
+		return "", nil, err
+	}
+	for range maxAttachmentCreateAttempts {
+		rel := attachmentPath(ext)
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if os.IsExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", nil, err
+		}
+		return rel, f, nil
+	}
+	return "", nil, fmt.Errorf("create unique attachment path")
+}
+
+func writeAttachmentAt(workspaceRoot, ext string, raw []byte) (string, error) {
+	root, err := workspaceRootPath(workspaceRoot)
+	if err != nil {
+		return "", err
+	}
+	rel, f, err := createAttachmentFileAt(root, ext)
+	if err != nil {
+		return "", err
+	}
+	abs := filepath.Join(root, filepath.FromSlash(rel))
+	if _, err := f.Write(raw); err != nil {
+		_ = f.Close()
+		_ = os.Remove(abs)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(abs)
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func workspaceRootPath(workspaceRoot string) (string, error) {
+	root := strings.TrimSpace(workspaceRoot)
+	if root == "" {
+		root = "."
+	}
+	abs, err := filepath.Abs(filepath.FromSlash(root))
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	return filepath.Clean(abs), nil
 }
 
 func createAttachmentFile(ext string) (string, *os.File, error) {

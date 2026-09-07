@@ -5,6 +5,7 @@ package localai
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -42,13 +43,12 @@ func DetectHardware(dataRoot string) HardwareProfile {
 		p.MemoryTotalMiB = int64(mem.TotalPhys / 1024 / 1024)
 		p.MemoryFreeMiB = int64(mem.AvailPhys / 1024 / 1024)
 	}
-	if ptr, err := windows.UTF16PtrFromString(dataRoot); err == nil {
-		var free uint64
-		if ok, _, _ := getDiskFreeSpaceExProc.Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&free)), 0, 0); ok != 0 {
-			p.DiskFreeBytes = int64(free)
-		}
+	p.DiskFreeBytes = diskFreeBytes(dataRoot)
+	windowsGPUs, gpuErr := detectWindowsVideoControllers()
+	if gpuErr != nil {
+		p.GPUDetectionFailed = true
 	}
-	p.GPUs = mergeGPUAdapters(detectNVIDIAGPUs(), detectWindowsVideoControllers())
+	p.GPUs = mergeGPUAdapters(detectNVIDIAGPUs(), windowsGPUs)
 	p.GPUs = nonNilGPUs(p.GPUs)
 	applyRecommendation(&p)
 	return p
@@ -81,19 +81,18 @@ func detectNVIDIAGPUs() []GPUAdapter {
 	return result
 }
 
-func detectWindowsVideoControllers() []GPUAdapter {
-	script := `@(Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion) | ConvertTo-Json -Compress`
+func detectWindowsVideoControllers() ([]GPUAdapter, error) {
+	script := `$controllers = @(Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion); ConvertTo-Json -InputObject $controllers -Compress`
 	out, err := hiddenCommand("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Output()
 	if err != nil || len(out) == 0 {
-		return nil
+		if err == nil {
+			err = errors.New("Win32_VideoController returned no JSON")
+		}
+		return nil, err
 	}
-	var controllers []struct {
-		Name          string `json:"Name"`
-		AdapterRAM    uint64 `json:"AdapterRAM"`
-		DriverVersion string `json:"DriverVersion"`
-	}
-	if err := json.Unmarshal(out, &controllers); err != nil {
-		return nil
+	controllers, err := decodeWindowsVideoControllers(out)
+	if err != nil {
+		return nil, err
 	}
 	result := make([]GPUAdapter, 0, len(controllers))
 	for _, controller := range controllers {
@@ -108,7 +107,44 @@ func detectWindowsVideoControllers() []GPUAdapter {
 			DriverVersion: strings.TrimSpace(controller.DriverVersion),
 		})
 	}
-	return result
+	return result, nil
+}
+
+type windowsVideoController struct {
+	Name          string `json:"Name"`
+	AdapterRAM    uint64 `json:"AdapterRAM"`
+	DriverVersion string `json:"DriverVersion"`
+}
+
+func decodeWindowsVideoControllers(data []byte) ([]windowsVideoController, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return nil, errors.New("empty video controller JSON")
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var controller windowsVideoController
+		if err := json.Unmarshal([]byte(trimmed), &controller); err != nil {
+			return nil, err
+		}
+		return []windowsVideoController{controller}, nil
+	}
+	var controllers []windowsVideoController
+	if err := json.Unmarshal([]byte(trimmed), &controllers); err != nil {
+		return nil, err
+	}
+	return controllers, nil
+}
+
+func diskFreeBytes(path string) int64 {
+	ptr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0
+	}
+	var free uint64
+	if ok, _, _ := getDiskFreeSpaceExProc.Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&free)), 0, 0); ok == 0 {
+		return 0
+	}
+	return int64(free)
 }
 
 func gpuVendorAndBackend(name string) (string, string) {

@@ -21,6 +21,8 @@ func TestFinalReadinessFailureBranches(t *testing.T) {
 	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"a.go"}}
 	checkAfter := evidence.Receipt{ToolName: "bash", Success: true, Command: "go test ./..."}
 	listingAfter := evidence.Receipt{ToolName: "bash", Success: true, Command: "ls -la"}
+	diffAfter := evidence.Receipt{ToolName: "bash", Success: true, Command: "git diff --check"}
+	readAfter := evidence.Receipt{ToolName: "read_file", Success: true, Read: true, Paths: []string{"a.go"}}
 	todo := evidence.Receipt{ToolName: "todo_write", Success: true, Todos: []evidence.TodoItem{{Content: "edit", Status: "in_progress"}}}
 	completeAfter := evidence.Receipt{ToolName: "complete_step", Success: true, Step: "edit"}
 	doneTodo := evidence.Receipt{ToolName: "todo_write", Success: true, Todos: []evidence.TodoItem{{Content: "edit", Status: "completed"}}}
@@ -39,6 +41,8 @@ func TestFinalReadinessFailureBranches(t *testing.T) {
 		{"writer without checks reports advisory only", nil, readinessLedger(writer), true, ""},
 		{"ordinary shell command reports advisory only", nil, readinessLedger(writer, listingAfter), true, ""},
 		{"writer with fallback verification satisfies", nil, readinessLedger(writer, checkAfter), true, ""},
+		{"named check rejects diff-only receipt", []instruction.VerifyCheck{check}, readinessLedger(writer, diffAfter), false, "go test ./..."},
+		{"named check rejects read-only receipt", []instruction.VerifyCheck{check}, readinessLedger(writer, readAfter), false, "go test ./..."},
 		{"missing project check after writer is reported", []instruction.VerifyCheck{check}, readinessLedger(checkAfter, writer), false, "go test ./..."},
 		{"project check run after writer satisfies", []instruction.VerifyCheck{check}, readinessLedger(writer, checkAfter), true, ""},
 		{"todo writer without complete_step is reported", nil, readinessLedger(writer, todo), false, "incomplete items"},
@@ -78,6 +82,21 @@ func TestFinalReadinessAllowsIncompleteTodosInPlanMode(t *testing.T) {
 	}
 	if got := a.finalReadinessCheck(); got.applies {
 		t.Fatalf("finalReadinessCheck() applies in plan mode: %+v", got)
+	}
+}
+
+func TestFinalReadinessRequiresEveryNamedProjectCheck(t *testing.T) {
+	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"a.go"}}
+	first := evidence.Receipt{ToolName: "bash", Success: true, Command: "go test ./internal/..."}
+	checks := []instruction.VerifyCheck{
+		{Command: "go test ./internal/...", SourcePath: "AGENTS.md", Line: 3},
+		{Command: "npm test", SourcePath: "AGENTS.md", Line: 4},
+	}
+	a := &Agent{evidence: readinessLedger(writer, first), projectChecks: checks}
+
+	got := a.finalReadinessCheck()
+	if got.missingProjectChecks != 1 || !strings.Contains(got.reason, `run "npm test"`) {
+		t.Fatalf("finalReadinessCheck() = %+v, want only npm test missing", got)
 	}
 }
 

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "format": "xlsx",
+  "title": "Legacy workbook",
+  "sheets": [
+    {
+      "name": "Data",
+      "rows": [
+        [
+          "12",
+          "0012",
+          "=SUM(A1:A1)"
+        ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-07T14:17:13.4834027Z"
+}

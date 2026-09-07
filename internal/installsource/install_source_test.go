@@ -779,18 +779,16 @@ func TestPlanURLRemoteMCPHostAuto(t *testing.T) {
 	}
 }
 
-func TestPlanURLSSEDefault(t *testing.T) {
+func TestPlanURLSSEDefaultIsRejected(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	resp := execInstall(t, tl, map[string]any{
+	raw, _ := json.Marshal(map[string]any{
 		"source": "https://example.com/sse/stream",
 	})
-	if !resp.OK {
-		t.Fatalf("response = %+v", resp)
-	}
-	if resp.Actions[0].Transport != "sse" {
-		t.Errorf("transport = %q, want sse (URL contains 'sse')", resp.Actions[0].Transport)
+	_, err := tl.Execute(context.Background(), raw)
+	if err == nil || !strings.Contains(err.Error(), "Streamable HTTP") {
+		t.Fatalf("inferred legacy SSE endpoint must be rejected, got %v", err)
 	}
 }
 

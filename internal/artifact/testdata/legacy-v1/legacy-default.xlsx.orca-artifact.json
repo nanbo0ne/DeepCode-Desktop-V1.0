@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "format": "xlsx",
+  "title": "Default workbook",
+  "paragraphs": [
+    "Default workbook"
+  ],
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rows": [
+        [
+          "Default workbook"
+        ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-07T14:17:13.4693491Z"
+}

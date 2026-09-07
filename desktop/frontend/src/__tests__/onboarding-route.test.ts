@@ -20,7 +20,7 @@ eq(DEFAULT_ONBOARDING_ROUTE, "deepseek", "first launch opens the DeepSeek key ro
 const root = fileURLToPath(new URL("..", import.meta.url));
 const overlay = readFileSync(join(root, "components", "OnboardingOverlay.tsx"), "utf8");
 const app = readFileSync(join(root, "App.tsx"), "utf8");
-eq(overlay.includes('.catch((e) => setError(`无法读取模型配置：${String(e)}`))'), true, "state load failures surface inside onboarding");
+eq(overlay.includes('setError(t("onboarding.error.unknown", { msg: String(e) }))'), true, "state load failures surface inside onboarding");
 eq(overlay.includes('role="dialog" aria-modal="true"'), true, "onboarding exposes modal dialog semantics");
 eq(overlay.includes('const changeRoute = (next: OnboardingRoute) => { setError(null); setRoute(next); };'), true, "route changes clear stale errors");
 eq(overlay.includes('onKeyDown={keepFocusInDialog}'), true, "keyboard focus remains inside onboarding");

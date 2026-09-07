@@ -278,7 +278,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	if !codingMode {
 		toolRoutingPolicy = config.BuildWorkToolRoutingPolicy(cfg.ToolLibrary)
 	}
-	if codingMode && strings.TrimSpace(sysPrompt) == strings.TrimSpace(config.DefaultAgentSystemPrompt) {
+	if strings.TrimSpace(sysPrompt) == strings.TrimSpace(config.DefaultAgentSystemPrompt) {
 		sysPrompt = ""
 	}
 	// Output style: fold the selected persona/tone block into the base prompt
@@ -348,6 +348,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	searchSpec := builtin.ResolveSearch(cfg.Tools.Search.Engine, cfg.Tools.Search.RgPath, stderr)
 	bashTimeout := time.Duration(cfg.BashTimeoutSeconds()) * time.Second
 	addBuiltins(reg, cfg.Tools.Enabled, cfg.WriteRootsForRoot(root), bashSpec, bashTimeout, searchSpec, stderr, root, proxySpec, config.BuildBashHostToolSteer(cfg.ToolLibrary))
+	builtin.BindBashEnvironment(reg, cfg.EnvironmentSlice())
 	for _, t := range hosttools.Tools(root, cfg.ToolLibrary) {
 		reg.Add(t)
 	}

@@ -1191,14 +1191,15 @@ func hasPermissionRule(rules []string, want string) bool {
 
 // TestBuildMigratesLegacyConfigEndToEnd drives the real boot path: a v0.x
 // ~/.orca/config.json with no v1+ config present must be imported during
-// Build — config written, key pinned into the env, and the user told via a notice.
+// Build — config written, scoped key resolution retained, and the user told via
+// a notice.
 func TestBuildMigratesLegacyConfigEndToEnd(t *testing.T) {
 	home := robustTempDir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)                               // os.UserHomeDir on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config")) // os.UserConfigDir on Linux
 	t.Setenv("AppData", filepath.Join(home, "AppData"))         // os.UserConfigDir on Windows
-	t.Setenv("DEEPSEEK_API_KEY", "")                            // track for cleanup; migration os.Setenv's it live
+	t.Setenv("DEEPSEEK_API_KEY", "")                            // keep host env empty; config scope must resolve the migrated file
 
 	proj := robustTempDir(t)
 	t.Chdir(proj)
@@ -1243,8 +1244,8 @@ func TestBuildMigratesLegacyConfigEndToEnd(t *testing.T) {
 		t.Errorf("migrated config missing plugin/lang:\n%s", data)
 	}
 
-	if got := os.Getenv("DEEPSEEK_API_KEY"); got != "sk-e2e" {
-		t.Errorf("DEEPSEEK_API_KEY not pinned into env after migration: %q", got)
+	if got := os.Getenv("DEEPSEEK_API_KEY"); got != "" {
+		t.Errorf("migration must not mutate process environment: %q", got)
 	}
 
 	if data, err := os.ReadFile(config.UserCredentialsPath()); err != nil || !strings.Contains(string(data), "DEEPSEEK_API_KEY=sk-e2e") {

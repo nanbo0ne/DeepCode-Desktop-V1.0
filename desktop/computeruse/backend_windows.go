@@ -90,12 +90,14 @@ var (
 	procUnhookWindowsHookEx       = user32DLL.NewProc("UnhookWindowsHookEx")
 	procCallNextHookEx            = user32DLL.NewProc("CallNextHookEx")
 	procGetMessageW               = user32DLL.NewProc("GetMessageW")
+	procPeekMessageW              = user32DLL.NewProc("PeekMessageW")
 	procPostThreadMessageW        = user32DLL.NewProc("PostThreadMessageW")
 	procGetAncestor               = user32DLL.NewProc("GetAncestor")
 	procOpenInputDesktop          = user32DLL.NewProc("OpenInputDesktop")
 	procCloseDesktop              = user32DLL.NewProc("CloseDesktop")
 	procGetUserObjectInformationW = user32DLL.NewProc("GetUserObjectInformationW")
 	procGetCurrentThreadID        = kernel32DLL.NewProc("GetCurrentThreadId")
+	procSysFreeString             = windows.NewLazySystemDLL("oleaut32.dll").NewProc("SysFreeString")
 )
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
@@ -144,19 +146,23 @@ type elementTarget struct {
 }
 
 type WindowsBackend struct {
-	mu             sync.Mutex
-	targets        map[string]elementTarget
-	displays       map[string]Rect
-	windows        map[string]uintptr
-	pressedKeys    map[uint16]bool
-	pressedButtons map[string]bool
-	hookThread     uint32
-	keyboardHook   uintptr
-	mouseHook      uintptr
-	onEmergency    func()
-	onUserInput    func()
-	hookStop       chan struct{}
-	overlay        *nativeOverlay
+	mu                 sync.Mutex
+	observationRequest uint64
+	targets            map[string]elementTarget
+	displays           map[string]Rect
+	windows            map[string]uintptr
+	pressedKeys        map[uint16]bool
+	pressedButtons     map[string]bool
+	hookThread         uint32
+	keyboardHook       uintptr
+	mouseHook          uintptr
+	hookGeneration     uint64
+	hookDone           chan struct{}
+	hookLifecycle      sync.Mutex
+	postThreadMessage  func(uint32) error
+	onEmergency        func()
+	onUserInput        func()
+	overlay            *nativeOverlay
 }
 
 func NewPlatformBackend() Backend {
@@ -174,6 +180,10 @@ func (b *WindowsBackend) Observe(ctx context.Context, sessionID string, generati
 	if err := ctx.Err(); err != nil {
 		return Observation{}, err
 	}
+	b.mu.Lock()
+	b.observationRequest++
+	request := b.observationRequest
+	b.mu.Unlock()
 	secure := !onDefaultDesktop()
 	obs := Observation{SessionID: sessionID, Generation: generation, ObservedAt: time.Now().UTC(), SecureDesktop: secure}
 	if secure {
@@ -217,6 +227,10 @@ func (b *WindowsBackend) Observe(ctx context.Context, sessionID string, generati
 	obs.Elements = elements
 	obs.Summary = summarizeObservation(obs)
 	b.mu.Lock()
+	if request != b.observationRequest || ctx.Err() != nil {
+		b.mu.Unlock()
+		return Observation{}, ErrStaleObservation
+	}
 	b.targets, b.windows, b.displays = targets, handles, map[string]Rect{}
 	for _, d := range displays {
 		b.displays[d.ID] = d.Bounds
@@ -245,24 +259,25 @@ func (b *WindowsBackend) Execute(ctx context.Context, observation Observation, a
 	if observation.Foreground.HigherTrust || sensitiveText(observation.Foreground.Title) {
 		return fmt.Errorf("%w: the foreground window has a protected trust or credential boundary", ErrProtectedSurface)
 	}
-	if protected, reason := protectedElementAt(x, y); protected {
-		return fmt.Errorf("%w: %s", ErrProtectedSurface, reason)
+	protected, reason, inspectErr := protectedElementAt(x, y)
+	if err := protectedElementDecision(protected, reason, inspectErr); err != nil {
+		return err
 	}
 
 	switch action.Type {
 	case "click", "double_click", "right_click", "hover", "mouse_down", "mouse_up", "drag":
-		return b.pointerAction(action, x, y, observation)
+		return b.pointerAction(ctx, action, x, y, observation)
 	case "scroll":
 		return b.scroll(action, x, y)
 	case "key", "key_combo":
-		return b.keyboardAction(action)
+		return b.keyboardAction(ctx, action)
 	case "type_text":
 		if action.Text == "" {
 			return nil
 		}
-		return b.typeText(action.Text)
+		return b.typeText(ctx, action.Text)
 	case "activate_window", "minimize_window", "maximize_window", "restore_window", "close_window", "move_window", "resize_window":
-		return b.windowAction(action)
+		return b.windowAction(ctx, observation, action)
 	case "invoke", "toggle", "select", "expand", "collapse", "set_value":
 		return b.uiaAction(action, x, y)
 	case "wait":
@@ -304,7 +319,10 @@ func (b *WindowsBackend) resolveTarget(observation Observation, action Action) (
 	return elementTarget{Generation: action.Generation, Bounds: Rect{X: x, Y: y, Width: 1, Height: 1}}, x, y, nil
 }
 
-func (b *WindowsBackend) pointerAction(action Action, x, y int, observation Observation) error {
+func (b *WindowsBackend) pointerAction(ctx context.Context, action Action, x, y int, observation Observation) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if _, _, err := procSetCursorPos.Call(uintptr(x), uintptr(y)); err != syscall.Errno(0) {
 		return err
 	}
@@ -323,11 +341,13 @@ func (b *WindowsBackend) pointerAction(action Action, x, y int, observation Obse
 		b.setButton("left", false)
 		return nil
 	case "double_click":
-		if err := b.pointerAction(Action{Type: "click"}, x, y, observation); err != nil {
+		if err := b.pointerAction(ctx, Action{Type: "click"}, x, y, observation); err != nil {
 			return err
 		}
-		time.Sleep(70 * time.Millisecond)
-		return b.pointerAction(Action{Type: "click"}, x, y, observation)
+		if err := waitInputDelay(ctx, 70*time.Millisecond); err != nil {
+			return err
+		}
+		return b.pointerAction(ctx, Action{Type: "click"}, x, y, observation)
 	case "right_click":
 		if err := sendMouse(mouseeventfRightDown, 0); err != nil {
 			return err
@@ -359,8 +379,13 @@ func (b *WindowsBackend) pointerAction(action Action, x, y int, observation Obse
 		ex := bounds.X + int(clamp(action.EndX, 0, 1)*float64(max(0, bounds.Width-1)))
 		ey := bounds.Y + int(clamp(action.EndY, 0, 1)*float64(max(0, bounds.Height-1)))
 		for i := 1; i <= 8; i++ {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			procSetCursorPos.Call(uintptr(x+(ex-x)*i/8), uintptr(y+(ey-y)*i/8))
-			time.Sleep(18 * time.Millisecond)
+			if err := waitInputDelay(ctx, 18*time.Millisecond); err != nil {
+				return err
+			}
 		}
 		if err := sendMouse(mouseeventfLeftUp, 0); err != nil {
 			return err
@@ -384,7 +409,7 @@ func (b *WindowsBackend) scroll(action Action, x, y int) error {
 	return nil
 }
 
-func (b *WindowsBackend) keyboardAction(action Action) error {
+func (b *WindowsBackend) keyboardAction(ctx context.Context, action Action) error {
 	keys := append([]string(nil), action.Keys...)
 	if action.Key != "" {
 		keys = append(keys, action.Key)
@@ -401,6 +426,9 @@ func (b *WindowsBackend) keyboardAction(action Action) error {
 		codes = append(codes, code)
 	}
 	for _, code := range codes {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := sendKey(code, false); err != nil {
 			return err
 		}
@@ -415,8 +443,11 @@ func (b *WindowsBackend) keyboardAction(action Action) error {
 	return nil
 }
 
-func (b *WindowsBackend) typeText(text string) error {
+func (b *WindowsBackend) typeText(ctx context.Context, text string) error {
 	for _, unit := range utf16.Encode([]rune(text)) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := sendUnicode(unit, false); err != nil {
 			return err
 		}
@@ -427,12 +458,36 @@ func (b *WindowsBackend) typeText(text string) error {
 	return nil
 }
 
-func (b *WindowsBackend) windowAction(action Action) error {
+func (b *WindowsBackend) windowAction(ctx context.Context, observation Observation, action Action) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var target *Window
+	for i := range observation.Windows {
+		if observation.Windows[i].ID == action.WindowID {
+			target = &observation.Windows[i]
+			break
+		}
+	}
+	if target == nil {
+		return ErrStaleObservation
+	}
+	if target.HigherTrust || sensitiveText(target.Title) {
+		return ErrProtectedSurface
+	}
 	b.mu.Lock()
 	hwnd := b.windows[action.WindowID]
 	b.mu.Unlock()
 	if hwnd == 0 {
 		return fmt.Errorf("unknown window %q", action.WindowID)
+	}
+	var pid uint32
+	procGetWindowThreadProcessID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	if pid == 0 || pid != target.ProcessID {
+		return ErrStaleObservation
+	}
+	if isHigherIntegrity(pid) {
+		return ErrProtectedSurface
 	}
 	switch action.Type {
 	case "activate_window":
@@ -466,14 +521,18 @@ func (b *WindowsBackend) uiaAction(action Action, x, y int) error {
 		if err != nil {
 			return err
 		}
-		defer raw.Release()
-		elem := uia.NewElement(raw)
-		elem.Populate(false)
-		elem.IsPassword()
-		elem.Name()
-		if elem.CurrentIsPassword != 0 || sensitiveText(elem.CurrentName) {
-			return ErrProtectedSurface
+		if raw == nil {
+			return protectedElementDecision(false, "", fmt.Errorf("UI Automation returned no element"))
 		}
+		defer raw.Release()
+		protected, reason, err := currentElementProtection(raw)
+		if err != nil {
+			return protectedElementDecision(false, "", err)
+		}
+		if err := protectedElementDecision(protected, reason, nil); err != nil {
+			return err
+		}
+		elem := uia.NewElement(raw)
 		switch action.Type {
 		case "invoke":
 			p, err := elem.GetInvokePattern()
@@ -728,10 +787,10 @@ func processName(pid uint32) string {
 func isHigherIntegrity(pid uint32) bool {
 	target, err := processIntegrity(pid)
 	if err != nil {
-		return false
+		return true
 	}
 	current, err := processIntegrity(uint32(windows.GetCurrentProcessId()))
-	return err == nil && target > current
+	return err != nil || target > current
 }
 
 func processIntegrity(pid uint32) (uint32, error) {
@@ -746,20 +805,36 @@ func processIntegrity(pid uint32) (uint32, error) {
 	}
 	defer tok.Close()
 	var n uint32
-	_ = windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, nil, 0, &n)
+	if err = windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, nil, 0, &n); err != windows.ERROR_INSUFFICIENT_BUFFER {
+		return 0, err
+	}
+	if n < uint32(unsafe.Sizeof(windows.Tokenmandatorylabel{})) {
+		return 0, fmt.Errorf("integrity label is truncated")
+	}
 	buf := make([]byte, n)
 	if err = windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, &buf[0], n, &n); err != nil {
 		return 0, err
 	}
-	if len(buf) < 12 {
+	return integrityLevelFromTokenInfo(buf)
+}
+
+func integrityLevelFromTokenInfo(buf []byte) (uint32, error) {
+	if len(buf) < int(unsafe.Sizeof(windows.Tokenmandatorylabel{})) {
 		return 0, fmt.Errorf("integrity label is truncated")
 	}
-	count := int(buf[1])
-	if count <= 0 || len(buf) < 8+count*4 {
+	label := (*windows.Tokenmandatorylabel)(unsafe.Pointer(&buf[0]))
+	return integrityLevelFromSID(label.Label.Sid)
+}
+
+func integrityLevelFromSID(sid *windows.SID) (uint32, error) {
+	if sid == nil || !sid.IsValid() {
 		return 0, fmt.Errorf("integrity SID is invalid")
 	}
-	base := 8 + (count-1)*4
-	return uint32(buf[base]) | uint32(buf[base+1])<<8 | uint32(buf[base+2])<<16 | uint32(buf[base+3])<<24, nil
+	count := sid.SubAuthorityCount()
+	if count == 0 {
+		return 0, fmt.Errorf("integrity SID has no sub-authorities")
+	}
+	return sid.SubAuthority(uint32(count - 1)), nil
 }
 
 func sensitiveText(s string) bool {
@@ -772,44 +847,122 @@ func sensitiveText(s string) bool {
 	return false
 }
 
-func protectedElementAt(x, y int) (bool, string) {
+func protectedElementAt(x, y int) (bool, string, error) {
 	protected, reason := false, ""
-	_ = withUIAutomation(func(auto *uia.IUIAutomation) error {
+	err := withUIAutomation(func(auto *uia.IUIAutomation) error {
 		raw, err := auto.ElementFromPoint(&uia.TagPoint{X: int32(x), Y: int32(y)})
 		if err != nil {
-			return nil
+			return err
+		}
+		if raw == nil {
+			return fmt.Errorf("UI Automation returned no element")
 		}
 		defer raw.Release()
-		elem := uia.NewElement(raw)
-		elem.Populate(false)
-		elem.IsPassword()
-		elem.Name()
-		if elem.CurrentIsPassword != 0 {
-			protected, reason = true, "password fields cannot be automated"
-		} else if sensitiveText(elem.CurrentName) {
-			protected, reason = true, "credential or CAPTCHA controls cannot be automated"
-		}
-		return nil
+		protected, reason, err = currentElementProtection(raw)
+		return err
 	})
-	return protected, reason
+	return protected, reason, err
+}
+
+// go-element's element property helpers discard HRESULTs. Read the two
+// security-relevant properties through the same COM vtable so a provider
+// failure cannot be interpreted as an unprotected target.
+type uiAutomationElementObject struct {
+	vtbl *uia.IUnKnown
+}
+
+func currentElementProtection(raw *uia.IUIAutomationElement) (bool, string, error) {
+	obj := (*uiAutomationElementObject)(unsafe.Pointer(raw))
+	if obj.vtbl == nil {
+		return false, "", fmt.Errorf("UI Automation element has no vtable")
+	}
+	vtbl := (*uia.IUIAutomationElementVtbl)(unsafe.Pointer(obj.vtbl))
+	password, err := currentElementPassword(raw, vtbl.Get_CurrentIsPassword)
+	if err != nil {
+		return false, "", fmt.Errorf("read UI Automation password property: %w", err)
+	}
+	if password {
+		return true, "password fields cannot be automated", nil
+	}
+	name, err := currentElementName(raw, vtbl.Get_CurrentName)
+	if err != nil {
+		return false, "", fmt.Errorf("read UI Automation name property: %w", err)
+	}
+	if sensitiveText(name) {
+		return true, "credential or CAPTCHA controls cannot be automated", nil
+	}
+	return false, "", nil
+}
+
+func currentElementPassword(raw *uia.IUIAutomationElement, method uintptr) (bool, error) {
+	if method == 0 {
+		return false, fmt.Errorf("UI Automation password getter is unavailable")
+	}
+	var value int32
+	ret, _, _ := syscall.SyscallN(method, uintptr(unsafe.Pointer(raw)), uintptr(unsafe.Pointer(&value)))
+	if ret != 0 {
+		return false, uia.HResult(ret)
+	}
+	return value != 0, nil
+}
+
+func currentElementName(raw *uia.IUIAutomationElement, method uintptr) (string, error) {
+	if method == 0 {
+		return "", fmt.Errorf("UI Automation name getter is unavailable")
+	}
+	var bstr uintptr
+	ret, _, _ := syscall.SyscallN(method, uintptr(unsafe.Pointer(raw)), uintptr(unsafe.Pointer(&bstr)))
+	if bstr != 0 {
+		defer procSysFreeString.Call(bstr)
+	}
+	if ret != 0 {
+		return "", uia.HResult(ret)
+	}
+	if bstr == 0 {
+		return "", nil
+	}
+	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(bstr))), nil
+}
+
+func protectedElementDecision(protected bool, reason string, inspectErr error) error {
+	if inspectErr != nil {
+		return fmt.Errorf("%w: inspect target: %v", ErrProtectedSurface, inspectErr)
+	}
+	if protected {
+		return fmt.Errorf("%w: %s", ErrProtectedSurface, reason)
+	}
+	return nil
 }
 
 func (b *WindowsBackend) StartSafetyHooks(emergency, userInput func()) error {
-	b.StopSafetyHooks()
+	b.hookLifecycle.Lock()
+	defer b.hookLifecycle.Unlock()
+	if err := b.stopSafetyHooks(); err != nil {
+		return err
+	}
 	b.mu.Lock()
+	b.hookGeneration++
+	generation := b.hookGeneration
 	b.onEmergency, b.onUserInput = emergency, userInput
-	b.hookStop = make(chan struct{})
+	b.hookDone = make(chan struct{})
+	done := b.hookDone
 	ready := make(chan error, 1)
 	b.mu.Unlock()
-	go b.hookLoop(ready)
+	go b.hookLoop(ready, generation, done)
 	return <-ready
 }
 
-func (b *WindowsBackend) hookLoop(ready chan<- error) {
+func (b *WindowsBackend) hookLoop(ready chan<- error, generation uint64, done chan<- struct{}) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	defer close(done)
 	thread, _, _ := procGetCurrentThreadID.Call()
 	b.mu.Lock()
+	if generation != b.hookGeneration {
+		b.mu.Unlock()
+		ready <- ErrStopPending
+		return
+	}
 	b.hookThread = uint32(thread)
 	b.mu.Unlock()
 	kcb := syscall.NewCallback(func(code int, wp, lp uintptr) uintptr {
@@ -820,8 +973,10 @@ func (b *WindowsBackend) hookLoop(ready chan<- error) {
 				em, user := b.onEmergency, b.onUserInput
 				b.mu.Unlock()
 				if ev.VKCode == vkEscape {
-					go em()
-				} else {
+					if em != nil {
+						go em()
+					}
+				} else if user != nil {
 					go user()
 				}
 			}
@@ -836,7 +991,9 @@ func (b *WindowsBackend) hookLoop(ready chan<- error) {
 				b.mu.Lock()
 				user := b.onUserInput
 				b.mu.Unlock()
-				go user()
+				if user != nil {
+					go user()
+				}
 			}
 		}
 		r, _, _ := procCallNextHookEx.Call(0, uintptr(code), wp, lp)
@@ -851,14 +1008,18 @@ func (b *WindowsBackend) hookLoop(ready chan<- error) {
 		if m != 0 {
 			procUnhookWindowsHookEx.Call(m)
 		}
+		b.clearHookState(generation)
 		ready <- fmt.Errorf("install safety hooks: keyboard=%v mouse=%v", ke, me)
 		return
 	}
 	b.mu.Lock()
 	b.keyboardHook, b.mouseHook = k, m
 	b.mu.Unlock()
-	ready <- nil
+	// PostThreadMessageW cannot target a thread until it has a message queue.
+	// PM_NOREMOVE creates the queue without consuming a message.
 	var msg message
+	procPeekMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0, 0)
+	ready <- nil
 	for {
 		r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if int32(r) <= 0 {
@@ -867,22 +1028,85 @@ func (b *WindowsBackend) hookLoop(ready chan<- error) {
 	}
 	procUnhookWindowsHookEx.Call(k)
 	procUnhookWindowsHookEx.Call(m)
-	b.mu.Lock()
-	b.keyboardHook, b.mouseHook, b.hookThread = 0, 0, 0
-	b.mu.Unlock()
+	b.clearHookState(generation)
 }
 
 func (b *WindowsBackend) StopSafetyHooks() {
+	b.hookLifecycle.Lock()
+	defer b.hookLifecycle.Unlock()
+	_ = b.stopSafetyHooks()
+}
+
+func (b *WindowsBackend) StopSafetyHooksError() error {
+	b.hookLifecycle.Lock()
+	defer b.hookLifecycle.Unlock()
+	return b.stopSafetyHooks()
+}
+
+func (b *WindowsBackend) stopSafetyHooks() error {
 	b.mu.Lock()
 	thread := b.hookThread
+	done := b.hookDone
+	b.hookGeneration++
 	b.onEmergency, b.onUserInput = nil, nil
 	b.mu.Unlock()
 	if thread != 0 {
-		procPostThreadMessageW.Call(uintptr(thread), 0x0012, 0, 0)
+		if err := b.postHookStop(thread); err != nil {
+			return fmt.Errorf("stop safety hooks: %w", err)
+		}
+	}
+	if done != nil {
+		<-done
+		b.mu.Lock()
+		if b.hookDone == done {
+			b.keyboardHook, b.mouseHook, b.hookThread = 0, 0, 0
+			b.hookDone = nil
+		}
+		b.mu.Unlock()
+	}
+	return nil
+}
+
+func (b *WindowsBackend) postHookStop(thread uint32) error {
+	if b.postThreadMessage != nil {
+		return b.postThreadMessage(thread)
+	}
+	ret, _, err := procPostThreadMessageW.Call(uintptr(thread), 0x0012, 0, 0)
+	if ret == 0 {
+		if err != syscall.Errno(0) {
+			return err
+		}
+		return fmt.Errorf("PostThreadMessageW returned false")
+	}
+	return nil
+}
+
+func (b *WindowsBackend) clearHookState(generation uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.hookGeneration == generation {
+		b.keyboardHook, b.mouseHook, b.hookThread = 0, 0, 0
+		b.hookDone = nil
 	}
 }
 
 func (b *WindowsBackend) ReleaseInjectedInput() {
+	_ = b.releaseInjectedInput(
+		func(code uint16) error { return sendKey(code, true) },
+		func(button string) error {
+			switch button {
+			case "left":
+				return sendMouse(mouseeventfLeftUp, 0)
+			case "right":
+				return sendMouse(mouseeventfRightUp, 0)
+			default:
+				return fmt.Errorf("unknown pressed button %q", button)
+			}
+		},
+	)
+}
+
+func (b *WindowsBackend) releaseInjectedInput(keyUp func(uint16) error, buttonUp func(string) error) error {
 	b.mu.Lock()
 	keys := make([]uint16, 0, len(b.pressedKeys))
 	for k, v := range b.pressedKeys {
@@ -891,18 +1115,38 @@ func (b *WindowsBackend) ReleaseInjectedInput() {
 		}
 	}
 	left, right := b.pressedButtons["left"], b.pressedButtons["right"]
-	b.pressedKeys = map[uint16]bool{}
-	b.pressedButtons = map[string]bool{}
 	b.mu.Unlock()
+	var firstErr error
 	for _, k := range keys {
-		_ = sendKey(k, true)
+		if err := keyUp(k); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		b.mu.Lock()
+		if b.pressedKeys[k] {
+			delete(b.pressedKeys, k)
+		}
+		b.mu.Unlock()
 	}
-	if left {
-		_ = sendMouse(mouseeventfLeftUp, 0)
+	for button, pressed := range map[string]bool{"left": left, "right": right} {
+		if !pressed {
+			continue
+		}
+		if err := buttonUp(button); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		b.mu.Lock()
+		if b.pressedButtons[button] {
+			delete(b.pressedButtons, button)
+		}
+		b.mu.Unlock()
 	}
-	if right {
-		_ = sendMouse(mouseeventfRightUp, 0)
-	}
+	return firstErr
 }
 
 func (b *WindowsBackend) ShowOverlay(state OverlayState) error { return b.overlay.Show(state) }

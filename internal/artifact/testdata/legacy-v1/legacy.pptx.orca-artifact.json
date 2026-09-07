@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "format": "pptx",
+  "title": "Legacy deck",
+  "slides": [
+    {
+      "title": "Original slide",
+      "bullets": [
+        "Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet Long bullet "
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-07T14:17:13.4854922Z"
+}

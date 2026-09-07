@@ -1,5 +1,17 @@
 # O.R.C.A Desktop Changelog
 
+## V3.0.2 - 2026-09-07
+
+- Fixed Modern header/footer spacing, narrow Composer controls, modal focus, and settings error recovery. Kept the Classic blue-and-white layout and corrected its overlapping search control.
+- Preserved drafts and attachments when sending fails. Isolated workspace credentials, attachment roots, and delegated approval responses between conversations.
+- Hardened interrupted migrations, named verification checks, provider stream completion, download pause/resume, GPU detection, and local runtime credentials.
+- Added cancellation and stale-observation protection to Computer Use, plus independent completion verification and stricter Windows input boundaries.
+- Reduced unnecessary tool use for ordinary questions and simplified settings, placeholders, and usage displays.
+- Fixed repeated command-palette opening, stale cross-tab context results, inaccessible Send labels, and truncated risk-review requests without changing ordinary chat reasoning.
+- Fixed PDF pagination, numeric spreadsheet cells, formula cache handling and bounded slide text. PDF previews render actual pages through optional Poppler; unavailable Office previews are reported honestly. Legacy sidecars remain readable without being overwritten.
+- Hardened installer upgrade detection, scoped process closure and uninstall cleanup. Pinned Node and CodeGraph downloads, retained the full portable payload after signing, and added release test/tag checks.
+- Added real provider-backed conversation, vision, file-generation and editing scenarios alongside fault-injection and rendered-layout regression tests. Native VM installation, full local-model downloads and multi-monitor desktop acceptance remain separate checks.
+
 ## V3.0.1 - 2026-08-25
 
 - Rebuilt the Modern desktop layout around a compact four-menu shell, a responsive single-row Composer, stable send/stop geometry, right-aligned model and reasoning controls, full-width scrolling, and correctly centered empty-session content.

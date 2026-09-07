@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,12 +10,51 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileutil"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/product"
 )
 
 const v11MigrationMarker = ".migration-v11.json"
+
+var ErrMigrationBusy = errors.New("state migration is already in progress")
+
+// MigrationBusyError reports an active migration lock. Callers can use
+// errors.Is(err, ErrMigrationBusy) to distinguish a retryable busy state from
+// an I/O failure.
+type MigrationBusyError struct {
+	Path      string
+	PID       int
+	CreatedAt time.Time
+}
+
+func (e *MigrationBusyError) Error() string {
+	if e == nil {
+		return ErrMigrationBusy.Error()
+	}
+	if e.PID > 0 {
+		return fmt.Sprintf("%s: pid %d still owns %s", ErrMigrationBusy, e.PID, e.Path)
+	}
+	return fmt.Sprintf("%s: %s", ErrMigrationBusy, e.Path)
+}
+
+func (e *MigrationBusyError) Unwrap() error { return ErrMigrationBusy }
+
+// MigrationConflictError reports destination files that already contain
+// divergent data. They are preserved; the marker is intentionally not written
+// so an operator can resolve the paths and retry.
+type MigrationConflictError struct {
+	Paths []string
+}
+
+func (e *MigrationConflictError) Error() string {
+	if e == nil || len(e.Paths) == 0 {
+		return "state migration has unresolved destination conflicts"
+	}
+	return fmt.Sprintf("state migration has unresolved destination conflicts: %s", strings.Join(e.Paths, ", "))
+}
 
 type v11MigrationRecord struct {
 	Version    int       `json:"version"`
@@ -36,7 +77,8 @@ func EnsureV11StateMigration() error {
 	} else if err != nil {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(newRoot, v11MigrationMarker)); err == nil {
+	markerPath := filepath.Join(newRoot, v11MigrationMarker)
+	if migrationMarkerValid(markerPath) {
 		return nil
 	}
 
@@ -44,15 +86,25 @@ func EnsureV11StateMigration() error {
 		return err
 	}
 	lockPath := filepath.Join(dir, ".orca-v11-migration.lock")
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	release, acquired, err := acquireMigrationLock(lockPath)
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return nil
-		}
 		return err
 	}
-	_ = lock.Close()
-	defer os.Remove(lockPath)
+	if !acquired {
+		return &MigrationBusyError{Path: lockPath}
+	}
+	defer release()
+	// A corrupt marker is recoverable state. Remove it before the replacement
+	// write; on Windows rename does not replace an existing destination.
+	if !migrationMarkerValid(markerPath) {
+		if _, statErr := os.Stat(markerPath); statErr == nil {
+			if removeErr := os.Remove(markerPath); removeErr != nil {
+				return removeErr
+			}
+		}
+	} else {
+		return nil
+	}
 
 	if err := copyTreeMissing(legacyRoot, newRoot); err != nil {
 		return fmt.Errorf("migrate V2 state: %w", err)
@@ -62,11 +114,53 @@ func EnsureV11StateMigration() error {
 	if err != nil {
 		return err
 	}
-	return atomicWriteMigrationFile(filepath.Join(newRoot, v11MigrationMarker), append(body, '\n'), 0o600)
+	return atomicWriteMigrationFile(markerPath, append(body, '\n'), 0o600)
+}
+
+func migrationMarkerValid(path string) bool {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var record v11MigrationRecord
+	return json.Unmarshal(body, &record) == nil && record.Version == 11 &&
+		!record.MigratedAt.IsZero() && strings.TrimSpace(record.LegacyRoot) != "" && strings.TrimSpace(record.NewRoot) != ""
+}
+
+func acquireMigrationLock(path string) (release func(), acquired bool, err error) {
+	lock, openErr := openMigrationLock(path)
+	if errors.Is(openErr, ErrMigrationBusy) {
+		return nil, false, &MigrationBusyError{Path: path}
+	}
+	if openErr != nil {
+		return nil, false, openErr
+	}
+	record := struct {
+		PID       int       `json:"pid"`
+		CreatedAt time.Time `json:"createdAt"`
+	}{PID: os.Getpid(), CreatedAt: time.Now().UTC()}
+	body, marshalErr := json.Marshal(record)
+	if marshalErr == nil {
+		if err := lock.Truncate(0); err != nil {
+			marshalErr = err
+		} else if _, err := lock.Seek(0, 0); err != nil {
+			marshalErr = err
+		} else if _, err := lock.Write(append(body, '\n')); err != nil {
+			marshalErr = err
+		} else {
+			marshalErr = lock.Sync()
+		}
+	}
+	if marshalErr != nil {
+		releaseMigrationLock(lock)
+		return nil, false, marshalErr
+	}
+	return func() { releaseMigrationLock(lock) }, true, nil
 }
 
 func copyTreeMissing(source, target string) error {
-	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+	var conflicts []string
+	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -90,12 +184,66 @@ func copyTreeMissing(source, target string) error {
 			return os.MkdirAll(dst, info.Mode().Perm())
 		}
 		if _, err := os.Stat(dst); err == nil {
+			same, compareErr := migrationFilesIdentical(path, dst)
+			if compareErr != nil {
+				return compareErr
+			}
+			if !same {
+				conflicts = append(conflicts, dst)
+			}
 			return nil
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		return copyFileExclusive(path, dst, info.Mode().Perm())
 	})
+	if err != nil {
+		return err
+	}
+	if len(conflicts) > 0 {
+		return &MigrationConflictError{Paths: conflicts}
+	}
+	return nil
+}
+
+func migrationFilesIdentical(source, target string) (bool, error) {
+	sourceInfo, err := os.Stat(source)
+	if err != nil {
+		return false, err
+	}
+	targetInfo, err := os.Stat(target)
+	if err != nil {
+		return false, err
+	}
+	if sourceInfo.IsDir() || targetInfo.IsDir() {
+		return false, nil
+	}
+	if sourceInfo.Size() != targetInfo.Size() {
+		return false, nil
+	}
+	hashFile := func(path string) ([sha256.Size]byte, error) {
+		f, err := os.Open(path)
+		if err != nil {
+			return [sha256.Size]byte{}, err
+		}
+		defer f.Close()
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return [sha256.Size]byte{}, err
+		}
+		var sum [sha256.Size]byte
+		copy(sum[:], h.Sum(nil))
+		return sum, nil
+	}
+	sourceHash, err := hashFile(source)
+	if err != nil {
+		return false, err
+	}
+	targetHash, err := hashFile(target)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(sourceHash[:], targetHash[:]), nil
 }
 
 func copyFileExclusive(source, target string, mode fs.FileMode) error {
@@ -107,30 +255,38 @@ func copyFileExclusive(source, target string, mode fs.FileMode) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".migration-v11-copy-*.tmp")
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if _, err := os.Stat(target); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(tmpPath, target); err != nil {
+		if _, statErr := os.Stat(target); statErr == nil {
 			return nil
 		}
 		return err
 	}
-	ok := false
-	defer func() {
-		_ = out.Close()
-		if !ok {
-			_ = os.Remove(target)
-		}
-	}()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	if err := out.Sync(); err != nil {
-		return err
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	ok = true
 	return nil
 }
 
@@ -156,5 +312,5 @@ func atomicWriteMigrationFile(path string, body []byte, mode fs.FileMode) error 
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	return fileutil.ReplaceFile(tmpPath, path)
 }

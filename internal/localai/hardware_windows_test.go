@@ -2,7 +2,30 @@
 
 package localai
 
-import "testing"
+import (
+	"testing"
+)
+
+func TestDecodeWindowsVideoControllersAcceptsObjectAndArray(t *testing.T) {
+	object, err := decodeWindowsVideoControllers([]byte(`{"Name":"Intel(R) UHD Graphics","AdapterRAM":2147483648,"DriverVersion":"31.0"}`))
+	if err != nil || len(object) != 1 || object[0].Name != "Intel(R) UHD Graphics" {
+		t.Fatalf("single controller = %+v, err=%v", object, err)
+	}
+	array, err := decodeWindowsVideoControllers([]byte(`[{"Name":"AMD Radeon","AdapterRAM":4294967296},{"Name":"Virtual Display","AdapterRAM":536870912}]`))
+	if err != nil || len(array) != 2 || array[1].Name != "Virtual Display" {
+		t.Fatalf("controller array = %+v, err=%v", array, err)
+	}
+	empty, err := decodeWindowsVideoControllers([]byte(`[]`))
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty controller list = %+v, err=%v", empty, err)
+	}
+}
+
+func TestDecodeWindowsVideoControllersRejectsInvalidJSON(t *testing.T) {
+	if _, err := decodeWindowsVideoControllers([]byte(`not-json`)); err == nil {
+		t.Fatal("invalid controller JSON must be reported as detection failure")
+	}
+}
 
 func TestMergeGPUAdaptersKeepsIntegratedAndDiscreteAdapters(t *testing.T) {
 	got := mergeGPUAdapters(

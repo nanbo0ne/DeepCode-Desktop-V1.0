@@ -44,6 +44,17 @@ type MigrationResult struct {
 	Warnings []string
 }
 
+const legacyMigrationMarkerSuffix = ".legacy-migration.json"
+
+type legacyMigrationRecord struct {
+	Version            int    `json:"version"`
+	Source             string `json:"source"`
+	Destination        string `json:"destination"`
+	ConfigWritten      bool   `json:"configWritten"`
+	CredentialsWritten bool   `json:"credentialsWritten"`
+	Complete           bool   `json:"complete"`
+}
+
 func (r *MigrationResult) Notice() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "migrated your previous configuration: %s → %s", r.From, r.To)
@@ -70,6 +81,15 @@ func MigrateLegacyIfNeeded() (*MigrationResult, error) {
 	if dest == "" {
 		return nil, nil
 	}
+	markerPath := dest + legacyMigrationMarkerSuffix
+	if record, err := readLegacyMigrationRecord(markerPath); err == nil {
+		if record.Complete {
+			return nil, nil
+		}
+		return resumeLegacyJSONMigration(dest, markerPath, record)
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
 	if _, err := os.Stat(dest); err == nil {
 		return nil, nil
 	}
@@ -85,11 +105,15 @@ func MigrateLegacyIfNeeded() (*MigrationResult, error) {
 	if err != nil {
 		return nil, nil
 	}
-	var legacy legacyConfig
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // tolerate a UTF-8 BOM (some editors add one)
+	var legacy legacyConfig
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return nil, fmt.Errorf("parse legacy config %s: %w", src, err)
 	}
+	return migrateLegacyJSON(dest, markerPath, src, legacy, home)
+}
+
+func migrateLegacyJSON(dest, markerPath, src string, legacy legacyConfig, home string) (*MigrationResult, error) {
 
 	cfg := Default()
 	res := &MigrationResult{From: src, To: dest}
@@ -114,15 +138,106 @@ func MigrateLegacyIfNeeded() (*MigrationResult, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return nil, fmt.Errorf("create config dir: %w", err)
 	}
-	if err := cfg.WriteFile(dest); err != nil {
-		return nil, fmt.Errorf("write %s: %w", dest, err)
+	record := legacyMigrationRecord{Version: 1, Source: src, Destination: dest}
+	if err := writeLegacyMigrationRecord(markerPath, record); err != nil {
+		return nil, fmt.Errorf("write migration state: %w", err)
 	}
-	if len(envLines) > 0 {
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		body := []byte(RenderTOMLForScope(cfg, renderScopeForPath(dest)))
+		if err := atomicWriteMigrationFile(dest, body, 0o644); err != nil {
+			return res, fmt.Errorf("write %s: %w", dest, err)
+		}
+	} else if err != nil {
+		return res, fmt.Errorf("stat %s: %w", dest, err)
+	}
+	record.ConfigWritten = true
+	if err := writeLegacyMigrationRecord(markerPath, record); err != nil {
+		return res, fmt.Errorf("write migration state: %w", err)
+	}
+	return finishLegacyJSONMigration(res, markerPath, record, envLines, home)
+}
+
+func resumeLegacyJSONMigration(dest, markerPath string, record legacyMigrationRecord) (*MigrationResult, error) {
+	if record.Version != 1 || filepath.Clean(record.Destination) != filepath.Clean(dest) || strings.TrimSpace(record.Source) == "" {
+		return nil, fmt.Errorf("invalid legacy migration state %s", markerPath)
+	}
+	data, err := os.ReadFile(record.Source)
+	if err != nil {
+		return nil, fmt.Errorf("read legacy config %s: %w", record.Source, err)
+	}
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	var legacy legacyConfig
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return nil, fmt.Errorf("parse legacy config %s: %w", record.Source, err)
+	}
+	res := &MigrationResult{From: record.Source, To: dest, Plugins: len(legacyPlugins(legacy))}
+	if strings.TrimSpace(legacy.APIKey) != "" {
+		res.KeyToEnv = true
+	}
+	if !record.ConfigWritten {
+		if info, statErr := os.Stat(dest); statErr == nil && !info.IsDir() {
+			record.ConfigWritten = true
+		} else if os.IsNotExist(statErr) {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				return res, homeErr
+			}
+			return migrateLegacyJSON(dest, markerPath, record.Source, legacy, home)
+		} else if statErr != nil {
+			return res, fmt.Errorf("stat %s: %w", dest, statErr)
+		} else {
+			return res, fmt.Errorf("migration destination %s is a directory", dest)
+		}
+	}
+	if err := writeLegacyMigrationRecord(markerPath, record); err != nil {
+		return res, fmt.Errorf("write migration state: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return res, err
+	}
+	return finishLegacyJSONMigration(res, markerPath, record, legacyAPIKeyLines(legacy), home)
+}
+
+func legacyAPIKeyLines(legacy legacyConfig) []string {
+	if key := strings.TrimSpace(legacy.APIKey); key != "" {
+		return []string{"DEEPSEEK_API_KEY=" + key}
+	}
+	return nil
+}
+
+func finishLegacyJSONMigration(res *MigrationResult, markerPath string, record legacyMigrationRecord, envLines []string, home string) (*MigrationResult, error) {
+	if !record.CredentialsWritten && len(envLines) > 0 {
 		if err := writeCredentialsEnv(home, envLines); err != nil {
 			return res, fmt.Errorf("write credentials: %w", err)
 		}
 	}
+	record.CredentialsWritten = true
+	record.Complete = true
+	if err := writeLegacyMigrationRecord(markerPath, record); err != nil {
+		return res, fmt.Errorf("write migration state: %w", err)
+	}
 	return res, nil
+}
+
+func writeLegacyMigrationRecord(path string, record legacyMigrationRecord) error {
+	body, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWriteMigrationFile(path, append(body, '\n'), 0o600)
+}
+
+func readLegacyMigrationRecord(path string) (legacyMigrationRecord, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return legacyMigrationRecord{}, err
+	}
+	var record legacyMigrationRecord
+	if err := json.Unmarshal(body, &record); err != nil {
+		return legacyMigrationRecord{}, err
+	}
+	return record, nil
 }
 
 func migrateLegacyTOMLIfNeeded(dest, home string) (*MigrationResult, error) {
@@ -262,9 +377,10 @@ func mergeEnv(base, overlay map[string]string) map[string]string {
 }
 
 // writeCredentialsEnv merges lines into the deepseek-orca-owned global credentials
-// file (UserCredentialsPath, e.g. %AppData%\deepseek-orca\credentials), replacing any
-// existing assignment of the same key, and pins them into the current process env
-// so the just-built session resolves the key without a restart. Falls back to
+// file (UserCredentialsPath, e.g. %AppData%\deepseek-orca\credentials), keeping any
+// existing assignment of the same key so a retry cannot overwrite a newer value.
+// The current config resolves the imported value from this credentials file
+// without changing the process environment. Falls back to
 // ~/.env only when the user config dir can't be resolved — never a project .env,
 // so a migration keeps secrets out of the user's project tree.
 func writeCredentialsEnv(home string, lines []string) error {
@@ -282,11 +398,15 @@ func writeCredentialsEnv(home string, lines []string) error {
 		}
 	}
 	var kept []string
+	existing := make(map[string]bool)
 	if data, err := os.ReadFile(path); err == nil {
 		for _, raw := range strings.Split(string(data), "\n") {
 			check := strings.TrimPrefix(strings.TrimSpace(raw), "export ")
-			if k, _, ok := strings.Cut(check, "="); ok && target[strings.TrimSpace(k)] {
-				continue
+			if k, _, ok := strings.Cut(check, "="); ok {
+				key := strings.TrimSpace(k)
+				if target[key] {
+					existing[key] = true
+				}
 			}
 			kept = append(kept, raw)
 		}
@@ -302,11 +422,13 @@ func writeCredentialsEnv(home string, lines []string) error {
 		b.WriteByte('\n')
 	}
 	for _, l := range lines {
+		key, _, ok := strings.Cut(l, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" || existing[key] {
+			continue
+		}
 		b.WriteString(l)
 		b.WriteByte('\n')
-		if k, v, ok := strings.Cut(l, "="); ok {
-			os.Setenv(strings.TrimSpace(k), v)
-		}
 	}
 	return os.WriteFile(path, []byte(b.String()), 0o600)
 }

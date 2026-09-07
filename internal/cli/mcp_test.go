@@ -3,12 +3,14 @@ package cli
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/codegraph"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/config"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/plugin"
@@ -456,7 +458,11 @@ func TestApplyMCPModeRecordsPluginConnectFailure(t *testing.T) {
 func TestApplyMCPModeRecordsCodegraphConnectFailure(t *testing.T) {
 	isolateUserConfig(t)
 	t.Setenv("PATH", "")
-	t.Setenv("DEEPSEEK_ORCA_CACHE_DIR", t.TempDir())
+	cacheRoot := t.TempDir()
+	t.Setenv("ORCA_CODEGRAPH_CACHE_DIR", cacheRoot)
+	if got, want := codegraph.CacheDir(), filepath.Join(cacheRoot, "codegraph", codegraph.Version); filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("CodeGraph cache dir = %q, want isolated path %q", got, want)
+	}
 	cfg := config.Default()
 	cfg.Codegraph.Enabled = false
 	cfg.Codegraph.Tier = "eager"
@@ -465,8 +471,12 @@ func TestApplyMCPModeRecordsCodegraphConnectFailure(t *testing.T) {
 	}
 
 	m := newTestChatTUI()
-	m.ctrl = control.New(control.Options{Host: plugin.NewHost()})
-	defer m.ctrl.Close()
+	host := plugin.NewHost()
+	m.ctrl = control.New(control.Options{Host: host})
+	defer func() {
+		m.ctrl.Close()
+		host.Close()
+	}()
 	m.host = m.ctrl.Host()
 	m.mcp = &mcpManager{
 		stage: mcpStageMode,

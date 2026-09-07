@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
 )
@@ -168,7 +170,7 @@ func TestReadStream(t *testing.T) {
 	c := &client{name: "anthropic"}
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sseFixture))}
 	ch := make(chan provider.Chunk)
-	go c.readStream(resp, ch)
+	go c.readStream(context.Background(), resp, ch)
 
 	var text strings.Builder
 	var started, full *provider.ToolCall
@@ -221,7 +223,7 @@ func TestReadStreamError(t *testing.T) {
 	c := &client{name: "anthropic"}
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sse))}
 	ch := make(chan provider.Chunk)
-	go c.readStream(resp, ch)
+	go c.readStream(context.Background(), resp, ch)
 
 	var gotErr error
 	for ck := range ch {
@@ -231,6 +233,74 @@ func TestReadStreamError(t *testing.T) {
 	}
 	if gotErr == nil || !strings.Contains(gotErr.Error(), "overloaded") {
 		t.Fatalf("expected an error chunk mentioning overloaded, got %v", gotErr)
+	}
+}
+
+func TestReadStreamRequiresMessageStop(t *testing.T) {
+	sse := "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n"
+	c := &client{name: "anthropic"}
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sse))}
+	ch := make(chan provider.Chunk)
+	go c.readStream(context.Background(), resp, ch)
+
+	var gotErr error
+	for ck := range ch {
+		switch ck.Type {
+		case provider.ChunkDone:
+			t.Fatal("truncated stream emitted ChunkDone")
+		case provider.ChunkError:
+			gotErr = ck.Err
+		}
+	}
+	if gotErr == nil || !strings.Contains(gotErr.Error(), "message_stop") {
+		t.Fatalf("expected missing message_stop error, got %v", gotErr)
+	}
+}
+
+type signaledBody struct {
+	io.Reader
+	readOnce sync.Once
+	read     chan struct{}
+}
+
+func (b *signaledBody) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	if n > 0 {
+		b.readOnce.Do(func() { close(b.read) })
+	}
+	return n, err
+}
+
+func (b *signaledBody) Close() error { return nil }
+
+func TestReadStreamCancellationUnblocksChunkSend(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	body := &signaledBody{
+		Reader: strings.NewReader("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n"),
+		read:   make(chan struct{}),
+	}
+	resp := &http.Response{Body: body}
+	out := make(chan provider.Chunk)
+	done := make(chan struct{})
+	go func() {
+		(&client{name: "anthropic"}).readStream(ctx, resp, out)
+		close(done)
+	}()
+
+	select {
+	case <-body.read:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not read input")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("canceled stream remained blocked sending a chunk")
+	}
+	if _, ok := <-out; ok {
+		t.Fatal("canceled stream emitted a chunk after cancellation")
 	}
 }
 
@@ -314,7 +384,7 @@ func TestReadStreamThinking(t *testing.T) {
 	c := &client{name: "anthropic"}
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sseThinking))}
 	ch := make(chan provider.Chunk)
-	go c.readStream(resp, ch)
+	go c.readStream(context.Background(), resp, ch)
 
 	var reasoning, text strings.Builder
 	var sig string

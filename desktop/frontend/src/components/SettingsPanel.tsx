@@ -11,6 +11,8 @@ import { persistUIStyle, UI_STYLES, type UIStyle } from "../lib/uiStyle";
 import { checkDesktopUpdate } from "../lib/updateCheck";
 import type { BotConnectionView, BotInstallStartResult, BotSettingsView, ComputerUseState, LocalAICatalogView, NetworkView, ProcessDisplayMode, ProductCapabilities, PromptMode, ProviderView, SettingsTab, SettingsView, VisionCapability } from "../lib/types";
 import { normalizeLocalAICatalog } from "../lib/localAI";
+import { localDownloadActions, wrappedFocusIndex, type LocalDownloadAction } from "../lib/settingsPanelState";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { InlineConfirmButton } from "./InlineConfirmButton";
 import { Tooltip } from "./Tooltip";
 import { AnchoredPopover } from "./AnchoredPopover";
@@ -41,23 +43,102 @@ const SETTINGS_TABS: SettingsTab[] = [
 export function SettingsPanel({ onClose, onChanged, initialTab, productCapabilities }: { onClose: () => void; onChanged: () => void; initialTab?: SettingsTab; productCapabilities: ProductCapabilities }) {
   const t = useT();
   const [s, setS] = useState<SettingsView | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [textSize, setTextSizeState] = useState<TextSize>(getTextSize());
   const [fontFamily, setFontFamilyState] = useState<FontFamily>(getFontFamily());
 	const [restartStyle, setRestartStyle] = useState<UIStyle | null>(null);
   const [tab, setTab] = useState<SettingsTab>(normalizeInitialSettingsTab(initialTab));
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   // Play the modal exit animation, then let the parent unmount us.
   const { status, requestClose } = useDeferredClose(onClose, 240);
 
   const reload = async () => {
-    const next = normalizeSettingsView(await app.Settings().catch(() => null));
-    setS(next);
+    setSettingsLoading(true);
+    try {
+      const next = normalizeSettingsView(await app.Settings());
+      setS(next);
+      setSettingsError(null);
+      return true;
+    } catch {
+      setSettingsError(t("settings.loadFailed"));
+      return false;
+    } finally {
+      setSettingsLoading(false);
+    }
   };
   useEffect(() => {
     void reload();
     if (initialTab) setTab(normalizeInitialSettingsTab(initialTab));
   }, [initialTab]);
+
+  // Keep focus inside the modal and make the rest of the app inert while it is
+  // open. The element that opened settings receives focus after close.
+  useEffect(() => {
+    const active = document.activeElement;
+    returnFocusRef.current = active instanceof HTMLElement ? active : null;
+    const backdrop = dialogRef.current?.parentElement;
+    const appRoot = backdrop?.parentElement;
+    const background = appRoot
+      ? Array.from(appRoot.children).filter((element) => element !== backdrop) as HTMLElement[]
+      : [];
+    const previousInert = background.map((element) => element.inert);
+    background.forEach((element) => { element.inert = true; });
+    const frame = requestAnimationFrame(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (first || dialogRef.current)?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      background.forEach((element, index) => { element.inert = previousInert[index] ?? false; });
+      if (returnFocusRef.current?.isConnected) requestAnimationFrame(() => returnFocusRef.current?.focus());
+    };
+  }, []);
+
+  const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) || []).filter((element) => element.offsetParent !== null);
+    const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = wrappedFocusIndex(currentIndex, focusable.length, event.shiftKey);
+    if (nextIndex < 0) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+    } else if (currentIndex < 0 || (event.shiftKey && currentIndex === 0) || (!event.shiftKey && currentIndex === focusable.length - 1)) {
+      event.preventDefault();
+      focusable[nextIndex]?.focus();
+    }
+  };
+
+  // Model pickers use a body portal. When one is open, include its controls in
+  // the same focus scope so Tab can return to the settings dialog.
+  useEffect(() => {
+    const onPortalKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const popover = document.querySelector<HTMLElement>("[data-anchored-popover='active']:not([aria-hidden='true'])");
+      if (!popover || !popover.contains(document.activeElement)) return;
+      const dialogControls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) || []).filter((element) => element.offsetParent !== null);
+      const popoverControls = Array.from(popover.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.offsetParent !== null);
+      const focusable = [...dialogControls, ...popoverControls];
+      const nextIndex = wrappedFocusIndex(focusable.indexOf(document.activeElement as HTMLElement), focusable.length, event.shiftKey);
+      if (nextIndex >= 0) {
+        event.preventDefault();
+        focusable[nextIndex]?.focus();
+      }
+    };
+    document.addEventListener("keydown", onPortalKeyDown, true);
+    return () => document.removeEventListener("keydown", onPortalKeyDown, true);
+  }, []);
   // apply runs a mutation, re-reads settings, and refreshes the topbar/model.
   const apply = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -99,9 +180,9 @@ export function SettingsPanel({ onClose, onChanged, initialTab, productCapabilit
 
   return (
     <div className="management-modal-backdrop settings-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
-      <div className="management-modal settings-modal" data-state={status}>
+      <div ref={dialogRef} className="management-modal settings-modal" data-state={status} role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" aria-busy={settingsLoading} tabIndex={-1} onKeyDown={trapFocus}>
         <header className="management-modal__head settings-modal__head">
-          <div className="management-modal__title settings-modal__title">{t("settings.title")}</div>
+          <div id="settings-dialog-title" className="management-modal__title settings-modal__title">{t("settings.title")}</div>
           <ModalCloseButton label={t("common.close")} onClick={requestClose} />
         </header>
 
@@ -119,9 +200,10 @@ export function SettingsPanel({ onClose, onChanged, initialTab, productCapabilit
             ))}
           </nav>
           <main className="settings-center__content">
-            {needsSettings && err && <div className="banner banner--error">{err}</div>}
+            {needsSettings && settingsError && <div className="banner banner--error" role="alert"><span>{settingsError}</span>{!s && <button type="button" className="btn btn--ghost" disabled={settingsLoading} onClick={() => void reload()}>{t("settings.retryLoad")}</button>}</div>}
+            {needsSettings && err && <div className="banner banner--error" role="alert">{err}</div>}
             {needsSettings && !s ? (
-              <div className="empty">{t("settings.loading")}</div>
+              <div className="empty">{settingsLoading ? t("settings.loading") : t("settings.loadFailed")}</div>
             ) : (
               <>
                 {tab === "general" && s && <SettingsPageShell key={tab} s={s} tab={tab} busy={busy} apply={apply}><GeneralSection s={s} busy={busy} apply={apply} /></SettingsPageShell>}
@@ -287,47 +369,92 @@ type ModelsSectionProps = SectionProps & {
 };
 
 function LocalAISection() {
+  const t = useT();
   const [catalog, setCatalog] = useState<LocalAICatalogView | null>(null);
+  const catalogRef = useRef<LocalAICatalogView | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const reload = () => {
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingActionRef = useRef(false);
+  const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
+  const [loading, setLoading] = useState(true);
+  const reload = async () => {
     setError(null);
-    void app.GetLocalAICatalog()
-      .then((next) => setCatalog(normalizeLocalAICatalog(next)))
-      .catch((e) => setError(String(e)));
+    setRetryAction(null);
+    setLoading(true);
+    try {
+      const next = await app.GetLocalAICatalog();
+      const normalized = normalizeLocalAICatalog(next);
+      catalogRef.current = normalized;
+      setCatalog(normalized);
+      return true;
+    } catch {
+      setError(catalogRef.current ? t("settings.localAI.refreshFailed") : t("settings.localAI.loadFailed"));
+      if (catalogRef.current) setRetryAction(() => () => { void reload(); });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+  const runLocalAction = async (label: string, operation: () => Promise<unknown>) => {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = true;
+    setPendingAction(label);
+    setError(null);
+    setRetryAction(null);
+    try {
+      await operation();
+      const refreshed = await reload();
+      if (!refreshed) setRetryAction(() => () => { void reload(); });
+    } catch {
+      setError(t("settings.localAI.operationFailed", { action: label }));
+      setRetryAction(() => () => { void runLocalAction(label, operation); });
+    } finally {
+      pendingActionRef.current = false;
+      setPendingAction(null);
+    }
   };
   useEffect(() => {
-    reload();
-    return onLocalAIChanged(reload);
+    void reload();
+    return onLocalAIChanged(() => { void reload(); });
   }, []);
   if (!catalog) return error ? (
     <div className="banner banner--error" role="alert">
-      <span>读取本地 AI 状态失败：{error}</span>
-      <button type="button" className="btn btn--ghost" onClick={reload}>重试</button>
+      <span>{error}</span>
+      <button type="button" className="btn btn--ghost" disabled={loading} onClick={() => void reload()}>{t("settings.retryLoad")}</button>
     </div>
-  ) : <div className="empty">正在读取本地 AI 状态…</div>;
+  ) : <div className="empty">{t("settings.localAI.loading")}</div>;
   const installed = new Set(catalog.installedModels.map((model) => model.id));
+  const gpuSummary = catalog.hardware.gpuDetectionFailed
+    ? t("settings.localAI.gpuDetectionFailed")
+    : catalog.hardware.gpus.map((gpu) => `${gpu.name} ${Math.round(gpu.dedicatedMiB / 1024)}GB`).join("、") || t("settings.localAI.noDiscreteGpu");
   return (
     <>
-      {error && <div className="banner banner--error">{error}</div>}
-      {!catalog.supported && <div className="banner">本地推理首版仅支持 Windows；云端模型不受影响。</div>}
-      <SettingsSection title="硬件与运行器" description={`${catalog.hardware.gpus.map((gpu) => `${gpu.name} ${Math.round(gpu.dedicatedMiB / 1024)}GB`).join("、") || "未检测到独立显卡"} · ${Math.round(catalog.hardware.memoryTotalMiB / 1024)}GB 内存`}>
+      {error && <div className="banner banner--error" role="alert"><span>{error}</span>{retryAction && <button type="button" className="btn btn--ghost" disabled={pendingAction !== null} onClick={retryAction}>{t("settings.retryLoad")}</button>}</div>}
+      {!catalog.supported && <div className="banner">{t("settings.localAI.platformUnsupported")}</div>}
+      <SettingsSection title={t("settings.localAI.hardwareRuntime")} description={`${gpuSummary} · ${t("settings.localAI.memory", { n: Math.round(catalog.hardware.memoryTotalMiB / 1024) })}`}>
         <div className="settings-inline-actions">
-          <span className="settings-value">推荐：{catalog.hardware.recommendedModel || "暂不推荐本地模型"}</span>
-          {catalog.runtime ? <button className="btn btn--ghost" onClick={() => void app.StopLocalRuntime().then(reload)}><Square size={14} />停止运行器</button> : (
-            <button className="btn btn--primary" disabled={!catalog.supported} onClick={() => void app.StartLocalRuntimeInstall(catalog.hardware.recommendedRuntime).then(reload)}><Download size={14} />安装 llama.cpp</button>
+          <span className="settings-value">{t("settings.localAI.recommended", { model: catalog.hardware.recommendedModel || t("settings.localAI.noRecommendation") })}</span>
+          {catalog.runtime ? <button className="btn btn--ghost" disabled={pendingAction !== null} onClick={() => void runLocalAction(t("settings.localAI.stopRuntime"), () => app.StopLocalRuntime())}><Square size={14} />{t("settings.localAI.stopRuntime")}</button> : (
+            <button className="btn btn--primary" disabled={!catalog.supported || pendingAction !== null} onClick={() => void runLocalAction(t("settings.localAI.installRuntime"), () => app.StartLocalRuntimeInstall(catalog.hardware.recommendedRuntime))}><Download size={14} />{t("settings.localAI.installRuntime")}</button>
           )}
         </div>
-        <div className="settings-field__hint-line">运行器独立安装，服务仅监听本机；卸载运行器不会删除模型文件。</div>
+        <div className="settings-field__hint-line">{t("settings.localAI.runtimeHint")}</div>
       </SettingsSection>
-      <SettingsSection title="模型库" description={`目录：${catalog.modelsDirectory}`}>
+      <SettingsSection title={t("settings.localAI.modelLibrary")} description={t("settings.localAI.directory", { path: catalog.modelsDirectory })}>
         {catalog.models.map((model) => {
           const isInstalled = installed.has(model.id);
           const task = catalog.downloads.find((item) => item.targetId === model.id);
           return <div className="settings-list-row" key={model.id}>
-            <div className="settings-list-row__main"><strong>{model.name}</strong><span>{model.description}</span><small>{model.vision ? "视觉" : "文本"} · {model.toolUse ? "工具" : "对话"} · {model.license}</small></div>
+            <div className="settings-list-row__main"><strong>{model.name}</strong><span>{model.description}</span><small>{model.vision ? t("settings.localAI.vision") : t("settings.localAI.text")} · {model.toolUse ? t("settings.localAI.tools") : t("settings.localAI.chat")} · {model.license}</small></div>
             <div className="settings-list-row__actions">
-              {task && <LocalDownloadStatus task={task} onReload={reload} />}
-              {isInstalled ? <button className="btn btn--ghost" onClick={() => void app.DeleteLocalModel(model.id).then(reload)}><Trash2 size={14} />删除</button> : <button className="btn btn--primary" disabled={!catalog.supported || !!task} onClick={() => void app.StartLocalModelDownload(model.id).then(reload)}><Download size={14} />下载</button>}
+              {task && <LocalDownloadStatus task={task} onAction={(action) => {
+                if (action === "pause") return runLocalAction(t("settings.localAI.pause"), () => app.PauseLocalDownload(task.id));
+                if (action === "resume") return runLocalAction(t("settings.localAI.resume"), () => app.ResumeLocalDownload(task.id));
+                if (action === "cancel") return runLocalAction(t("settings.localAI.cancel"), () => app.CancelLocalDownload(task.id));
+                const label = action === "retry" ? t("settings.localAI.retryDownload") : t("settings.localAI.redownload");
+                return runLocalAction(label, () => app.StartLocalModelDownload(task.targetId));
+              }} pendingAction={pendingAction !== null} />}
+              {isInstalled ? <button className="btn btn--ghost" disabled={pendingAction !== null} onClick={() => void runLocalAction(t("common.delete"), () => app.DeleteLocalModel(model.id))}><Trash2 size={14} />{t("common.delete")}</button> : <button className="btn btn--primary" disabled={!catalog.supported || !!task || pendingAction !== null} onClick={() => void runLocalAction(t("settings.localAI.download"), () => app.StartLocalModelDownload(model.id))}><Download size={14} />{t("settings.localAI.download")}</button>}
             </div>
           </div>;
         })}
@@ -336,45 +463,51 @@ function LocalAISection() {
   );
 }
 
-function LocalDownloadStatus({ task, onReload }: { task: LocalAICatalogView["downloads"][number]; onReload: () => void }) {
+function LocalDownloadStatus({ task, onAction, pendingAction }: { task: LocalAICatalogView["downloads"][number]; onAction: (action: LocalDownloadAction) => Promise<void>; pendingAction: boolean }) {
+  const t = useT();
   const progress = task.totalBytes > 0 ? Math.min(100, Math.round((task.downloadedBytes / task.totalBytes) * 100)) : 0;
-  const active = task.state === "downloading" || task.state === "queued" || task.state === "verifying";
   const formatSize = (value: number) => value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(value / 1024 ** 2))} MB`;
-  const formatEta = (seconds: number) => seconds > 3600 ? `${Math.ceil(seconds / 3600)}小时` : seconds > 60 ? `${Math.ceil(seconds / 60)}分钟` : `${Math.max(0, Math.ceil(seconds))}秒`;
+  const formatEta = (seconds: number) => seconds > 3600 ? `${Math.ceil(seconds / 3600)}h` : seconds > 60 ? `${Math.ceil(seconds / 60)}m` : `${Math.max(0, Math.ceil(seconds))}s`;
+  const actions = localDownloadActions(task.state);
   return <div className="local-download-status">
-    <div className="local-download-status__meta"><span>{task.state === "completed" ? "已校验" : task.state === "failed" ? "下载失败" : `${progress}%`}</span><span>{task.source || "镜像"}</span></div>
+    <div className="local-download-status__meta"><span>{task.state === "completed" ? t("settings.localAI.verified") : task.state === "failed" ? t("settings.localAI.downloadFailed") : `${progress}%`}</span><span>{task.source || t("settings.localAI.mirror")}</span></div>
     <div className="local-download-status__bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress}%` }} /></div>
-    <div className="local-download-status__meta"><span>{formatSize(task.downloadedBytes)} / {formatSize(task.totalBytes)}</span><span>{task.bytesPerSecond > 0 ? `${formatSize(task.bytesPerSecond)}/秒` : task.error || (task.etaSeconds > 0 ? `剩余 ${formatEta(task.etaSeconds)}` : "准备中")}</span></div>
-    {active && <div className="local-download-status__controls">
-      {task.state === "downloading" ? <button className="icon-button" title="暂停下载" aria-label="暂停下载" onClick={() => void app.PauseLocalDownload(task.id).then(onReload)}><Pause size={13} /></button> : <button className="icon-button" title="继续下载" aria-label="继续下载" onClick={() => void app.ResumeLocalDownload(task.id).then(onReload)}><Play size={13} /></button>}
-      <button className="icon-button icon-button--danger" title="取消下载" aria-label="取消下载" onClick={() => void app.CancelLocalDownload(task.id).then(onReload)}><X size={13} /></button>
+    <div className="local-download-status__meta"><span>{formatSize(task.downloadedBytes)} / {formatSize(task.totalBytes)}</span><span>{task.bytesPerSecond > 0 ? t("settings.localAI.perSecond", { size: formatSize(task.bytesPerSecond) }) : task.error || (task.etaSeconds > 0 ? t("settings.localAI.remaining", { time: formatEta(task.etaSeconds) }) : t("settings.localAI.preparing"))}</span></div>
+    {actions.length > 0 && <div className="local-download-status__controls">
+      {actions.includes("pause") && <button className="icon-button" disabled={pendingAction} title={t("settings.localAI.pause")} aria-label={t("settings.localAI.pause")} onClick={() => void onAction("pause")}><Pause size={13} /></button>}
+      {actions.includes("resume") && <button className="icon-button" disabled={pendingAction} title={t("settings.localAI.resume")} aria-label={t("settings.localAI.resume")} onClick={() => void onAction("resume")}><Play size={13} /></button>}
+      {actions.includes("retry") && <button className="btn btn--small" disabled={pendingAction} onClick={() => void onAction("retry")}><RefreshCw size={13} />{t("settings.localAI.retryDownload")}</button>}
+      {actions.includes("redownload") && <button className="btn btn--small" disabled={pendingAction} onClick={() => void onAction("redownload")}><Download size={13} />{t("settings.localAI.redownload")}</button>}
+      {actions.includes("cancel") && <button className="icon-button icon-button--danger" disabled={pendingAction} title={t("settings.localAI.cancel")} aria-label={t("settings.localAI.cancel")} onClick={() => void onAction("cancel")}><X size={13} /></button>}
     </div>}
   </div>;
 }
 
 function ComputerUseSection({ s, busy, apply }: SectionProps) {
+  const t = useT();
   const [state, setState] = useState<ComputerUseState | null>(null);
   const reload = () => { void app.GetComputerUseState().then(setState).catch(() => {}); };
   useEffect(() => { reload(); return onComputerUseChanged(reload); }, []);
   const modelOptions = s.providers.flatMap((provider) => provider.models.map((model) => `${provider.name}/${model}`));
   return <>
-    <SettingsSection title="Windows Computer Use" description="Orca 会使用屏幕观察、UI Automation 和受控输入完成电脑任务。截图默认只存在于当前请求，不写入会话。">
-      <SettingsField label="控制模型" hint="必须确认支持视觉与结构化动作；本地 Qwen 模型会显示在这里。">
-        <select className="settings-select" disabled={busy} value={s.computerControlModel || ""} onChange={(event) => void apply(() => app.SetComputerControlModel(event.target.value))}><option value="">自动选择合格模型</option>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select>
+    <SettingsSection title={t("settings.computer.title")} description={t("settings.computer.description")}>
+      <SettingsField label={t("settings.computer.controlModel")} hint={t("settings.computer.modelHint")}>
+        <select className="settings-select" disabled={busy} value={s.computerControlModel || ""} onChange={(event) => void apply(() => app.SetComputerControlModel(event.target.value))}><option value="">{t("settings.computer.autoSelect")}</option>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select>
       </SettingsField>
-      <SettingsField label="完全访问" hint="一次授权后不再逐项询问点击和输入；UAC、安全桌面、密码、验证码和 CAPTCHA 始终禁止。">
-        <button className={`btn ${s.computerUseFullAccessApproved ? "btn--primary" : "btn--ghost"}`} disabled={busy || !state?.capabilities.supported} onClick={() => void apply(() => app.SetComputerUseFullAccess(!s.computerUseFullAccessApproved))}>{s.computerUseFullAccessApproved ? <><ShieldCheck size={14} />已授权，可撤销</> : <><ShieldCheck size={14} />授权一次</>}</button>
+      <SettingsField label={t("settings.computer.fullAccess")} hint={t("settings.computer.fullAccessHint")}>
+        <button className={`btn ${s.computerUseFullAccessApproved ? "btn--primary" : "btn--ghost"}`} disabled={busy || !state?.capabilities.supported} onClick={() => void apply(() => app.SetComputerUseFullAccess(!s.computerUseFullAccessApproved))}>{s.computerUseFullAccessApproved ? <><ShieldCheck size={14} />{t("settings.computer.authorized")}</> : <><ShieldCheck size={14} />{t("settings.computer.authorize")}</>}</button>
       </SettingsField>
-      {state && <div className="settings-field__hint-line">{state.capabilities.supported ? `Windows 能力：${state.capabilities.uiAutomation ? "UI Automation" : "无 UIA"}、${state.capabilities.screenCapture ? "屏幕捕获" : "无屏幕捕获"}、${state.capabilities.overlay ? "蓝色边缘提示" : "无覆盖层"}` : `当前不可用：${state.capabilities.unavailableReason || "平台不支持"}`}</div>}
+      {state && <div className="settings-field__hint-line">{state.capabilities.supported ? t("settings.computer.capabilities", { details: [state.capabilities.uiAutomation ? t("settings.computer.uiAutomation") : t("settings.computer.noUiAutomation"), state.capabilities.screenCapture ? t("settings.computer.screenCapture") : t("settings.computer.noScreenCapture"), state.capabilities.overlay ? t("settings.computer.overlay") : t("settings.computer.noOverlay")].join(", ") }) : t("settings.computer.unavailable", { reason: state.capabilities.unavailableReason || t("settings.computer.platformUnsupported") })}</div>}
     </SettingsSection>
   </>;
 }
 
 function AboutSection() {
+  const t = useT();
   const [version, setVersion] = useState("-");
   useEffect(() => { void app.Version().then(setVersion).catch(() => {}); }, []);
-  return <SettingsSection title="O.R.C.A. for Windows" description="Open Reasoning & Computing Agent">
-    <div className="settings-about"><strong>当前版本：{version}</strong><span>编程模式、助手模式与固定 Orca 主对话。</span><button className="btn btn--ghost" onClick={() => openExternal("https://github.com/nanbo0ne/O.R.C.A-for-Windows")}>GitHub</button></div>
+  return <SettingsSection title={t("settings.about.title")} description={t("settings.about.description")}>
+    <div className="settings-about"><strong>{t("settings.about.version", { version })}</strong><span>{t("settings.about.modes")}</span><button className="btn btn--ghost" onClick={() => openExternal("https://github.com/nanbo0ne/O.R.C.A-for-Windows")}>{t("settings.about.github")}</button></div>
   </SettingsSection>;
 }
 
@@ -408,11 +541,11 @@ function settingsTabLabel(id: SettingsTab, t: ReturnType<typeof useT>): string {
 		case "appearance":
 			return t("settings.tab.appearance");
 		case "localAI":
-			return "本地 AI";
+			return t("settings.tab.localAI");
 		case "computer":
-			return "电脑控制";
+			return t("settings.tab.computer");
 		case "about":
-			return "关于";
+			return t("settings.tab.about");
   }
 }
 
@@ -443,7 +576,7 @@ function settingsTabMeta(id: SettingsTab, s: SettingsView, t: ReturnType<typeof 
 		case "localAI":
 			return "llama.cpp";
 		case "computer":
-			return s.computerUseFullAccessApproved ? "已授权" : "未授权";
+			return s.computerUseFullAccessApproved ? t("settings.computer.authorized") : t("settings.computer.authorize");
 		case "about":
 			return "O.R.C.A.";
   }

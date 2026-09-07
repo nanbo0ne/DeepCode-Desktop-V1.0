@@ -476,7 +476,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("# External MCP servers. type: \"stdio\" (default, a subprocess) | \"http\" | \"sse\".\n")
+	b.WriteString("# External MCP servers. type: \"stdio\" (default, a subprocess) | \"http\" (Streamable HTTP). Legacy \"sse\" entries are read-only and must be migrated before saving.\n")
 	b.WriteString("# ${VAR} / ${VAR:-default} are expanded from the environment in command/args/env/url/headers.\n")
 	if len(c.Plugins) == 0 {
 		b.WriteString("# [[plugins]]\n")

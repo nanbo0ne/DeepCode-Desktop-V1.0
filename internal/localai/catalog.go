@@ -41,8 +41,8 @@ func ModelCatalog() []ModelSpec {
 			ID: "qwen3.8-27b-iq3-xxs", Name: "Qwen3.8 27B · IQ3_XXS", Description: "首选本地视觉与工具模型，适合 16GB 级独显", License: "Apache-2.0",
 			MinVRAMGiB: 12, RecommendedVRAM: 16, ContextSize: 25_600, ContextFallback: []int{16_384, 8_192}, Vision: true, ToolUse: true,
 			Artifacts: []Artifact{
-				modelArtifact("Qwen3.8-27B-UD-IQ3_XXS.gguf", 11_913_559_104, "0a6129dcbbbe72f423dc67e0e3bbfbbdf3e923981a3637687ebb96a46c59d6be", "unsloth/Qwen3.8-27B-GGUF"),
-				modelArtifact("mmproj-F16.gguf", 927_607_488, "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e", "unsloth/Qwen3.8-27B-GGUF"),
+				modelArtifactAtRevision("Qwen3.8-27B-UD-IQ3_XXS.gguf", 10_934_860_704, "c0b7c3038681ed2e3040456c1dd45f9858b6c2290bed172c70388a94874f3eee", "unsloth/Qwen3.8-27B-GGUF", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "cda69804e9a0bf6546a3adefb63a771c37e50a5d"),
+				modelArtifactAtRevision("mmproj-F16.gguf", 927_607_488, "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e", "unsloth/Qwen3.8-27B-GGUF", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "276faa3e9be1b3b57954c1eec3b5e993802a880f"),
 			},
 		},
 		{
@@ -77,11 +77,15 @@ func RuntimeCatalog() []RuntimeSpec {
 }
 
 func modelArtifact(name string, size int64, sha, repo string) Artifact {
-	path := repo + "/resolve/main/" + name
+	return modelArtifactAtRevision(name, size, sha, repo, "main", "master")
+}
+
+func modelArtifactAtRevision(name string, size int64, sha, repo, hfRevision, modelScopeRevision string) Artifact {
+	hfPath := repo + "/resolve/" + hfRevision + "/" + name
 	return Artifact{Name: name, Size: size, SHA256: sha, Sources: []string{
-		"https://modelscope.cn/models/" + repo + "/resolve/master/" + name,
-		"https://hf-mirror.com/" + path,
-		"https://huggingface.co/" + path,
+		"https://modelscope.cn/models/" + repo + "/resolve/" + modelScopeRevision + "/" + name,
+		"https://hf-mirror.com/" + hfPath,
+		"https://huggingface.co/" + hfPath,
 	}}
 }
 

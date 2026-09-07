@@ -23,6 +23,34 @@ interface ContextPanelUsageInput {
   sessionTokens?: number;
 }
 
+export function resolveContextPanelRequestCount(
+  info?: ContextPanelInfo | null,
+  context?: ContextInfo,
+): number {
+  if (typeof info?.requestCount === "number" && info.requestCount >= 0) return info.requestCount;
+  if (typeof context?.requestCount === "number" && context.requestCount >= 0) return context.requestCount;
+  return 0;
+}
+
+export function contextPanelCurrencySymbol(currency?: string): string | null {
+  const value = (currency || "").trim();
+  if (!value) return null;
+  if (/^(cny|rmb|yuan|¥|￥)$/i.test(value)) return "¥";
+  if (/^(usd|dollar|\$)$/i.test(value)) return "$";
+  if (/^(eur|euro|€)$/i.test(value)) return "€";
+  if (/^(gbp|pound|£)$/i.test(value)) return "£";
+  return null;
+}
+
+export function formatContextPanelMoney(amount: number, currency?: string): string {
+  if (!Number.isFinite(amount) || amount <= 0) return "-";
+  const formatted = amount < 1 ? amount.toFixed(4) : amount.toFixed(2);
+  const value = (currency || "").trim();
+  const symbol = contextPanelCurrencySymbol(value);
+  if (symbol) return `${symbol}${formatted}`;
+  return value ? `${value} ${formatted}` : formatted;
+}
+
 function positive(value?: number): number {
   return typeof value === "number" && value > 0 ? value : 0;
 }

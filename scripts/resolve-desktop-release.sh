@@ -13,6 +13,10 @@ if [ "${EVENT_NAME:-}" = "workflow_dispatch" ] && [ "${IN_CHANNEL:-stable}" = "c
 	base="${IN_BASE_VERSION:?canary dispatch requires base_version}"
 	base="${base#v}"
 	base="${base#desktop-v}"
+	if [[ ! "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "${RUN_NUMBER:-}" =~ ^[0-9]+$ ]]; then
+		echo "canary requires a numeric major.minor.patch base and run number" >&2
+		exit 1
+	fi
 	version="v${base}-canary.${RUN_NUMBER}"
 	tag="desktop-canary"
 	channel="canary"
@@ -22,6 +26,10 @@ else
 		tag="${IN_TAG:?stable dispatch requires tag}"
 	else
 		tag="${REF_NAME}"
+	fi
+	if [[ ! "$tag" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ]]; then
+		echo "stable release tag must use desktop-v<major.minor.patch> with an optional prerelease suffix" >&2
+		exit 1
 	fi
 	version="${tag#desktop-}"
 	channel="stable"

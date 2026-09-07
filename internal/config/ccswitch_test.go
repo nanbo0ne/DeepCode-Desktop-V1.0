@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -46,7 +47,6 @@ func TestCCSwitchRowsPreferIDForDuplicateDisplayNames(t *testing.T) {
 func TestCCSwitchImportClassifiesRiskyServers(t *testing.T) {
 	rows := []ccSwitchMCPRow{
 		{Name: "@modelcontextprotocol/server-chrome-devtools", ServerConfig: `{"command":"npx","args":["-y","chrome-devtools-mcp@latest"]}`},
-		{Name: "legacy", ServerConfig: `{"type":"sse","url":"https://example.test/sse"}`},
 	}
 	got, err := ccSwitchRowsToPlugins(rows)
 	if err != nil {
@@ -57,6 +57,13 @@ func TestCCSwitchImportClassifiesRiskyServers(t *testing.T) {
 		if candidate.Recommended {
 			t.Fatalf("%s should not be recommended: %+v", e.Name, candidate)
 		}
+	}
+}
+
+func TestCCSwitchImportRejectsLegacySSE(t *testing.T) {
+	rows := []ccSwitchMCPRow{{Name: "legacy", ServerConfig: `{"type":"sse","url":"https://example.test/sse"}`}}
+	if _, err := ccSwitchRowsToPlugins(rows); err == nil || !strings.Contains(err.Error(), "Streamable HTTP") {
+		t.Fatalf("legacy SSE import error = %v, want Streamable HTTP migration guidance", err)
 	}
 }
 

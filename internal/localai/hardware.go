@@ -19,6 +19,7 @@ type HardwareProfile struct {
 	MemoryFreeMiB      int64        `json:"memoryFreeMiB"`
 	DiskFreeBytes      int64        `json:"diskFreeBytes"`
 	GPUs               []GPUAdapter `json:"gpus"`
+	GPUDetectionFailed bool         `json:"gpuDetectionFailed,omitempty"`
 	RecommendedModel   string       `json:"recommendedModel,omitempty"`
 	RecommendedRuntime string       `json:"recommendedRuntime,omitempty"`
 	Warning            string       `json:"warning,omitempty"`

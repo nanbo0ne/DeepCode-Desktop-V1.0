@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText } from "lucide-react";
 import { asArray } from "../lib/array";
 import { app } from "../lib/bridge";
-import { computeContextPanelUsage } from "../lib/contextPanelUsage";
+import {
+  computeContextPanelUsage,
+  formatContextPanelMoney,
+  resolveContextPanelRequestCount,
+} from "../lib/contextPanelUsage";
 import { useT, type Translator } from "../lib/i18n";
 import type { DictKey } from "../locales/en";
 import type { ContextInfo, ContextPanelInfo, WireUsage } from "../lib/types";
@@ -41,21 +45,6 @@ function fmtDuration(ms: number, t: Translator): string {
   const seconds = totalSeconds % 60;
   if (minutes <= 0) return t("context.durationSeconds", { seconds });
   return t("context.durationMinutesSeconds", { minutes, seconds });
-}
-
-function currencySymbol(currency?: string): string {
-  const value = (currency || "CNY").trim();
-  if (/^(cny|rmb|yuan|¥|￥)$/i.test(value)) return "¥";
-  if (/^(usd|dollar|\$)$/i.test(value)) return "$";
-  if (/^(eur|euro|€)$/i.test(value)) return "€";
-  if (/^(gbp|pound|£)$/i.test(value)) return "£";
-  return "¥";
-}
-
-function fmtMoney(amount: number, currency?: string): string {
-  if (amount <= 0) return "-";
-  const symbol = currencySymbol(currency);
-  return `${symbol}${amount < 1 ? amount.toFixed(4) : amount.toFixed(2)}`;
 }
 
 interface HealthResult {
@@ -110,17 +99,31 @@ export function ContextPanel({
   onOpenWorkspaceChangeFile,
 }: ContextPanelProps) {
   const t = useT();
-  const [info, setInfo] = useState<ContextPanelInfo | null>(null);
+  const [infoState, setInfoState] = useState<{ tabId: string; info: ContextPanelInfo } | null>(null);
   const infoSignatureRef = useRef("");
+  const refreshSeqRef = useRef(0);
+  const activeTabIdRef = useRef(tabId);
+  activeTabIdRef.current = tabId;
+
+  useEffect(() => {
+    infoSignatureRef.current = "";
+    refreshSeqRef.current += 1;
+    return () => {
+      refreshSeqRef.current += 1;
+    };
+  }, [tabId]);
 
   const refresh = useCallback(async () => {
     if (!tabId) return;
+    const requestedTabId = tabId;
+    const requestSeq = ++refreshSeqRef.current;
     try {
-      const next = await app.ContextPanel(tabId);
+      const next = await app.ContextPanel(requestedTabId);
+      if (activeTabIdRef.current !== requestedTabId || refreshSeqRef.current !== requestSeq) return;
       const signature = JSON.stringify(next);
       if (signature !== infoSignatureRef.current) {
         infoSignatureRef.current = signature;
-        setInfo(next);
+        setInfoState({ tabId: requestedTabId, info: next });
       }
     } catch {
       /* bridge unavailable */
@@ -136,6 +139,7 @@ export function ContextPanel({
     void refresh();
   }, [refresh, refreshKey]);
 
+  const info = infoState && infoState.tabId === tabId ? infoState.info : null;
   const {
     usedTokens,
     windowTokens,
@@ -149,7 +153,8 @@ export function ContextPanel({
     currentCompletionTokens,
     currentReasoningTokens,
   } = computeContextPanelUsage({ context, info, usage, sessionTokens });
-  const costAvailable = info?.costAvailable === true || context?.costAvailable === true || usage?.costAvailable === true;
+  const currency = (info?.sessionCurrency || context?.sessionCurrency || sessionCurrency || usage?.currency || "").trim();
+  const costAvailable = currency.length > 0 && (info?.costAvailable === true || context?.costAvailable === true || usage?.costAvailable === true);
   const cost = info?.costAvailable === true
     ? (info.sessionCost ?? info.sessionCostUsd ?? 0)
     : context?.costAvailable === true
@@ -157,7 +162,6 @@ export function ContextPanel({
       : usage?.costAvailable === true
         ? (sessionCost ?? usage.cost ?? usage.costUsd ?? 0)
         : 0;
-  const currency = info?.sessionCurrency || context?.sessionCurrency || sessionCurrency || usage?.currency || "";
   const readFiles = asArray(info?.readFiles);
   const changedFiles = asArray(info?.changedFiles);
 
@@ -183,8 +187,8 @@ export function ContextPanel({
   ].filter((time) => time > 0);
   const derivedElapsed = eventTimes.length > 1 ? Math.max(...eventTimes) - Math.min(...eventTimes) : 0;
   const elapsed = info?.elapsedMs && info.elapsedMs > 0 ? info.elapsedMs : derivedElapsed;
-  const derivedRequestCount = Math.max(readFiles.length + changedFiles.length, 0);
-  const requestCount = info?.requestCount && info.requestCount > 0 ? info.requestCount : derivedRequestCount;
+  const requestCount = resolveContextPanelRequestCount(info, context);
+  const hasCacheData = cacheHitTokens + cacheMissTokens > 0;
   const readRows = readFiles.map((f, i) => ({
     key: `${f.path}-${i}`,
     path: f.path,
@@ -248,13 +252,13 @@ export function ContextPanel({
               <MetricCard label={t("context.time")} value={fmtDuration(elapsed, t)} />
             </div>
           </section>
-          <section className="context-panel__section">
+          {(costAvailable || hasCacheData) && <section className="context-panel__section">
             <SectionHeading title={t("context.costMetrics")} />
             <div className="context-panel__stats">
-              <MetricCard label={t("context.cacheHit")} value={cachePct > 0 ? `${cachePct}%` : "-"} tone="accent" />
-              {costAvailable && <MetricCard label={t("context.sessionCost")} value={fmtMoney(cost, currency)} />}
+              {hasCacheData && <MetricCard label={t("context.cacheHit")} value={`${cachePct}%`} tone="accent" />}
+              {costAvailable && <MetricCard label={t("context.sessionCost")} value={formatContextPanelMoney(cost, currency)} />}
             </div>
-          </section>
+          </section>}
           <section className="context-panel__section context-panel__section--status">
             <SectionHeading title={t("context.sessionStatus")} />
             <div className="context-panel__stats">

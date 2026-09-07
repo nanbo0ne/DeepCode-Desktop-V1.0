@@ -157,7 +157,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 	}
 
 	out := make(chan provider.Chunk)
-	go c.readStream(resp, out)
+	go c.readStream(ctx, resp, out)
 	return out, nil
 }
 
@@ -213,7 +213,7 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 			// the tool_use it led to). Only when thinking is on and we have both the
 			// text and its signature — reasoning without a signature (e.g. from an
 			// openai-compatible provider) can't be replayed as a thinking block.
-			if c.thinking != "" && m.ReasoningContent != "" && m.ReasoningSignature != "" {
+			if !req.DisableThinking && c.thinking != "" && m.ReasoningContent != "" && m.ReasoningSignature != "" {
 				blocks = append(blocks, contentBlock{Type: "thinking", Thinking: m.ReasoningContent, Signature: m.ReasoningSignature})
 			}
 			if m.Content != "" {
@@ -270,7 +270,7 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 	// Extended thinking is opt-in and Anthropic-specific (a compatible gateway like
 	// DeepSeek's would reject the field). "summarized" display streams the reasoning
 	// text; the default omits it but still emits the signature we round-trip.
-	if c.thinking == "adaptive" {
+	if !req.DisableThinking && c.thinking == "adaptive" {
 		r.Thinking = &thinkingConfig{Type: "adaptive", Display: "summarized"}
 		if c.effort != "" {
 			r.OutputConfig = &outputConfig{Effort: c.effort}
@@ -284,7 +284,7 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 // and a complete ChunkToolCall when the block closes; usage is assembled from
 // message_start (input/cache) + message_delta (output + stop_reason) and emitted
 // once before ChunkDone.
-func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
+func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<- provider.Chunk) {
 	defer resp.Body.Close()
 	defer close(out)
 
@@ -305,6 +305,9 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 		defer idle.Stop()
 		for {
 			select {
+			case <-ctx.Done():
+				resp.Body.Close()
+				return
 			case <-idle.C:
 				stalled.Store(true)
 				resp.Body.Close()
@@ -327,6 +330,7 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 	var inTok, outTok, cacheCreate, cacheRead int
 	var stopReason string
 	haveUsage := false
+	hadMessageStop := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -349,7 +353,9 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 
 		var ev streamEvent
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			out <- provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: decode stream: %w", c.name, err)}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: decode stream: %w", c.name, err)}) {
+				return
+			}
 			return
 		}
 
@@ -365,7 +371,9 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 			if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
 				tc := &provider.ToolCall{ID: ev.ContentBlock.ID, Name: ev.ContentBlock.Name}
 				tools[ev.Index] = tc
-				out <- provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: tc.ID, Name: tc.Name}}
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: tc.ID, Name: tc.Name}}) {
+					return
+				}
 			}
 		case "content_block_delta":
 			if ev.Delta == nil {
@@ -374,15 +382,21 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 			switch ev.Delta.Type {
 			case "text_delta":
 				if ev.Delta.Text != "" {
-					out <- provider.Chunk{Type: provider.ChunkText, Text: ev.Delta.Text}
+					if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkText, Text: ev.Delta.Text}) {
+						return
+					}
 				}
 			case "thinking_delta":
 				if ev.Delta.Thinking != "" {
-					out <- provider.Chunk{Type: provider.ChunkReasoning, Text: ev.Delta.Thinking}
+					if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: ev.Delta.Thinking}) {
+						return
+					}
 				}
 			case "signature_delta":
 				if ev.Delta.Signature != "" {
-					out <- provider.Chunk{Type: provider.ChunkReasoning, Signature: ev.Delta.Signature}
+					if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Signature: ev.Delta.Signature}) {
+						return
+					}
 				}
 			case "input_json_delta":
 				if tc := tools[ev.Index]; tc != nil {
@@ -391,7 +405,9 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 			}
 		case "content_block_stop":
 			if tc := tools[ev.Index]; tc != nil {
-				out <- provider.Chunk{Type: provider.ChunkToolCall, ToolCall: tc}
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCall, ToolCall: tc}) {
+					return
+				}
 				delete(tools, ev.Index)
 			}
 		case "message_delta":
@@ -403,37 +419,62 @@ func (c *client) readStream(resp *http.Response, out chan<- provider.Chunk) {
 				haveUsage = true
 			}
 		case "message_stop":
-			// Stream complete; fall through to finalize below.
+			// The protocol-level terminator is required; a clean TCP EOF is not
+			// sufficient because it can leave text or tool JSON truncated.
+			hadMessageStop = true
 		case "error":
 			msg := "stream error"
 			if ev.Error != nil && ev.Error.Message != "" {
 				msg = ev.Error.Message
 			}
-			out <- provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: %s", c.name, msg)}
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: %s", c.name, msg)}) {
+				return
+			}
 			return
 		}
 	}
 
 	if stalled.Load() {
-		out <- provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: stream stalled — no data for %s, connection likely dropped", c.name, idleTimeout)}
+		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: stream stalled — no data for %s, connection likely dropped", c.name, idleTimeout)}) {
+			return
+		}
 		return
 	}
 	if err := scanner.Err(); err != nil {
-		out <- provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: read stream: %w", c.name, err)}
+		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: read stream: %w", c.name, err)}) {
+			return
+		}
+		return
+	}
+	if !hadMessageStop {
+		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: stream interrupted before message_stop", c.name)}) {
+			return
+		}
 		return
 	}
 
 	if haveUsage {
-		out <- provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{
+		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{
 			PromptTokens:     inTok + cacheCreate + cacheRead,
 			CompletionTokens: outTok,
 			TotalTokens:      inTok + cacheCreate + cacheRead + outTok,
 			CacheHitTokens:   cacheRead,
 			CacheMissTokens:  inTok + cacheCreate, // uncached input + cache writes (billed ≥1×)
 			FinishReason:     mapStopReason(stopReason),
-		}}
+		}}) {
+			return
+		}
 	}
-	out <- provider.Chunk{Type: provider.ChunkDone}
+	_ = sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkDone})
+}
+
+func sendChunk(ctx context.Context, out chan<- provider.Chunk, chunk provider.Chunk) bool {
+	select {
+	case out <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // mapStopReason translates Anthropic stop reasons to the OpenAI-style finish

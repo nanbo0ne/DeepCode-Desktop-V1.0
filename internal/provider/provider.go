@@ -74,6 +74,9 @@ type Request struct {
 	Tools       []ToolSchema
 	Temperature float64
 	MaxTokens   int
+	// DisableThinking is for short, isolated host classifiers. Ordinary turns
+	// leave it false and retain the configured reasoning behavior.
+	DisableThinking bool
 }
 
 // interruptedToolResult stands in for a tool result that never landed — an

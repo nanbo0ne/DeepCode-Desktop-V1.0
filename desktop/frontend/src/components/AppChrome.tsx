@@ -347,10 +347,11 @@ function ModernAppChrome(props: AppChromeProps) {
 }
 
 function WindowControls({ browserPreviewChrome }: { browserPreviewChrome: boolean }) {
+  const t = useT();
   return <div className="app-chrome__window-controls app-chrome__window-controls--windows">
-    <button type="button" className="app-chrome__window-control app-chrome__window-control--minimize" aria-label="Minimize window" onClick={() => { if (!browserPreviewChrome) WindowMinimise(); }}><Minus size={12} strokeWidth={1.9} /></button>
-    <button type="button" className="app-chrome__window-control app-chrome__window-control--maximize" aria-label="Maximize or restore window" onClick={() => { if (!browserPreviewChrome) WindowToggleMaximise(); }}><Square size={10} strokeWidth={1.8} /></button>
-    <button type="button" className="app-chrome__window-control app-chrome__window-control--close" aria-label="Close window" onClick={() => { if (!browserPreviewChrome) Quit(); }}><X size={12} strokeWidth={1.9} /></button>
+    <button type="button" className="app-chrome__window-control app-chrome__window-control--minimize" aria-label={t("topbar.windowMinimize")} onClick={() => { if (!browserPreviewChrome) WindowMinimise(); }}><Minus size={12} strokeWidth={1.9} /></button>
+    <button type="button" className="app-chrome__window-control app-chrome__window-control--maximize" aria-label={t("topbar.windowMaximize")} onClick={() => { if (!browserPreviewChrome) WindowToggleMaximise(); }}><Square size={10} strokeWidth={1.8} /></button>
+    <button type="button" className="app-chrome__window-control app-chrome__window-control--close" aria-label={t("topbar.windowClose")} onClick={() => { if (!browserPreviewChrome) Quit(); }}><X size={12} strokeWidth={1.9} /></button>
   </div>;
 }
 

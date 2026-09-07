@@ -35,6 +35,14 @@ const nullArrays = normalizeLocalAICatalog({
 check(nullArrays.models.length === 0 && nullArrays.installedModels.length === 0, "turns null catalog collections into arrays");
 check(nullArrays.hardware.gpus.length === 0, "turns a null GPU collection into an array");
 check(nullArrays.hardware.memoryTotalMiB === 32768, "preserves valid hardware values");
+check(nullArrays.hardware.gpuDetectionFailed === false, "defaults GPU detection failures to false");
+
+const detectionFailed = normalizeLocalAICatalog({
+  supported: true,
+  platform: "windows",
+  hardware: { gpuDetectionFailed: true, gpus: [] },
+});
+check(detectionFailed.hardware.gpuDetectionFailed === true, "preserves GPU detection failures");
 
 const mixedGPUs = normalizeLocalAICatalog({
   supported: true,

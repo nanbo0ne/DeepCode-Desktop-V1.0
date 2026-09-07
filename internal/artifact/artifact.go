@@ -3,12 +3,11 @@ package artifact
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 const sidecarVersion = 1
@@ -32,21 +33,25 @@ type Slide struct {
 }
 
 type Model struct {
-	Version    int             `json:"version"`
-	Format     string          `json:"format"`
-	Title      string          `json:"title"`
-	Paragraphs []string        `json:"paragraphs,omitempty"`
-	Sheets     []WorkbookSheet `json:"sheets,omitempty"`
-	Slides     []Slide         `json:"slides,omitempty"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
+	Version        int             `json:"version"`
+	Format         string          `json:"format"`
+	Title          string          `json:"title"`
+	Paragraphs     []string        `json:"paragraphs,omitempty"`
+	Sheets         []WorkbookSheet `json:"sheets,omitempty"`
+	Slides         []Slide         `json:"slides,omitempty"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+	ArtifactSHA256 string          `json:"artifactSha256,omitempty"`
+	SidecarSHA256  string          `json:"sidecarSha256,omitempty"`
 }
 
 type Validation struct {
-	Valid      bool     `json:"valid"`
-	Format     string   `json:"format"`
-	Units      int      `json:"units"`
-	TextBlocks int      `json:"textBlocks"`
-	Warnings   []string `json:"warnings,omitempty"`
+	Valid          bool     `json:"valid"`
+	Scope          string   `json:"scope"`
+	VisualVerified bool     `json:"visualVerified"`
+	Format         string   `json:"format"`
+	Units          int      `json:"units"`
+	TextBlocks     int      `json:"textBlocks"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 func Normalize(m Model, path string) Model {
@@ -58,7 +63,7 @@ func Normalize(m Model, path string) Model {
 	if strings.TrimSpace(m.Title) == "" {
 		m.Title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
-	if len(m.Paragraphs) == 0 && len(m.Sheets) == 0 && len(m.Slides) == 0 {
+	if (m.Format == "pdf" || m.Format == "docx") && len(m.Paragraphs) == 0 && len(m.Sheets) == 0 && len(m.Slides) == 0 {
 		m.Paragraphs = []string{m.Title}
 	}
 	if m.Format == "xlsx" && len(m.Sheets) == 0 {
@@ -75,29 +80,18 @@ func SidecarPath(path string) string { return path + ".orca-artifact.json" }
 
 func Create(path string, model Model) (Validation, error) {
 	model = Normalize(model, path)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	data, err := renderModel(model)
+	if err != nil {
 		return Validation{}, err
 	}
-	var data []byte
-	var err error
-	switch model.Format {
-	case "docx":
-		data, err = renderDOCX(model)
-	case "xlsx":
-		data, err = renderXLSX(model)
-	case "pptx":
-		data, err = renderPPTX(model)
-	case "pdf":
-		data, err = renderPDF(model)
-	default:
-		return Validation{}, fmt.Errorf("unsupported artifact format %q", model.Format)
-	}
-	if err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return Validation{}, err
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return Validation{}, err
 	}
+	model.ArtifactSHA256 = digest(data)
+	model.SidecarSHA256 = sidecarDigest(model)
 	sidecar, _ := json.MarshalIndent(model, "", "  ")
 	if err := os.WriteFile(SidecarPath(path), append(sidecar, '\n'), 0o644); err != nil {
 		return Validation{}, err
@@ -111,15 +105,35 @@ func Load(path string) (Model, error) {
 		return Model{}, fmt.Errorf("structured editing requires an Orca sidecar: %w", err)
 	}
 	var model Model
-	if err := json.Unmarshal(b, &model); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&model); err != nil {
 		return Model{}, err
 	}
-	return Normalize(model, path), nil
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return Model{}, fmt.Errorf("artifact sidecar contains trailing JSON")
+	}
+	if model.Version != sidecarVersion {
+		return Model{}, fmt.Errorf("unsupported artifact sidecar version %d", model.Version)
+	}
+	if (model.ArtifactSHA256 == "") != (model.SidecarSHA256 == "") ||
+		model.SidecarSHA256 != "" && model.SidecarSHA256 != sidecarDigest(model) {
+		return Model{}, fmt.Errorf("artifact sidecar integrity check failed; refusing to discard or regenerate changed metadata")
+	}
+	// Preserve the stored timestamp and fields on reads. Creation already writes
+	// normalized sidecars, including those produced by the original v1 generator.
+	return model, nil
 }
 
 func Edit(path string, mutate func(*Model) error) (Validation, error) {
 	model, err := Load(path)
 	if err != nil {
+		return Validation{}, err
+	}
+	if model.ArtifactSHA256 == "" {
+		return Validation{}, fmt.Errorf("legacy sidecar has no artifact checksum; consistency is unknown, so editing is refused without overwriting the file; explicitly recreate from reviewed content")
+	}
+	if _, err := Validate(path); err != nil {
 		return Validation{}, err
 	}
 	if err := mutate(&model); err != nil {
@@ -133,127 +147,50 @@ func Validate(path string) (Validation, error) {
 	if err != nil {
 		return Validation{}, err
 	}
-	result := Validation{Valid: true, Format: model.Format, TextBlocks: len(model.Paragraphs)}
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		return Validation{}, err
+	}
+	if model.ArtifactSHA256 != "" && model.ArtifactSHA256 != digest(actual) {
+		return Validation{}, fmt.Errorf("artifact SHA256 mismatch; file changed or is corrupt, refusing to overwrite external edits")
+	}
+	result := Validation{Valid: true, Scope: "artifact_sha256_and_structure", Format: model.Format, Warnings: []string{"Structural checks only; not visual verification or formula evaluation."}}
+	if model.ArtifactSHA256 == "" {
+		result.Scope = "structure_only_sidecar_consistency_unknown"
+		result.Warnings = append(result.Warnings, "Legacy sidecar has no artifact SHA256. Content consistency with the sidecar is unknown; edits are disabled. Structural validity does not establish that all source content was rendered.")
+	}
 	switch model.Format {
 	case "docx", "xlsx", "pptx":
-		zr, err := zip.OpenReader(path)
-		if err != nil {
-			return Validation{}, err
-		}
-		defer zr.Close()
-		names := map[string]bool{}
-		for _, file := range zr.File {
-			names[file.Name] = true
-			if strings.HasSuffix(strings.ToLower(file.Name), ".xml") {
-				r, openErr := file.Open()
-				if openErr != nil {
-					return Validation{}, openErr
-				}
-				decoder := xml.NewDecoder(r)
-				for {
-					_, decodeErr := decoder.Token()
-					if decodeErr == io.EOF {
-						break
-					}
-					if decodeErr != nil {
-						r.Close()
-						return Validation{}, fmt.Errorf("invalid XML part %s: %w", file.Name, decodeErr)
-					}
-				}
-				r.Close()
-			}
-		}
-		if !names["[Content_Types].xml"] || !names["_rels/.rels"] {
-			return Validation{}, fmt.Errorf("invalid OOXML package: required relationships are missing")
-		}
-		if model.Format == "docx" {
-			result.Units = 1
-			result.Valid = names["word/document.xml"]
-		} else if model.Format == "xlsx" {
-			result.Units = len(model.Sheets)
-			result.Valid = names["xl/workbook.xml"] && result.Units > 0
-			for _, sheet := range model.Sheets {
-				for _, row := range sheet.Rows {
-					result.TextBlocks += len(row)
-				}
-			}
-		} else {
-			result.Units = len(model.Slides)
-			result.Valid = names["ppt/presentation.xml"] && result.Units > 0
-			for _, slide := range model.Slides {
-				result.TextBlocks += 1 + len(slide.Bullets)
-			}
-		}
+		result.Units, result.TextBlocks, err = validateOOXML(actual, model.Format)
 	case "pdf":
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return Validation{}, err
+		var warning string
+		result.Units, warning, err = validatePDFStructure(path, actual)
+		if warning != "" {
+			result.Warnings = append(result.Warnings, warning)
 		}
-		result.Valid = bytes.HasPrefix(b, []byte("%PDF-")) && bytes.Contains(b, []byte("%%EOF"))
-		result.Units = 1
+		result.Warnings = append(result.Warnings, "PDF text block count is unavailable (reported as 0), not inferred from the sidecar.")
+		result.Warnings = append(result.Warnings, "PDF font is not embedded; viewer CJK font substitution is required. Supported text is printable ASCII and basic GB2312 characters.")
 	default:
 		return Validation{}, fmt.Errorf("unsupported artifact format %q", model.Format)
 	}
-	if !result.Valid {
-		return result, fmt.Errorf("artifact validation failed")
+	if err != nil {
+		result.Valid = false
+		return result, err
 	}
 	return result, nil
 }
 
-func Preview(path, output string) (string, error) {
-	model, err := Load(path)
-	if err != nil {
-		return "", err
-	}
-	if output == "" {
-		output = path + ".preview.png"
-	}
-	const width, height = 1200, 800
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	fill(img, img.Bounds(), color.RGBA{245, 247, 251, 255})
-	fill(img, image.Rect(90, 60, width-90, height-60), color.RGBA{255, 255, 255, 255})
-	fill(img, image.Rect(90, 60, width-90, 76), color.RGBA{52, 113, 232, 255})
-	lines := len(model.Paragraphs)
-	if model.Format == "xlsx" {
-		lines = 0
-		for _, s := range model.Sheets {
-			lines += len(s.Rows)
-		}
-	}
-	if model.Format == "pptx" {
-		lines = len(model.Slides) * 5
-	}
-	if lines < 4 {
-		lines = 4
-	}
-	if lines > 20 {
-		lines = 20
-	}
-	for i := 0; i < lines; i++ {
-		y := 125 + i*27
-		w := 520 + (i%4)*85
-		fill(img, image.Rect(145, y, 145+w, y+9), color.RGBA{177, 187, 204, 255})
-	}
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return "", err
-	}
-	f, err := os.Create(output)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
-		return "", err
-	}
-	return output, nil
+func digest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
-func fill(img *image.RGBA, rect image.Rectangle, c color.RGBA) {
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			img.SetRGBA(x, y, c)
-		}
-	}
+// This detects accidental sidecar changes, not an attacker who can rewrite
+// both hashes. It is independent of document templates and rendering code.
+func sidecarDigest(model Model) string {
+	model.SidecarSHA256 = ""
+	data, _ := json.Marshal(model)
+	return digest(data)
 }
 
 func xmlText(s string) string {
@@ -329,7 +266,9 @@ func renderXLSX(m Model) ([]byte, error) {
 			for ci, value := range row {
 				ref := columnName(ci+1) + strconv.Itoa(ri+1)
 				if strings.HasPrefix(value, "=") {
-					rows.WriteString(`<c r="` + ref + `"><f>` + xmlText(strings.TrimPrefix(value, "=")) + `</f><v>0</v></c>`)
+					rows.WriteString(`<c r="` + ref + `"><f>` + xmlText(strings.TrimPrefix(value, "=")) + `</f></c>`)
+				} else if numericCell(value) {
+					rows.WriteString(`<c r="` + ref + `" t="n"><v>` + value + `</v></c>`)
 				} else {
 					rows.WriteString(`<c r="` + ref + `" t="inlineStr"><is><t xml:space="preserve">` + xmlText(value) + `</t></is></c>`)
 				}
@@ -338,7 +277,7 @@ func renderXLSX(m Model) ([]byte, error) {
 		}
 		parts[fmt.Sprintf("xl/worksheets/sheet%d.xml", id)] = `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>` + rows.String() + `</sheetData></worksheet>`
 	}
-	parts["xl/workbook.xml"] = `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>` + sheets.String() + `</sheets></workbook>`
+	parts["xl/workbook.xml"] = `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>` + sheets.String() + `</sheets><calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>`
 	parts["xl/_rels/workbook.xml.rels"] = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` + rels.String() + `<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`
 	parts["[Content_Types].xml"] = `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` + overrides.String() + `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`
 	return zipPackage(parts)
@@ -352,10 +291,13 @@ func renderPPTX(m Model) ([]byte, error) {
 		ids.WriteString(fmt.Sprintf(`<p:sldId id="%d" r:id="rId%d"/>`, 255+id, id))
 		rels.WriteString(fmt.Sprintf(`<Relationship Id="rId%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide%d.xml"/>`, id, id))
 		overrides.WriteString(fmt.Sprintf(`<Override PartName="/ppt/slides/slide%d.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`, id))
-		text := append([]string{slide.Title}, slide.Bullets...)
+		text, err := slideLines(slide)
+		if err != nil {
+			return nil, fmt.Errorf("slide %d: %w", id, err)
+		}
 		var shapes strings.Builder
 		for j, line := range text {
-			shapes.WriteString(fmt.Sprintf(`<p:sp><p:nvSpPr><p:cNvPr id="%d" name="Text %d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="914400" y="%d"/><a:ext cx="7315200" cy="700000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="%d"/><a:t>%s</a:t></a:r></a:p></p:txBody></p:sp>`, j+2, j+1, 700000+j*850000, map[bool]int{true: 2800, false: 1800}[j == 0], xmlText(line)))
+			shapes.WriteString(fmt.Sprintf(`<p:sp><p:nvSpPr><p:cNvPr id="%d" name="Text %d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="914400" y="%d"/><a:ext cx="7315200" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0"/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="%d"><a:latin typeface="Arial"/><a:ea typeface="Microsoft YaHei"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody></p:sp>`, j+2, j+1, line.y, line.height, line.size, xmlText(line.text)))
 		}
 		parts[fmt.Sprintf("ppt/slides/slide%d.xml", id)] = `<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>` + shapes.String() + `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
 		parts[fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", id)] = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`
@@ -375,7 +317,6 @@ func renderPPTX(m Model) ([]byte, error) {
 func pdfHex(s string) string {
 	units := utf16.Encode([]rune(s))
 	var b strings.Builder
-	b.WriteString("FEFF")
 	for _, u := range units {
 		b.WriteString(fmt.Sprintf("%04X", u))
 	}
@@ -383,20 +324,29 @@ func pdfHex(s string) string {
 }
 
 func renderPDF(m Model) ([]byte, error) {
-	lines := append([]string{m.Title}, m.Paragraphs...)
-	if len(lines) > 28 {
-		lines = lines[:28]
+	lines, err := pdfLines(m)
+	if err != nil {
+		return nil, err
 	}
-	var content strings.Builder
-	content.WriteString("BT /F1 16 Tf 60 780 Td ")
-	for i, line := range lines {
-		if i > 0 {
-			content.WriteString("0 -24 Td ")
+	objects := []string{"", `<< /Type /Catalog /Pages 2 0 R >>`, "", `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [4 0 R] >>`, `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /DW 1000 /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> >>`}
+	var kids strings.Builder
+	for start := 0; start < len(lines); start += pdfLinesPerPage {
+		pageID := len(objects)
+		fmt.Fprintf(&kids, "%d 0 R ", pageID)
+		var content strings.Builder
+		content.WriteString("BT /F1 14 Tf 60 780 Td ")
+		for i, line := range lines[start:min(start+pdfLinesPerPage, len(lines))] {
+			if i > 0 {
+				content.WriteString("0 -22 Td ")
+			}
+			content.WriteString("<" + pdfHex(line) + "> Tj ")
 		}
-		content.WriteString("<" + pdfHex(line) + "> Tj ")
+		content.WriteString("ET")
+		objects = append(objects,
+			fmt.Sprintf(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>`, pageID+1),
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()))
 	}
-	content.WriteString("ET")
-	objects := []string{"", `<< /Type /Catalog /Pages 2 0 R >>`, `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`, fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()), `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >>`, `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> >>`}
+	objects[2] = fmt.Sprintf(`<< /Type /Pages /Kids [%s] /Count %d >>`, kids.String(), (len(lines)+pdfLinesPerPage-1)/pdfLinesPerPage)
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.4\n")
 	offsets := make([]int, len(objects))
@@ -411,4 +361,40 @@ func renderPDF(m Model) ([]byte, error) {
 	}
 	fmt.Fprintf(&b, "trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects), xref)
 	return b.Bytes(), nil
+}
+
+const pdfLinesPerPage = 33
+
+func pdfLines(m Model) ([]string, error) {
+	var lines []string
+	encoder := simplifiedchinese.GBK.NewEncoder()
+	for _, paragraph := range append([]string{m.Title}, m.Paragraphs...) {
+		paragraph = strings.ReplaceAll(strings.ReplaceAll(paragraph, "\r\n", "\n"), "\t", "    ")
+		for _, r := range paragraph {
+			if r == '\n' || r >= 32 && r <= 126 {
+				continue
+			}
+			// Restrict the unembedded GB1 font to the basic GB2312 repertoire.
+			encoded, err := encoder.String(string(r))
+			if err != nil || len(encoded) != 2 || encoded[0] < 0xA1 || encoded[0] > 0xF7 || encoded[1] < 0xA1 || encoded[1] > 0xFE {
+				return nil, fmt.Errorf("PDF unsupported glyph U+%04X; use DOCX or an external renderer with an embedded font", r)
+			}
+		}
+		for _, line := range strings.Split(paragraph, "\n") {
+			lines = append(lines, wrapRunes(line, 33)...)
+		}
+	}
+	return lines, nil
+}
+
+// The PDF font has an explicit 1000-unit advance, so 33 glyphs at 14pt
+// occupy 462pt within the 475pt page text area, including unbroken tokens.
+func wrapRunes(text string, width int) []string {
+	runes := []rune(text)
+	var lines []string
+	for len(runes) > width {
+		lines = append(lines, string(runes[:width]))
+		runes = runes[width:]
+	}
+	return append(lines, string(runes))
 }

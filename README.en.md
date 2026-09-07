@@ -10,11 +10,13 @@ O.R.C.A. is not tied to one model or one conversation style. Ordinary sessions c
 
 | Platform | Package | Notes |
 | --- | --- | --- |
-| Windows x64 | [Installer](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [Portable ZIP](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-for-Windows-windows-amd64.zip) | Full local-AI and Computer Use support |
-| macOS | [Universal DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-macos-universal.dmg) | Intel and Apple Silicon |
-| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.1/O.R.C.A-linux-amd64.deb) | Debian and Ubuntu |
+| Windows x64 | [Installer](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [Portable ZIP](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-for-Windows-windows-amd64.zip) | Full local-AI and Computer Use support |
+| macOS | [Universal DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-macos-universal.dmg) | Intel and Apple Silicon |
+| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/O.R.C.A-linux-amd64.deb) | Debian and Ubuntu |
 
-[View every O.R.C.A. v3.0.1 asset, checksum, and release note](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.1)
+[View every O.R.C.A. v3.0.2 asset, checksum, and release note](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.2)
+
+[Validation record and remaining coverage limits](docs/audits/2026-09-07-real-usage-release.md)
 
 The Windows installer supports in-place upgrades, Start Menu and optional desktop shortcuts, and an optional post-install launch. Uninstalling keeps user data and local models by default. The app reports available updates but never downloads or installs one without user action.
 
@@ -73,7 +75,7 @@ The selected mode is stored per session. Switching preserves visible history and
 - Paste, drop, or reference PNG, JPEG, WebP, GIF, and common document formats.
 - Vision capability is tracked per model. Auto mode prefers a confirmed vision-capable current model or vision subagent.
 - DeepSeek Vision Exp can handle screenshots, OCR, charts, and visual-agent tasks; text-only models are not mislabeled as image-capable.
-- Built-in artifact tools create, edit, preview, and parse-validate DOCX, XLSX, PPTX, and PDF files.
+- Built-in artifact tools create, structurally edit, and validate DOCX, XLSX, PPTX, and PDF files. Visual previews require a real renderer; missing dependencies produce an explicit error, not a placeholder pretending to be a document preview.
 - Generated artifacts carry a structured sidecar for reliable follow-up edits. The app states its limits when a complex third-party file cannot be preserved safely.
 
 ### Windows Local AI
@@ -101,7 +103,7 @@ The selected mode is stored per session. Switching preserves visible history and
 - Ask, automatic review, and full-access strategies coexist with host deny rules and workspace write boundaries.
 - Automatic review may use an independent model request for risk classification. It receives no history, tools, images, or secret fields. High-risk actions go to manual approval; classifier errors retain the existing automatic-approval fallback and emit warning telemetry.
 - API keys stay in local credential configuration. Every provider preset has its own key slot, and credentials are not written into chat messages.
-- Messages and attachments are sent only to the explicitly selected provider. Review the privacy and billing terms of any custom relay.
+- Messages and relevant attachments are sent to the active model and any vision model or subagent used for the task. Risk review receives only a redacted operation summary. Roles can use different providers; review their privacy and billing terms before enabling them.
 - Sessions, configuration, logs, cache, local models, and download tasks use separate storage so they can be backed up or removed independently.
 
 ### Interface and Accessibility
@@ -123,7 +125,7 @@ The selected mode is stored per session. Switching preserves visible history and
 
 ## Configuration and Migration
 
-V3 uses `orca.toml`, the `.orca/` project directory, `ORCA.md` project instructions, and `ORCA_*` environment variables. User data lives in the platform O.R.C.A. data location; the default Windows root is `%LOCALAPPDATA%\O.R.C.A\`.
+V3 project configuration uses `orca.toml`, the `.orca/` project directory, `ORCA.md` instructions, and `ORCA_*` environment variables. On Windows, global configuration is `%APPDATA%\orca\config.toml`; credentials, sessions, and migration records also live under `%APPDATA%\orca\`. Managed local runtimes, models, and download state use `%LOCALAPPDATA%\O.R.C.A\`. Back up both locations and each project's `.orca/` directory.
 
 When upgrading from V2, O.R.C.A. reads legacy configuration, sessions, attachments, providers, credentials, memory, skills, MCP, cost, and telemetry, then writes only to the new directory after an atomic migration. The old directory remains as a backup. Git-tracked legacy project instruction files are not renamed automatically. The current configuration schema is V11.
 

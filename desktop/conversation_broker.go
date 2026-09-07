@@ -13,6 +13,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
@@ -39,10 +40,21 @@ type DispatchTask struct {
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 
-	done        chan struct{}
-	cancel      context.CancelFunc
-	sourceTabID string
-	targetTabID string
+	done              chan struct{}
+	cancel            context.CancelFunc
+	sourceTabID       string
+	targetTabID       string
+	targetCtrl        *control.Controller
+	targetSessionPath string
+}
+
+type pendingBrokerPrompt struct {
+	taskID            string
+	sourceTabID       string
+	targetTabID       string
+	targetSessionPath string
+	ctrl              *control.Controller
+	id                string
 }
 
 type ConversationBroker struct {
@@ -51,8 +63,9 @@ type ConversationBroker struct {
 	mu               sync.Mutex
 	tasks            map[string]*DispatchTask
 	targetLocks      map[string]*sync.Mutex
-	pendingApprovals map[string]*control.Controller
-	pendingAnswers   map[string]*control.Controller
+	pendingApprovals map[string]pendingBrokerPrompt
+	pendingAnswers   map[string]pendingBrokerPrompt
+	rejectedPrompts  map[string]struct{}
 	sourceSinks      map[string]sourceSinkRegistration
 	nextTask         uint64
 	nextSink         uint64
@@ -68,8 +81,9 @@ func NewConversationBroker(app *App) *ConversationBroker {
 		app:              app,
 		tasks:            map[string]*DispatchTask{},
 		targetLocks:      map[string]*sync.Mutex{},
-		pendingApprovals: map[string]*control.Controller{},
-		pendingAnswers:   map[string]*control.Controller{},
+		pendingApprovals: map[string]pendingBrokerPrompt{},
+		pendingAnswers:   map[string]pendingBrokerPrompt{},
+		rejectedPrompts:  map[string]struct{}{},
 		sourceSinks:      map[string]sourceSinkRegistration{},
 	}
 }
@@ -263,6 +277,13 @@ func (b *ConversationBroker) Dispatch(sourceTabID, sourceTopicID, targetID, inst
 	if err != nil {
 		return nil, err
 	}
+	b.app.mu.RLock()
+	targetCtrl := tab.Ctrl
+	targetSessionPath := ""
+	if targetCtrl != nil {
+		targetSessionPath = targetCtrl.SessionPath()
+	}
+	b.app.mu.RUnlock()
 
 	b.mu.Lock()
 	for _, existing := range b.tasks {
@@ -274,14 +295,16 @@ func (b *ConversationBroker) Dispatch(sourceTabID, sourceTopicID, targetID, inst
 	b.nextTask++
 	now := time.Now().UnixMilli()
 	task := &DispatchTask{
-		ID:          fmt.Sprintf("dispatch_%d_%d", now, b.nextTask),
-		TargetID:    targetID,
-		Status:      "queued",
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		done:        make(chan struct{}),
-		sourceTabID: sourceTabID,
-		targetTabID: tab.ID,
+		ID:                fmt.Sprintf("dispatch_%d_%d", now, b.nextTask),
+		TargetID:          targetID,
+		Status:            "queued",
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		done:              make(chan struct{}),
+		sourceTabID:       sourceTabID,
+		targetTabID:       tab.ID,
+		targetCtrl:        targetCtrl,
+		targetSessionPath: targetSessionPath,
 	}
 	b.tasks[task.ID] = task
 	lock := b.targetLocks[targetID]
@@ -311,7 +334,7 @@ func (b *ConversationBroker) runDispatch(task *DispatchTask, tab *WorkspaceTab, 
 	b.mu.Unlock()
 	defer cancel()
 
-	ctrl := tab.Ctrl
+	ctrl := task.targetCtrl
 	if ctrl == nil {
 		b.finishTask(task, "", fmt.Errorf("target conversation controller is unavailable"))
 		return
@@ -341,9 +364,11 @@ func (b *ConversationBroker) finishTask(task *DispatchTask, result string, err e
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if task.Status == "cancelled" {
+		b.clearPendingPromptsLocked(task.ID)
 		task.cancel = nil
 		return
 	}
+	b.clearPendingPromptsLocked(task.ID)
 	if err != nil {
 		task.Status = "failed"
 		task.Error = err.Error()
@@ -423,6 +448,7 @@ func (b *ConversationBroker) Cancel(sourceTabID, taskID string) (*DispatchTask, 
 	if task.cancel != nil {
 		task.cancel()
 	}
+	b.clearPendingPromptsLocked(task.ID)
 	task.Status = "cancelled"
 	task.UpdatedAt = time.Now().UnixMilli()
 	select {
@@ -445,6 +471,7 @@ func (b *ConversationBroker) CancelActive(sourceTabID string) bool {
 		if task.cancel != nil {
 			task.cancel()
 		}
+		b.clearPendingPromptsLocked(task.ID)
 		task.Status = "cancelled"
 		task.UpdatedAt = time.Now().UnixMilli()
 		select {
@@ -468,6 +495,21 @@ func cloneDispatchTask(task *DispatchTask) *DispatchTask {
 	return &clone
 }
 
+func (b *ConversationBroker) clearPendingPromptsLocked(taskID string) {
+	for id, prompt := range b.pendingApprovals {
+		if prompt.taskID == taskID {
+			delete(b.pendingApprovals, id)
+			b.rejectedPrompts[id] = struct{}{}
+		}
+	}
+	for id, prompt := range b.pendingAnswers {
+		if prompt.taskID == taskID {
+			delete(b.pendingAnswers, id)
+			b.rejectedPrompts[id] = struct{}{}
+		}
+	}
+}
+
 func (b *ConversationBroker) Observe(tabID string, ctrl *control.Controller, e event.Event) {
 	if b == nil || ctrl == nil {
 		return
@@ -475,21 +517,35 @@ func (b *ConversationBroker) Observe(tabID string, ctrl *control.Controller, e e
 	b.mu.Lock()
 	sourceTabID := ""
 	var sourceSink event.Sink
-	for _, task := range b.tasks {
-		if task.targetTabID == tabID && (task.Status == "queued" || task.Status == "running") {
-			sourceTabID = task.sourceTabID
-			break
+	var task *DispatchTask
+	for _, candidate := range b.tasks {
+		if candidate.targetTabID != tabID || candidate.Status != "running" || candidate.targetCtrl != ctrl {
+			continue
 		}
+		if candidate.targetSessionPath != "" && candidate.targetSessionPath != ctrl.SessionPath() {
+			continue
+		}
+		task = candidate
+		break
 	}
-	if sourceTabID != "" {
+	if task != nil {
+		sourceTabID = task.sourceTabID
 		sourceSink = b.sourceSinks[sourceTabID].sink
 	}
-	if sourceTabID != "" {
+	if task != nil {
+		prompt := pendingBrokerPrompt{
+			taskID: task.ID, sourceTabID: task.sourceTabID, targetTabID: task.targetTabID,
+			targetSessionPath: task.targetSessionPath, ctrl: ctrl,
+		}
 		switch e.Kind {
 		case event.ApprovalRequest:
-			b.pendingApprovals[e.Approval.ID] = ctrl
+			prompt.id = e.Approval.ID
+			delete(b.rejectedPrompts, prompt.id)
+			b.pendingApprovals[e.Approval.ID] = prompt
 		case event.AskRequest:
-			b.pendingAnswers[e.Ask.ID] = ctrl
+			prompt.id = e.Ask.ID
+			delete(b.rejectedPrompts, prompt.id)
+			b.pendingAnswers[e.Ask.ID] = prompt
 		}
 	}
 	b.mu.Unlock()
@@ -522,28 +578,90 @@ func (b *ConversationBroker) RegisterSourceSink(sourceID string, sink event.Sink
 	}
 }
 
-func (b *ConversationBroker) Approve(id string, allow, session, persist bool) bool {
+func (b *ConversationBroker) Approve(id string, allow, session, persist bool) bot.ResponseRouteResult {
+	return b.ApproveForSource("", id, allow, session, persist)
+}
+
+// ApproveForSource consumes an approval only when the response source still
+// owns the live task/controller/session that emitted it. An empty source is
+// deliberately rejected so callers cannot bypass source authorization.
+func (b *ConversationBroker) ApproveForSource(sourceID, id string, allow, session, persist bool) bot.ResponseRouteResult {
+	if b == nil {
+		return bot.ResponseNotOwned
+	}
+	if b.app != nil {
+		b.app.mu.RLock()
+		defer b.app.mu.RUnlock()
+	}
 	b.mu.Lock()
-	ctrl := b.pendingApprovals[id]
+	defer b.mu.Unlock()
+	prompt, owned := b.pendingApprovals[id]
+	if !owned {
+		if _, stale := b.rejectedPrompts[id]; stale {
+			return bot.ResponseRejected
+		}
+		return bot.ResponseNotOwned
+	}
+	if !b.promptAuthorizedLocked(prompt, sourceID) || !b.promptTargetIsLiveLocked(prompt) {
+		return bot.ResponseRejected
+	}
 	delete(b.pendingApprovals, id)
-	b.mu.Unlock()
-	if ctrl == nil {
+	prompt.ctrl.Approve(prompt.id, allow, session, persist)
+	return bot.ResponseConsumed
+}
+
+func (b *ConversationBroker) Answer(id string, answers []event.AskAnswer) bot.ResponseRouteResult {
+	return b.AnswerForSource("", id, answers)
+}
+
+// AnswerForSource is the source-authorized counterpart to Answer.
+func (b *ConversationBroker) AnswerForSource(sourceID, id string, answers []event.AskAnswer) bot.ResponseRouteResult {
+	if b == nil {
+		return bot.ResponseNotOwned
+	}
+	if b.app != nil {
+		b.app.mu.RLock()
+		defer b.app.mu.RUnlock()
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	prompt, owned := b.pendingAnswers[id]
+	if !owned {
+		if _, stale := b.rejectedPrompts[id]; stale {
+			return bot.ResponseRejected
+		}
+		return bot.ResponseNotOwned
+	}
+	if !b.promptAuthorizedLocked(prompt, sourceID) || !b.promptTargetIsLiveLocked(prompt) {
+		return bot.ResponseRejected
+	}
+	delete(b.pendingAnswers, id)
+	prompt.ctrl.AnswerQuestion(prompt.id, answers)
+	return bot.ResponseConsumed
+}
+
+func (b *ConversationBroker) promptAuthorizedLocked(prompt pendingBrokerPrompt, sourceID string) bool {
+	if strings.TrimSpace(sourceID) == "" || prompt.ctrl == nil || prompt.id == "" || prompt.sourceTabID != sourceID {
 		return false
 	}
-	ctrl.Approve(id, allow, session, persist)
+	task := b.tasks[prompt.taskID]
+	if task == nil || task.Status != "running" || task.targetTabID != prompt.targetTabID || task.targetCtrl != prompt.ctrl {
+		return false
+	}
+	if prompt.targetSessionPath != "" && prompt.targetSessionPath != prompt.ctrl.SessionPath() {
+		return false
+	}
 	return true
 }
 
-func (b *ConversationBroker) Answer(id string, answers []event.AskAnswer) bool {
-	b.mu.Lock()
-	ctrl := b.pendingAnswers[id]
-	delete(b.pendingAnswers, id)
-	b.mu.Unlock()
-	if ctrl == nil {
-		return false
+// promptTargetIsLiveLocked requires the app read lock when b.app is non-nil;
+// callers take it before b.mu to match tabEventSink's lock order.
+func (b *ConversationBroker) promptTargetIsLiveLocked(prompt pendingBrokerPrompt) bool {
+	if b.app == nil {
+		return true
 	}
-	ctrl.AnswerQuestion(id, answers)
-	return true
+	tab := b.app.tabs[prompt.targetTabID]
+	return tab != nil && tab.Ctrl == prompt.ctrl
 }
 
 func (a *App) ensureBrokerTargetTab(entry ConversationCatalogEntry) (*WorkspaceTab, error) {
@@ -551,7 +669,7 @@ func (a *App) ensureBrokerTargetTab(entry ConversationCatalogEntry) (*WorkspaceT
 	for _, tab := range a.tabs {
 		if tab != nil && tab.TopicID == entry.ID && tab.Scope != scopeAutomation {
 			a.mu.RUnlock()
-			return waitForBrokerTabReady(tab)
+			return waitForBrokerTabReady(a, tab)
 		}
 	}
 	active := a.activeTabID
@@ -572,18 +690,21 @@ func (a *App) ensureBrokerTargetTab(entry ConversationCatalogEntry) (*WorkspaceT
 	a.mu.RLock()
 	tab := a.tabs[meta.ID]
 	a.mu.RUnlock()
-	return waitForBrokerTabReady(tab)
+	return waitForBrokerTabReady(a, tab)
 }
 
-func waitForBrokerTabReady(tab *WorkspaceTab) (*WorkspaceTab, error) {
+func waitForBrokerTabReady(a *App, tab *WorkspaceTab) (*WorkspaceTab, error) {
 	if tab == nil {
 		return nil, fmt.Errorf("target tab was not created")
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if tab.Ready {
-			if tab.Ctrl == nil {
-				return nil, fmt.Errorf("target conversation failed to start: %s", tab.StartupErr)
+		a.mu.RLock()
+		ready, ctrl, startupErr := tab.Ready, tab.Ctrl, tab.StartupErr
+		a.mu.RUnlock()
+		if ready {
+			if ctrl == nil {
+				return nil, fmt.Errorf("target conversation failed to start: %s", startupErr)
 			}
 			return tab, nil
 		}

@@ -64,3 +64,17 @@ if (!css.includes(':root[data-ui-style="modern"] .onboarding__card') || !css.inc
   throw new Error("modern onboarding must use the compact scoped sheet");
 }
 console.log("  PASS  explicit classic and modern chrome contracts");
+
+if (css.includes('--app-chrome-height: 46px')) {
+  throw new Error("color themes must not override the presentation's header height");
+}
+if (!css.includes('height: var(--app-chrome-height)') || !css.includes('padding: 10px 10px calc(8px + var(--statusbar-height))')) {
+  throw new Error("modern header and sidebar must reserve the visible chrome and status bar");
+}
+if (!css.includes('.composer-modern-parameter > .modelsw') || !css.includes('min-width: 68px')) {
+  throw new Error("narrow model wrappers must shrink without squeezing the two run controls");
+}
+if (!chrome.includes('t("topbar.windowMinimize")') || !chrome.includes('t("topbar.windowClose")')) {
+  throw new Error("window controls must follow the selected language");
+}
+console.log("  PASS  audited shell occupancy and narrow controls");

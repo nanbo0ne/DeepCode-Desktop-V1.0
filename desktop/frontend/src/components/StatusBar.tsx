@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Info } from "lucide-react";
 import logoWordmark from "../assets/logo-wordmark.png";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "../lib/i18n";
@@ -105,6 +105,7 @@ function formatTokenCount(tokens?: number): string {
 }
 
 export function StatusBar({
+  uiStyle = "classic",
   context,
   usage,
   balance,
@@ -121,6 +122,7 @@ export function StatusBar({
   updateInfo,
   onOpenUpdate,
 }: {
+  uiStyle?: "modern" | "classic";
   context: ContextInfo;
   usage?: WireUsage;
   balance?: BalanceInfo;
@@ -138,6 +140,15 @@ export function StatusBar({
   onOpenUpdate?: () => void;
 }) {
   const { t } = useI18n();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (details && event.target instanceof Node && !details.contains(event.target)) details.open = false;
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
   const pct = context.window ? Math.min(100, Math.round((context.used / context.window) * 100)) : null;
   const compactPct = context.compactRatio ? Math.round(context.compactRatio * 100) : null;
   const compactNear = pct !== null && compactPct !== null && pct >= Math.max(0, compactPct - 10);
@@ -162,7 +173,21 @@ export function StatusBar({
           </span>
         </Tooltip>
       </div>
-      <div className="statusbar__group statusbar__group--primary">
+      {uiStyle === "modern" && <details className="statusbar__details" ref={detailsRef} onKeyDown={(event) => {
+        if (event.key === "Escape" && detailsRef.current) {
+          detailsRef.current.open = false;
+          detailsRef.current.querySelector("summary")?.focus();
+        }
+      }}>
+        <summary aria-label={t("status.details")} title={t("status.details")}><Info size={14} /></summary>
+        <dl className="statusbar__metrics">
+          <dt>{t("status.cacheLabel")}</dt><dd>{nowPct !== null ? `${nowPct}%` : "-"}</dd>
+          <dt>{t("status.cacheAvgLabel")}</dt><dd>{avgPct !== null ? `${avgPct}%` : "-"}</dd>
+          <dt>{t("status.sessionTokensLabel")}</dt><dd>{tokenLabel}</dd>
+          <dt>{t("status.compactLabel")}</dt><dd>{compactPct !== null ? `${compactPct}%` : "-"}</dd>
+        </dl>
+      </details>}
+      {uiStyle === "classic" && <div className="statusbar__group statusbar__group--primary">
         <Tooltip label={t("status.cacheTitle")}>
           <span className="stat statusbar__cache">
             <span className="stat__label">{t("status.cacheLabel")}</span>
@@ -181,7 +206,7 @@ export function StatusBar({
             <b className={tokenLabel === "-" ? "stat__value--empty" : undefined}>{tokenLabel}</b>
           </span>
         </Tooltip>
-      </div>
+      </div>}
       <div className="statusbar__group statusbar__group--context">
         <Tooltip label={t("status.ctxTitle")}>
           <span className="stat statusbar__ctx">
@@ -189,7 +214,7 @@ export function StatusBar({
             <b className={pct === null ? "stat__value--empty" : undefined}>{pct !== null ? `${pct}%` : "-"}</b>
           </span>
         </Tooltip>
-        <Tooltip label={t("status.compactTitle")}>
+        {uiStyle === "classic" && <Tooltip label={t("status.compactTitle")}>
           <span className="stat statusbar__compact">
             <span className="stat__label">{t("status.compactLabel")}</span>
             <b
@@ -201,7 +226,7 @@ export function StatusBar({
               {compactPct !== null ? `${compactPct}%` : "-"}
             </b>
           </span>
-        </Tooltip>
+        </Tooltip>}
       </div>
       <div className="statusbar__group statusbar__group--account">
         {costAvailable && <Tooltip label={t("status.spendTitle")}>

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -60,6 +61,90 @@ type Config struct {
 	LSP           LSPConfig           `toml:"lsp"`
 	Bot           BotConfig           `toml:"bot"`
 	LocalAI       LocalAIConfig       `toml:"local_ai"`
+
+	// env is scoped to this loaded workspace. It is deliberately private so
+	// project .env values do not become process-wide state.
+	env map[string]string
+}
+
+// Env looks up an environment value with host-process variables taking
+// precedence over this config's workspace-scoped dotenv values. It never
+// mutates the host environment.
+func (c *Config) Env(key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false
+	}
+	var scope map[string]string
+	if c != nil {
+		scope = c.env
+	}
+	return lookupScopedEnv(scope, key)
+}
+
+// Environment returns a copy of the host environment merged with this config's
+// dotenv values. Existing host entries are preserved, and project values are
+// added only when the host has no entry. The returned map is independent and
+// changing it does not mutate the host.
+func (c *Config) Environment() map[string]string {
+	env := make(map[string]string)
+	for _, entry := range os.Environ() {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			env[key] = value
+		}
+	}
+	if c != nil {
+		seen := make(map[string]struct{}, len(env))
+		for key := range env {
+			seen[environmentKey(key)] = struct{}{}
+		}
+		for key, value := range c.env {
+			if _, hostSet := seen[environmentKey(key)]; !hostSet {
+				env[key] = value
+			}
+		}
+	}
+	return env
+}
+
+func environmentKey(key string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(key)
+	}
+	return key
+}
+
+func lookupScopedEnv(scope map[string]string, key string) (string, bool) {
+	if value, ok := os.LookupEnv(key); ok {
+		return value, true
+	}
+	if value, ok := scope[key]; ok {
+		return value, true
+	}
+	if runtime.GOOS == "windows" {
+		for scopedKey, value := range scope {
+			if strings.EqualFold(scopedKey, key) {
+				return value, true
+			}
+		}
+	}
+	return "", false
+}
+
+// EnvironmentSlice returns Environment in exec.Cmd.Env format, with stable
+// ordering for reproducible subprocess setup.
+func (c *Config) EnvironmentSlice() []string {
+	env := c.Environment()
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, key+"="+env[key])
+	}
+	return out
 }
 
 // UIConfig controls CLI presentation-only settings. Desktop appearance is kept in
@@ -755,6 +840,10 @@ type ProviderEntry struct {
 	// NoProxy reaches this provider's base_url directly, never through the proxy.
 	// For China-only endpoints a foreign-exit proxy resets the TLS handshake (#2803).
 	NoProxy bool `toml:"no_proxy"`
+
+	env               map[string]string
+	apiKeyOverride    string
+	hasAPIKeyOverride bool
 }
 
 // ModelList returns the models this provider exposes: the explicit `models` list,
@@ -982,14 +1071,16 @@ type PermissionsConfig struct {
 
 // PluginEntry declares an external MCP server. Type selects the transport:
 // "stdio" (default) launches Command/Args/Env as a subprocess; "http"
-// (a.k.a. streamable-http) and "sse" connect to a remote URL with optional
-// static Headers. String fields support ${VAR} / ${VAR:-default} expansion so
+// (a.k.a. streamable-http) connects to a remote URL with optional static
+// Headers. Legacy "sse" entries remain readable for startup compatibility but
+// are rejected by save/import validation. String fields support ${VAR} /
+// ${VAR:-default} expansion so
 // secrets (bearer tokens, keys) come from the environment, not the file. The
 // fields mirror Claude Code's mcpServers spec, so entries can come from either
 // deepseek-orca.toml's [[plugins]] or a project-root .mcp.json (see loadMCPJSON).
 type PluginEntry struct {
 	Name    string            `toml:"name"`
-	Type    string            `toml:"type"` // "stdio" (default) | "http" | "sse"
+	Type    string            `toml:"type"` // "stdio" (default) | "http"; legacy "sse" is read-only
 	Command string            `toml:"command"`
 	Args    []string          `toml:"args"`
 	Env     map[string]string `toml:"env"`
@@ -1009,6 +1100,10 @@ type PluginEntry struct {
 	// Empty defaults to "background" so enabled MCPs connect automatically
 	// without blocking chat. Unknown non-empty values fall back to "lazy".
 	Tier string `toml:"tier"`
+
+	// env is the loaded Config's private workspace scope. It is intentionally
+	// unexported so MCP dotenv values never enter TOML or JSON serialization.
+	env map[string]string
 }
 
 func (e PluginEntry) ShouldAutoStart() bool {
@@ -1310,8 +1405,9 @@ func LoadForRoot(root string) (*Config, error) {
 	if err := EnsureV11StateMigration(); err != nil {
 		slog.Warn("config: V11 state migration failed; continuing with compatibility reads", "err", err)
 	}
-	loadDotEnvForRoot(root)
+	projectEnv := loadDotEnvForRoot(root)
 	cfg := Default()
+	cfg.env = projectEnv
 
 	projectTOML := product.ProjectConfigName
 	if root != "." {
@@ -1374,6 +1470,7 @@ func LoadForRoot(root string) (*Config, error) {
 	// from the TypeScript line keeps MCP servers without rewriting them. Anything
 	// the v2 config or .mcp.json already declared wins on a name collision.
 	cfg.mergeMCPJSON(loadLegacyMCP(legacyConfigPath()))
+	bindProviderEnv(cfg)
 	normalizePluginCommandLines(cfg)
 	normalizeLegacyEffort(cfg)
 	normalizeLegacyMCPTiers(cfg)
@@ -1389,6 +1486,7 @@ func LoadForRoot(root string) (*Config, error) {
 	normalizeV11ProductSettings(cfg)
 	normalizeEffortConfig(cfg)
 	backfillDeepSeekPro(cfg)
+	bindProviderEnv(cfg)
 	// First run (no config file anywhere): keep CodeGraph off until the user opts
 	// in. An existing config - even one without a [codegraph] section - keeps the
 	// built-in default (on), so an upgrade never silently drops code intelligence.
@@ -1528,8 +1626,9 @@ func mergeTOMLProviders(paths []string, fallback []ProviderEntry) ([]ProviderEnt
 // of resetting to defaults. .env is loaded so api_key_env resolution works while
 // the wizard decides which keys are still missing.
 func LoadForEdit(path string) *Config {
-	loadDotEnv()
+	cfgEnv := loadDotEnvForRoot(filepath.Dir(path))
 	cfg := Default()
+	cfg.env = cfgEnv
 	if _, err := os.Stat(path); err == nil {
 		if err := migrateLegacyMCPTiersFile(path); err != nil {
 			slog.Warn("config: legacy mcp tier migration failed", "path", path, "err", err)
@@ -1538,6 +1637,7 @@ func LoadForEdit(path string) *Config {
 	if err := mergeFile(cfg, path); err != nil {
 		slog.Warn("config: load for edit failed, using defaults", "path", path, "err", err)
 	}
+	bindProviderEnv(cfg)
 	normalizePluginCommandLines(cfg)
 	normalizeLegacyEffort(cfg)
 	normalizeLegacyMCPTiers(cfg)
@@ -1552,7 +1652,20 @@ func LoadForEdit(path string) *Config {
 	normalizeConversationProfiles(cfg)
 	normalizeV11ProductSettings(cfg)
 	normalizeEffortConfig(cfg)
+	bindProviderEnv(cfg)
 	return cfg
+}
+
+func bindProviderEnv(c *Config) {
+	if c == nil {
+		return
+	}
+	for i := range c.Providers {
+		c.Providers[i].env = c.env
+	}
+	for i := range c.Plugins {
+		c.Plugins[i].env = c.env
+	}
 }
 
 // V2 shipped check_updates=false without exposing a setting. V3 enables the
@@ -2133,7 +2246,7 @@ func UserConfigPath() string { return userConfigPath() }
 
 // UserCredentialsPath is the deepseek-orca-owned global secrets file, beside
 // config.toml in the user config dir (e.g. ~/.config/orca/credentials). It
-// holds KEY=value lines loaded into the environment by loadDotEnv. The setup
+// holds KEY=value lines loaded into each Config's scoped environment by loadDotEnv. The setup
 // wizard writes API keys here, deliberately NOT named .env: keys never land in a
 // project's own .env (which can't be selectively gitignored), never get
 // committed, and resolve from any working directory. "" when the user config dir
@@ -2431,20 +2544,16 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 }
 
 // ResolveModelWithFallback resolves a model reference to the canonical
-// "provider/model" form used by the desktop runtime. If ref is stale or empty,
-// it falls back to the first provider with at least one model.
+// "provider/model" form used by the desktop runtime. An unqualified stale or
+// empty reference may use the configured default, but a qualified reference is
+// an identity assertion and is never retried as a bare model on another
+// provider.
 func (c *Config) ResolveModelWithFallback(ref string) (resolvedRef string, fallback bool, ok bool) {
 	if strings.TrimSpace(ref) != "" {
 		if e, found := c.ResolveModel(ref); found {
 			return e.Name + "/" + e.Model, false, true
 		}
-		providerName, model, hasModel := strings.Cut(ref, "/")
-		if hasModel && providerName != "mimo-api" && providerName != "mimo-token-plan" {
-			if e, found := c.ResolveModel(model); found {
-				return e.Name + "/" + e.Model, true, true
-			}
-		}
-		if hasModel && (providerName == "mimo-api" || providerName == "mimo-token-plan") {
+		if _, _, hasModel := strings.Cut(ref, "/"); hasModel {
 			return "", false, false
 		}
 	}
@@ -2473,12 +2582,31 @@ func (c *Config) ResolveModelWithFallback(ref string) (resolvedRef string, fallb
 	return "", false, false
 }
 
-// APIKey resolves the entry's API key from its api_key_env.
+// WithAPIKey applies an in-memory API key for this provider entry. The
+// override is intentionally private and is not persisted by TOML rendering.
+func (e *ProviderEntry) WithAPIKey(token string) *ProviderEntry {
+	if e == nil {
+		return nil
+	}
+	e.apiKeyOverride = token
+	e.hasAPIKeyOverride = true
+	return e
+}
+
+// APIKey resolves the entry's API key from its in-memory override or
+// api_key_env.
 func (e *ProviderEntry) APIKey() string {
+	if e == nil {
+		return ""
+	}
+	if e.hasAPIKeyOverride {
+		return e.apiKeyOverride
+	}
 	if e.APIKeyEnv == "" {
 		return ""
 	}
-	return os.Getenv(e.APIKeyEnv)
+	value, _ := lookupScopedEnv(e.env, e.APIKeyEnv)
+	return value
 }
 
 // Configured reports whether the provider's api_key_env is set - the same check

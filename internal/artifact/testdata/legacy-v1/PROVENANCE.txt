@@ -1,0 +1,16 @@
+Generated fixtures only; no user documents.
+Source: git show 414225de74b1f1f772bab22ad7e25b422137c037:internal/artifact/artifact.go
+Original generator copied unchanged except package artifact -> package main,
+with a fixture-only main appended in the release evidence directory.
+Generation command:
+go run .tmp/release-2026-09-07/artifact-review/legacy-generator/main.go internal/artifact/testdata/legacy-v1
+
+legacy.pdf: 80 source paragraphs plus final marker; original generator silently
+rendered only one page, containing the title and paragraphs 0 through 26.
+legacy.xlsx: numeric string, leading-zero identifier, and fake cached formula 0.
+legacy.pptx: original unbounded long bullet.
+legacy-default.xlsx / legacy-default.pptx: original Normalize also put the title
+in an unused paragraphs field; legacy reads must preserve this field.
+legacy.docx: basic title, Chinese paragraph, and ASCII paragraph.
+
+No hashes are added to these original sidecars. Tests copy fixtures before use.

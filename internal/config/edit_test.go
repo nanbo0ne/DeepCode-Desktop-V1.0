@@ -659,6 +659,13 @@ func TestPluginMutators(t *testing.T) {
 	if err := c.UpsertPlugin(PluginEntry{Name: "bad", Type: "carrier-pigeon", Command: "x"}); err == nil {
 		t.Error("unknown transport should error")
 	}
+	if err := c.UpsertPlugin(PluginEntry{Name: "legacy", Type: "sse", URL: "https://mcp.example/sse"}); err == nil || !strings.Contains(err.Error(), "Streamable HTTP") {
+		t.Errorf("legacy SSE should be rejected with migration guidance: %v", err)
+	}
+	loaded := &Config{Plugins: []PluginEntry{{Name: "loaded-legacy", Type: "sse", URL: "https://mcp.example/sse"}}}
+	if err := loaded.ValidatePlugins(); err == nil || !strings.Contains(err.Error(), "Streamable HTTP") {
+		t.Errorf("planning validation should reject legacy SSE: %v", err)
+	}
 
 	// Replace in place.
 	if err := c.UpsertPlugin(PluginEntry{Name: "ex", Command: "other-cmd"}); err != nil {

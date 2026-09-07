@@ -1108,26 +1108,28 @@ export function useController() {
     return () => window.clearTimeout(timer);
   }, [activeTabId, reconcileTabRuntime, activeState.running, activeState.live]);
 
-  const send = useCallback((displayText: string, submitText = displayText) => {
-    const submitForTab = (tabId: string) => {
+  const send = useCallback(async (displayText: string, submitText = displayText): Promise<void> => {
+    const submitForTab = async (tabId: string): Promise<void> => {
       const seq = getOrCreateState(statesRef.current, tabId).seq;
       dispatchTo(tabId, { type: "user", text: displayText, seq });
       const display = displayText.trim();
       const submit = submitText.trim();
-      (display !== submit ? app.SubmitDisplayToTab(tabId, display, submit) : app.SubmitToTab(tabId, submit)).catch((error) => {
+      try {
+        await (display !== submit ? app.SubmitDisplayToTab(tabId, display, submit) : app.SubmitToTab(tabId, submit));
+      } catch (error) {
         dispatchTo(tabId, { type: "send_failed", error: `Send failed: ${error instanceof Error ? error.message : String(error)}` });
-      });
+        throw error;
+      }
     };
     const tabId = activeTabIdRef.current ?? activeTabId;
     if (tabId) {
-      submitForTab(tabId);
+      await submitForTab(tabId);
       return;
     }
-    void activeTabFromBackend().then((active) => {
-      if (!active?.id) return;
-      setActiveTabId(active.id);
-      submitForTab(active.id);
-    });
+    const active = await activeTabFromBackend();
+    if (!active?.id) throw new Error("Cannot send: no active tab is available.");
+    setActiveTabId(active.id);
+    await submitForTab(active.id);
   }, [activeTabFromBackend, activeTabId, dispatchTo]);
 
   const runShell = useCallback((command: string) => {

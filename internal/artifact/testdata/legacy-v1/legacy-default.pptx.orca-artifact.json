@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "format": "pptx",
+  "title": "Default deck",
+  "paragraphs": [
+    "Default deck"
+  ],
+  "slides": [
+    {
+      "title": "Default deck",
+      "bullets": null
+    }
+  ],
+  "updatedAt": "2026-09-07T14:17:13.4745665Z"
+}

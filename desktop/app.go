@@ -788,31 +788,33 @@ func (a *App) domReady(_ context.Context) {
 }
 
 // --- bound command surface (frontend → controller) ---
-// Each method guards on a nil controller so a pre-startup or failed-build call is
-// a no-op, never a panic.
+// Each method guards on a nil controller so a pre-startup or failed-build call
+// returns a descriptive error instead of panicking or silently dropping input.
 
 // Submit runs raw user input as a turn; slash commands and @-references are
 // resolved by the controller. Output arrives asynchronously on eventChannel.
-func (a *App) Submit(input string) {
-	a.SubmitToTab("", input)
+func (a *App) Submit(input string) error {
+	return a.SubmitToTab("", input)
 }
 
-func (a *App) SubmitToTab(tabID, input string) {
+func (a *App) SubmitToTab(tabID, input string) error {
 	if tab := a.tabByID(tabID); tab != nil && tab.ReadOnly {
-		a.noticeForTab(tab.ID, "此自动化历史为只读，请在 Orca 主对话中继续。")
-		return
+		return fmt.Errorf("此自动化历史为只读，请在 Orca 主对话中继续。")
 	}
 	trimmed := strings.TrimSpace(input)
 	if a.queueSubmitDuringRuntimeReconfigure(tabID, pendingRuntimeSubmit{input: input}) {
-		return
+		return nil
 	}
 	if trimmed == "/effort" || strings.HasPrefix(trimmed, "/effort ") {
 		a.runEffortCommandForTab(tabID, trimmed)
-		return
+		return nil
 	}
-	if ctrl := a.ctrlByTabID(tabID); ctrl != nil {
-		ctrl.SubmitDisplay(input, input)
+	ctrl := a.ctrlByTabID(tabID)
+	if ctrl == nil {
+		return workspaceNotReadyErr(a.tabByID(tabID))
 	}
+	ctrl.SubmitDisplay(input, input)
+	return nil
 }
 
 // RunShell executes a shell command directly (bypassing the model) and streams
@@ -833,21 +835,20 @@ func (a *App) RunShellForTab(tabID, command string) {
 
 // SubmitDisplay runs input as a turn while recording a shorter UI-only display
 // string for the saved desktop transcript. The model still receives input.
-func (a *App) SubmitDisplay(display, input string) {
-	a.SubmitDisplayToTab("", display, input)
+func (a *App) SubmitDisplay(display, input string) error {
+	return a.SubmitDisplayToTab("", display, input)
 }
 
-func (a *App) SubmitDisplayToTab(tabID, display, input string) {
+func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
 	if tab := a.tabByID(tabID); tab != nil && tab.ReadOnly {
-		a.noticeForTab(tab.ID, "此自动化历史为只读，请在 Orca 主对话中继续。")
-		return
+		return fmt.Errorf("此自动化历史为只读，请在 Orca 主对话中继续。")
 	}
 	if a.queueSubmitDuringRuntimeReconfigure(tabID, pendingRuntimeSubmit{display: display, input: input}) {
-		return
+		return nil
 	}
 	ctrl := a.ctrlByTabID(tabID)
 	if ctrl == nil {
-		return
+		return workspaceNotReadyErr(a.tabByID(tabID))
 	}
 	a.mu.Lock()
 	if tab := a.tabByIDLocked(tabID); tab != nil {
@@ -856,6 +857,7 @@ func (a *App) SubmitDisplayToTab(tabID, display, input string) {
 	}
 	a.mu.Unlock()
 	ctrl.SubmitDisplay(display, input)
+	return nil
 }
 
 func (a *App) queueSubmitDuringRuntimeReconfigure(tabID string, pending pendingRuntimeSubmit) bool {
@@ -933,8 +935,11 @@ func (a *App) Approve(id string, allow, session, persist bool) {
 
 // ApproveTab is like Approve but scoped to a specific tab.
 func (a *App) ApproveTab(tabID, id string, allow, session, persist bool) {
-	if a.conversationBroker != nil && a.conversationBroker.Approve(id, allow, session, persist) {
-		return
+	if a.conversationBroker != nil {
+		routed := a.conversationBroker.ApproveForSource(tabID, id, allow, session, persist)
+		if routed != bot.ResponseNotOwned {
+			return
+		}
 	}
 	ctrl := a.ctrlByTabID(tabID)
 	if ctrl != nil {
@@ -1109,8 +1114,11 @@ func (a *App) AnswerQuestionForTab(tabID, id string, answers []QuestionAnswer) {
 	for i, an := range answers {
 		out[i] = event.AskAnswer{QuestionID: an.QuestionID, Selected: an.Selected}
 	}
-	if a.conversationBroker != nil && a.conversationBroker.Answer(id, out) {
-		return
+	if a.conversationBroker != nil {
+		routed := a.conversationBroker.AnswerForSource(tabID, id, out)
+		if routed != bot.ResponseNotOwned {
+			return
+		}
 	}
 	ctrl := a.ctrlByTabID(tabID)
 	if ctrl == nil {
@@ -5003,43 +5011,16 @@ func (a *App) currentProviderEntryForTab(tabID string) (*config.ProviderEntry, e
 	return entry, nil
 }
 
-func (a *App) withActiveWorkspace(fn func() (string, error)) (string, error) {
-	var result string
-	err := a.withActiveWorkspaceDo(func() error {
-		var err error
-		result, err = fn()
-		return err
-	})
-	return result, err
-}
-
-func (a *App) withActiveWorkspaceDo(fn func() error) error {
-	root := a.activeWorkspaceRoot()
-	if root != "" && root != "." {
-		prev, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		if err := os.Chdir(root); err != nil {
-			return err
-		}
-		defer func() { _ = os.Chdir(prev) }()
-	}
-	return fn()
-}
-
 // SavePastedImage stores a browser clipboard image data URL under the active
 // tab's workspace .orca/attachments and returns the relative @-reference path.
 func (a *App) SavePastedImage(dataURL string) (string, error) {
-	return a.withActiveWorkspace(func() (string, error) {
-		return control.SaveImageDataURL(dataURL)
-	})
+	return control.SaveImageDataURLAt(a.activeWorkspaceRoot(), dataURL)
 }
 
 // SaveClipboardImage reads the native OS clipboard image under the active tab's
 // workspace .orca/attachments and returns the relative @-reference path.
 func (a *App) SaveClipboardImage() (string, error) {
-	return a.withActiveWorkspace(control.SaveClipboardImage)
+	return control.SaveClipboardImageAt(a.activeWorkspaceRoot())
 }
 
 // ReadClipboardFilePaths returns all file paths currently exposed by the native
@@ -5053,9 +5034,7 @@ func (a *App) ReadClipboardFilePaths() ([]string, error) {
 // as a data URL but not a real path) under the active tab's workspace
 // .orca/attachments and returns the relative @-reference path.
 func (a *App) SavePastedFile(name, dataURL string) (string, error) {
-	return a.withActiveWorkspace(func() (string, error) {
-		return control.SaveAttachmentDataURL(name, dataURL)
-	})
+	return control.SaveAttachmentDataURLAt(a.activeWorkspaceRoot(), name, dataURL)
 }
 
 // PickExportFile opens the native save dialog and returns the selected path. It
@@ -5131,9 +5110,7 @@ func exportFileFilters(mimeType, ext string) []runtime.FileFilter {
 
 // AttachmentDataURL returns a safe data URL for a stored image attachment.
 func (a *App) AttachmentDataURL(path string) (string, error) {
-	return a.withActiveWorkspace(func() (string, error) {
-		return control.ImageDataURL(path)
-	})
+	return control.ImageDataURLAt(path, a.activeWorkspaceRoot())
 }
 
 // DroppedItem is one OS-dropped file resolved into a composer context entry: an
@@ -5152,36 +5129,30 @@ type DroppedItem struct {
 // outside the workspace are copied into .orca/attachments.
 func (a *App) AttachDropped(path string) (DroppedItem, error) {
 	var item DroppedItem
-	err := a.withActiveWorkspaceDo(func() error {
-		info, err := os.Lstat(path)
-		if err != nil {
-			return err
-		}
-		if isImageExt(path) {
-			if rel, err := control.SaveImageFile(path); err == nil {
-				preview, _ := control.ImageDataURL(rel)
-				item = DroppedItem{Kind: "attachment", Path: rel, PreviewURL: preview}
-				return nil
-			}
-		}
-		if rel, ok := workspaceRelativeIn(path, a.activeWorkspaceRoot()); ok {
-			item = DroppedItem{Kind: "workspace", Path: rel, IsDir: info.IsDir()}
-			return nil
-		}
-		if info.IsDir() {
-			return fmt.Errorf("can only attach files from outside the workspace")
-		}
-		rel, err := control.SaveAttachmentFile(path)
-		if err != nil {
-			return err
-		}
-		item = DroppedItem{Kind: "attachment", Path: rel}
-		return nil
-	})
+	workspaceRoot := a.activeWorkspaceRoot()
+	info, err := os.Lstat(path)
 	if err != nil {
 		return DroppedItem{}, err
 	}
-	return item, nil
+	if isImageExt(path) {
+		if rel, saveErr := control.SaveImageFileAt(path, workspaceRoot); saveErr == nil {
+			preview, _ := control.ImageDataURLAt(rel, workspaceRoot)
+			item = DroppedItem{Kind: "attachment", Path: rel, PreviewURL: preview}
+			return item, nil
+		}
+	}
+	if rel, ok := workspaceRelativeIn(path, workspaceRoot); ok {
+		item = DroppedItem{Kind: "workspace", Path: rel, IsDir: info.IsDir()}
+		return item, nil
+	}
+	if info.IsDir() {
+		return DroppedItem{}, fmt.Errorf("can only attach files from outside the workspace")
+	}
+	rel, err := control.SaveAttachmentFileAt(path, workspaceRoot)
+	if err != nil {
+		return DroppedItem{}, err
+	}
+	return DroppedItem{Kind: "attachment", Path: rel}, nil
 }
 
 func isImageExt(path string) bool {

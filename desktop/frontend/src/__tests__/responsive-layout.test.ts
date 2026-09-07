@@ -126,7 +126,7 @@ check(
     css.includes("max-width: min(360px, 42cqw);") &&
     css.includes("@container (max-width: 320px)") &&
     css.includes(':root[data-ui-style="modern"] .composer-card__actions--modern {\n  display: flex;') &&
-    css.includes("width: max-content;\n  max-width: 100%;\n  min-width: 0;\n  justify-self: end;"),
+    css.includes("width: max-content;\n  max-width: min(100%, calc(100cqw - 88px));\n  min-width: 0;\n  justify-self: end;"),
   "Modern footer uses a content-sized right-aligned action track",
 );
 check(

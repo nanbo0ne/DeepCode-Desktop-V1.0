@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/permission"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
 )
 
 type fakeRiskClassifier struct {
@@ -67,8 +69,35 @@ func TestProviderRiskClassifierUsesIsolatedStrictRequest(t *testing.T) {
 	if got.Level != permission.RiskMedium || got.Reason != "bounded write" {
 		t.Fatalf("assessment = %+v", got)
 	}
-	if len(p.req.Messages) != 2 || len(p.req.Tools) != 0 || p.req.Temperature != 0 || p.req.MaxTokens != 96 {
+	if len(p.req.Messages) != 2 || len(p.req.Tools) != 0 || p.req.Temperature != 0 || p.req.MaxTokens != 256 || !p.req.DisableThinking {
 		t.Fatalf("classifier request leaked execution context: %+v", p.req)
+	}
+}
+
+type riskStreamProvider struct{ chunks chan provider.Chunk }
+
+func (p riskStreamProvider) Name() string { return "risk-stream" }
+func (p riskStreamProvider) Stream(context.Context, provider.Request) (<-chan provider.Chunk, error) {
+	return p.chunks, nil
+}
+
+func TestRiskClassifierRejectsIncompleteOrOversizedStream(t *testing.T) {
+	for _, value := range []string{`{"level":"low","reason":"ok"}`, strings.Repeat("x", 2049)} {
+		ch := make(chan provider.Chunk, 1)
+		ch <- provider.Chunk{Type: provider.ChunkText, Text: value}
+		close(ch)
+		if _, err := NewProviderRiskClassifier(riskStreamProvider{ch}).Assess(context.Background(), permission.RiskInput{}); err == nil {
+			t.Fatal("invalid stream accepted")
+		}
+	}
+}
+
+func TestRiskClassifierCancellationDoesNotWaitForProviderClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := NewProviderRiskClassifier(riskStreamProvider{make(chan provider.Chunk)}).Assess(ctx, permission.RiskInput{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
 	}
 }
 

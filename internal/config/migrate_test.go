@@ -31,6 +31,7 @@ func writeLegacy(t *testing.T, src, body string) {
 
 func TestMigrateImportsKeyPluginsAndLang(t *testing.T) {
 	src, dest, home := legacyHome(t)
+	t.Setenv("DEEPSEEK_API_KEY", "")
 	writeLegacy(t, src, `{
 		"apiKey": "sk-legacy-123",
 		"lang": "zh",
@@ -57,6 +58,9 @@ func TestMigrateImportsKeyPluginsAndLang(t *testing.T) {
 	}
 	if !strings.Contains(string(envData), "DEEPSEEK_API_KEY=sk-legacy-123") {
 		t.Errorf("credentials missing key: %q", envData)
+	}
+	if got := os.Getenv("DEEPSEEK_API_KEY"); got != "" {
+		t.Errorf("migration must not mutate process environment: %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".env")); !os.IsNotExist(err) {
 		t.Errorf("migration must not write the user's ~/.env, stat err=%v", err)
@@ -296,5 +300,67 @@ func TestMigrateCustomBaseURLWarns(t *testing.T) {
 		if !ok || p.BaseURL != "https://my-proxy.example/v1" {
 			t.Fatalf("%s base_url was not migrated: %+v", name, p)
 		}
+	}
+}
+
+func TestMigrateLegacyJSONRetriesCredentialsAfterPartialSuccess(t *testing.T) {
+	src, dest, _ := legacyHome(t)
+	writeLegacy(t, src, `{"apiKey":"sk-retry","lang":"en"}`)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(UserCredentialsPath(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLegacyIfNeeded(); err == nil {
+		t.Fatal("partial migration should report the credentials failure")
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("config stage missing after partial migration: %v", err)
+	}
+	if _, err := os.Stat(dest + legacyMigrationMarkerSuffix); err != nil {
+		t.Fatalf("migration stage record missing: %v", err)
+	}
+	if err := os.RemoveAll(UserCredentialsPath()); err != nil {
+		t.Fatal(err)
+	}
+	res, err := MigrateLegacyIfNeeded()
+	if err != nil || res == nil || !res.KeyToEnv {
+		t.Fatalf("retry result = %+v, err=%v", res, err)
+	}
+	data, err := os.ReadFile(UserCredentialsPath())
+	if err != nil || !strings.Contains(string(data), "DEEPSEEK_API_KEY=sk-retry") {
+		t.Fatalf("retried credentials = %q, err=%v", data, err)
+	}
+	record, err := readLegacyMigrationRecord(dest + legacyMigrationMarkerSuffix)
+	if err != nil || !record.Complete {
+		t.Fatalf("migration record = %+v, err=%v", record, err)
+	}
+}
+
+func TestMigrateLegacyJSONRetryPreservesNewCredentials(t *testing.T) {
+	src, dest, _ := legacyHome(t)
+	writeLegacy(t, src, `{"apiKey":"sk-old","lang":"en"}`)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(UserCredentialsPath(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLegacyIfNeeded(); err == nil {
+		t.Fatal("partial migration should report the credentials failure")
+	}
+	if err := os.RemoveAll(UserCredentialsPath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(UserCredentialsPath(), []byte("DEEPSEEK_API_KEY=sk-new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLegacyIfNeeded(); err != nil {
+		t.Fatalf("retry with newer credentials: %v", err)
+	}
+	data, err := os.ReadFile(UserCredentialsPath())
+	if err != nil || !strings.Contains(string(data), "DEEPSEEK_API_KEY=sk-new") || strings.Contains(string(data), "sk-old") {
+		t.Fatalf("new credentials were overwritten: %q, err=%v", data, err)
 	}
 }

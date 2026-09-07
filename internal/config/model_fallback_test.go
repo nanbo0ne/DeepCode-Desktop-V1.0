@@ -34,7 +34,7 @@ func TestResolveModelWithFallback(t *testing.T) {
 		{"provider name", "prov-b", "prov-b/model-b1", false, true},
 		{"bare model", "model-a1", "prov-a/model-a1", false, true},
 		{"empty falls back", "", "prov-a/model-a1", true, true},
-		{"stale falls back", "deleted/model", "prov-a/model-a1", true, true},
+		{"qualified stale stays unresolved", "deleted/model", "", false, false},
 	}
 
 	for _, tt := range cases {

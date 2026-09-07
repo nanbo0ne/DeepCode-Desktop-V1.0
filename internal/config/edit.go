@@ -651,7 +651,9 @@ func CanonicalSkillPath(path string) string {
 
 // UpsertPlugin adds e, or replaces an MCP server with the same name (preserving
 // position). The transport-specific required fields are validated: stdio needs
-// a command, http/sse need a url.
+// a command and Streamable HTTP needs a URL. Legacy SSE entries are retained
+// when loaded but cannot be newly saved because the runtime does not support
+// that transport.
 func (c *Config) UpsertPlugin(e PluginEntry) error {
 	e, _ = NormalizePluginCommandLine(e)
 	if err := validatePlugin(e); err != nil {
@@ -665,6 +667,26 @@ func (c *Config) UpsertPlugin(e PluginEntry) error {
 	}
 	c.Plugins = append(c.Plugins, e)
 	return nil
+}
+
+// ValidatePlugins validates entries before a new configuration is saved or a
+// planning/import operation is committed. Startup loading intentionally does
+// not call this method, so legacy SSE entries remain readable for migration.
+func (c *Config) ValidatePlugins() error {
+	if c == nil {
+		return nil
+	}
+	for _, e := range c.Plugins {
+		if err := validatePlugin(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidatePlugin validates one user-supplied plugin entry without changing it.
+func ValidatePlugin(e PluginEntry) error {
+	return validatePlugin(e)
 }
 
 // RemovePlugin deletes the named MCP server, reporting whether it was present.
@@ -747,12 +769,14 @@ func validatePlugin(e PluginEntry) error {
 		if strings.TrimSpace(e.Command) == "" {
 			return fmt.Errorf("plugin %q: command is required for a stdio server", e.Name)
 		}
-	case "http", "sse", "streamable-http":
+	case "sse":
+		return fmt.Errorf("plugin %q: legacy SSE transport is unsupported; migrate to type=\"http\" (Streamable HTTP) before saving", e.Name)
+	case "http", "streamable-http":
 		if strings.TrimSpace(e.URL) == "" {
 			return fmt.Errorf("plugin %q: url is required for a %s server", e.Name, e.Type)
 		}
 	default:
-		return fmt.Errorf("plugin %q: unknown type %q (want stdio|http|sse)", e.Name, e.Type)
+		return fmt.Errorf("plugin %q: unknown type %q (want stdio|http|streamable-http)", e.Name, e.Type)
 	}
 	return nil
 }

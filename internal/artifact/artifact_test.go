@@ -3,6 +3,7 @@ package artifact
 import (
 	"archive/zip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,7 +29,7 @@ func TestCreateEditPreviewAndValidateArtifacts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Create: %v", err)
 			}
-			if !result.Valid || result.TextBlocks == 0 {
+			if !result.Valid || result.TextBlocks == 0 && tc.format != "pdf" {
 				t.Fatalf("validation = %+v", result)
 			}
 			if _, err := os.Stat(SidecarPath(path)); err != nil {
@@ -49,12 +50,26 @@ func TestCreateEditPreviewAndValidateArtifacts(t *testing.T) {
 				}
 			}
 			if _, err := Edit(path, func(m *Model) error {
-				m.Paragraphs = append(m.Paragraphs, "后续结构化修改")
+				switch m.Format {
+				case "docx", "pdf":
+					m.Paragraphs = append(m.Paragraphs, "后续结构化修改")
+				case "xlsx":
+					m.Sheets[0].Rows = append(m.Sheets[0].Rows, []string{"后续结构化修改"})
+				case "pptx":
+					m.Slides = append(m.Slides, Slide{Title: "后续结构化修改"})
+				}
 				return nil
 			}); err != nil {
 				t.Fatalf("Edit: %v", err)
 			}
 			preview, err := Preview(path, "")
+			_, rendererErr := exec.LookPath("pdftoppm")
+			if tc.format != "pdf" || rendererErr != nil {
+				if err == nil || !strings.Contains(err.Error(), "unavailable") {
+					t.Fatalf("expected explicit unavailable preview, got %q, %v", preview, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Preview: %v", err)
 			}

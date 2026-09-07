@@ -553,3 +553,46 @@ func TestGatewayHiShowsAutomationCommands(t *testing.T) {
 		t.Fatalf("/hi response = %#v", sent)
 	}
 }
+
+func TestGatewayRejectedExternalAnswerKeepsPendingAsk(t *testing.T) {
+	adapter := newFakeAdapter(PlatformQQ, "qq")
+	const sourceID = "bot:owner"
+	called := false
+	gw := NewGateway(GatewayConfig{
+		Allowlist: AllowlistConfig{AllowAll: true},
+		ExternalAnswerForSource: func(gotSource, id string, answers []event.AskAnswer) ResponseRouteResult {
+			called = true
+			if gotSource != sourceID || id != "ask-1" {
+				t.Fatalf("route received source=%q id=%q", gotSource, id)
+			}
+			return ResponseRejected
+		},
+	}, map[Platform]Adapter{PlatformQQ: adapter}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctrl := control.New(control.Options{SessionPath: "session-bot"})
+	state := &sessionState{
+		ctrl:        ctrl,
+		pendingAsks: map[string][]event.AskQuestion{"ask-1": {{ID: "q1", Prompt: "continue?"}}},
+		sourceID:    sourceID,
+	}
+	msg := InboundMessage{Platform: PlatformQQ, ChatType: ChatDM, ChatID: "chat", UserID: "user", Text: "/answer ask-1 yes"}
+	remoteKey := BuildSessionKey(msg.Session())
+	gw.mu.Lock()
+	gw.controllers["controller-1"] = state
+	gw.remoteStates[remoteKey] = &remoteSessionState{mode: remoteModeInSession, selectedKey: "controller-1"}
+	gw.mu.Unlock()
+
+	gw.handleMessage(context.Background(), PlatformQQ, adapter, msg)
+	if !called {
+		t.Fatal("source-aware answer router was not called")
+	}
+	gw.mu.Lock()
+	_, pending := state.pendingAsks["ask-1"]
+	gw.mu.Unlock()
+	if !pending {
+		t.Fatal("rejected bot answer deleted pending ask")
+	}
+	sent := adapter.sentMessages()
+	if len(sent) != 1 || !strings.Contains(sent[0].Text, "不属于当前来源") {
+		t.Fatalf("rejection response = %#v", sent)
+	}
+}

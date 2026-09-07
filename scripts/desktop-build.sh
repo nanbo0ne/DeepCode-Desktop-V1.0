@@ -30,44 +30,165 @@ BINNAME="Orca"                      # wails.json outputfilename -> linux binary 
 ARTIFACT_BASE="O.R.C.A"
 [ "$os" = windows ] && ARTIFACT_BASE="O.R.C.A-for-Windows"
 
+# Windows payloads are release inputs, not copies of whichever runtime happens
+# to be first on PATH. Keep the Node distribution pinned to the same major line
+# used by the release workflow, and verify the official archive before reading
+# anything from it. These values come from Node's v22.23.2 SHASUMS256.txt.
+NODE_VERSION="v22.23.2"
+NODE_RELEASE_BASE="https://nodejs.org/dist/${NODE_VERSION}"
+
+verify_sha256() {
+	local file="$1"
+	local expected="$2"
+	local actual
+	actual="$(sha256sum "$file" | awk '{print tolower($1)}')"
+	[ "$actual" = "$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')" ] || {
+		echo "SHA-256 mismatch for $file: got $actual, expected $expected" >&2
+		return 1
+	}
+}
+
+resolve_absolute_path() {
+	local target="$1"
+	if [ -d "$target" ]; then
+		(cd -P -- "$target" && pwd)
+		return
+	fi
+	local parent base
+	parent="$(dirname -- "$target")"
+	base="$(basename -- "$target")"
+	(cd -P -- "$parent" && printf '%s/%s\n' "$(pwd)" "$base")
+}
+
+assert_within_dir() {
+	local target="$1"
+	local root="$2"
+	local absolute_target absolute_root
+	absolute_root="$(cd -P -- "$root" && pwd)" || {
+		echo "cannot resolve safety root: $root" >&2
+		return 1
+	}
+	absolute_target="$(resolve_absolute_path "$target")" || {
+		echo "cannot resolve packaging target: $target" >&2
+		return 1
+	}
+	case "$absolute_target" in
+		"$absolute_root"/*) return 0 ;;
+		*)
+			echo "refusing packaging operation outside $absolute_root: $absolute_target" >&2
+			return 1
+			;;
+	esac
+}
+
 prepare_windows_installer_resources() {
 	[ "$os" = windows ] || return 0
 
 	local res="$ROOT/desktop/build/windows/installer/resources"
 	local payload="$ROOT/desktop/build/windows/installer-go/payload"
-	mkdir -p "$res" "$payload"
+	mkdir -p "$res"
+	assert_within_dir "$res" "$ROOT/desktop/build/windows"
+	assert_within_dir "$payload" "$ROOT/desktop/build/windows/installer-go"
+	mkdir -p "$payload"
 
+	local node_arch node_archive node_archive_sha node_binary_sha
+	case "$arch" in
+	amd64)
+		node_arch="x64"
+		node_archive_sha="1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97"
+		node_binary_sha="0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4"
+		;;
+	arm64)
+		node_arch="arm64"
+		node_archive_sha="fec025a6da31757e3b6af84c5a1628e9d38442ca99a2161091d78f2fcfa35ef3"
+		node_binary_sha="97cce5301a815d2dce07ac5bfd1e6039eae88185ec1d10ae4f8cb712f1732878"
+		;;
+	*)
+		echo "unsupported Windows architecture for pinned Node runtime: $arch" >&2
+		return 1
+		;;
+	esac
+	node_archive="node-${NODE_VERSION}-win-${node_arch}.zip"
 	local node_dest="$payload/node.exe"
-	if [ ! -f "$node_dest" ]; then
-		local node_src
-		node_src="$(command -v node.exe 2>/dev/null || command -v node 2>/dev/null || true)"
-		[ -n "$node_src" ] || { echo "node runtime not found on PATH" >&2; exit 1; }
-		cp "$node_src" "$node_dest"
+	local node_license_dest="$payload/LICENSE.node.txt"
+	local cache_root="${ROOT}/.tmp"
+	if [ -n "${RUNNER_TEMP:-}" ]; then
+		cache_root="$(cygpath -u "$RUNNER_TEMP")"
 	fi
+	local node_cache_dir="${ORCA_NODE_CACHE_DIR:-$cache_root/orca-node-cache}"
+	local node_zip="$node_cache_dir/$node_archive"
+	mkdir -p "$node_cache_dir"
+	if [ ! -f "$node_zip" ] || ! verify_sha256 "$node_zip" "$node_archive_sha"; then
+		rm -f -- "$node_zip"
+		echo "==> fetching official Node ${NODE_VERSION} (${node_arch})"
+		curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+			"${NODE_RELEASE_BASE}/${node_archive}" -o "$node_zip"
+		verify_sha256 "$node_zip" "$node_archive_sha"
+	fi
+
+	# Re-extract from the verified archive on every build so an edited or damaged
+	# installed payload can never be silently repackaged.
+	local node_extract="$payload/.node-extract"
+	assert_within_dir "$node_extract" "$payload"
+	rm -rf -- "$node_extract"
+	mkdir -p "$node_extract"
+	powershell.exe -NoProfile -NonInteractive -Command \
+		"\$ErrorActionPreference = 'Stop'; Expand-Archive -Force -LiteralPath '$(cygpath -w "$node_zip")' -DestinationPath '$(cygpath -w "$node_extract")'"
+	local node_root="$node_extract/node-${NODE_VERSION}-win-${node_arch}"
+	[ -f "$node_root/node.exe" ] || { echo "Node archive layout not recognized" >&2; exit 1; }
+	[ -f "$node_root/LICENSE" ] || { echo "Node distribution LICENSE missing from archive" >&2; exit 1; }
+	cp "$node_root/node.exe" "$node_dest"
+	cp "$node_root/LICENSE" "$node_license_dest"
+	assert_within_dir "$node_extract" "$payload"
+	rm -rf -- "$node_extract"
+	verify_sha256 "$node_dest" "$node_binary_sha"
+	grep -Fq "Node.js is licensed" "$node_license_dest" || { echo "unexpected Node LICENSE content" >&2; exit 1; }
+	grep -Fq "Permission is hereby granted" "$node_license_dest" || { echo "unexpected Node LICENSE content" >&2; exit 1; }
 
 	local cg_dest="$payload/codegraph"
-	if [ ! -f "$cg_dest/bin/codegraph.cmd" ] && [ ! -f "$cg_dest/bin/codegraph" ]; then
-		local version asset zip
-		version="$(awk '/^CODEGRAPH_VERSION[[:space:]]*:=/ { print $3; exit }' "$ROOT/Makefile")"
-		[ -n "$version" ] || version="$(awk -F'"' '/Version = / { print $2; exit }' "$ROOT/internal/codegraph/install.go")"
-		[ -n "$version" ] || { echo "CODEGRAPH_VERSION not found" >&2; exit 1; }
-		asset="codegraph-win32-x64.zip"
-		if [ -n "${RUNNER_TEMP:-}" ]; then
-			zip="$(cygpath -u "$RUNNER_TEMP")/$asset"
-		else
-			zip="$(mktemp -t "$asset.XXXXXX")"
-		fi
-		echo "==> fetching $asset ($version) for Windows installer"
-		curl -fsSL "https://github.com/colbymchenry/codegraph/releases/download/$version/$asset" -o "$zip"
-		rm -rf "$cg_dest" "$payload/.codegraph-extract"
-		mkdir -p "$payload/.codegraph-extract"
-		powershell.exe -NoProfile -Command "Expand-Archive -Force -LiteralPath '$(cygpath -w "$zip")' -DestinationPath '$(cygpath -w "$payload/.codegraph-extract")'"
-		local extracted
-		extracted="$(find "$payload/.codegraph-extract" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-		[ -n "$extracted" ] || { echo "CodeGraph archive layout not recognized" >&2; exit 1; }
-		mv "$extracted" "$cg_dest"
-		rm -rf "$payload/.codegraph-extract"
+	local codegraph_arch="$node_arch"
+	local version go_version asset codegraph_sha codegraph_line
+	version="$(awk '/^CODEGRAPH_VERSION[[:space:]]*:=/ { print $3; exit }' "$ROOT/Makefile")"
+	[ -n "$version" ] || version="$(awk -F'"' '/Version = / { print $2; exit }' "$ROOT/internal/codegraph/install.go")"
+	[ -n "$version" ] || { echo "CODEGRAPH_VERSION not found" >&2; exit 1; }
+	go_version="$(awk -F'"' '/Version = / { print $2; exit }' "$ROOT/internal/codegraph/install.go")"
+	[ "$version" = "$go_version" ] || { echo "CodeGraph version drift: Makefile=$version Go=$go_version" >&2; exit 1; }
+	asset="codegraph-win32-${codegraph_arch}.zip"
+	codegraph_line="$(grep -F "\"$asset\"" "$ROOT/internal/codegraph/checksums.go" | head -n1 || true)"
+	codegraph_sha="$(printf '%s\n' "$codegraph_line" | sed -nE 's/.*"([0-9a-fA-F]{64})".*/\1/p')"
+	[ -n "$codegraph_sha" ] || { echo "CodeGraph checksum not found for $asset" >&2; exit 1; }
+	local codegraph_cache_dir="${ORCA_CODEGRAPH_CACHE_DIR:-$cache_root/orca-codegraph-cache}"
+	local zip="$codegraph_cache_dir/$asset"
+	mkdir -p "$codegraph_cache_dir"
+	if [ ! -f "$zip" ] || ! verify_sha256 "$zip" "$codegraph_sha"; then
+		rm -f -- "$zip"
+		echo "==> fetching immutable CodeGraph ${version} ($asset)"
+		curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+			"https://github.com/colbymchenry/codegraph/releases/download/${version}/${asset}" -o "$zip"
+		verify_sha256 "$zip" "$codegraph_sha"
 	fi
+
+	# Re-extract the complete tree every build. This makes the verified archive,
+	# rather than an editable installed directory, the package source of truth.
+	local codegraph_extract="$payload/.codegraph-extract"
+	assert_within_dir "$cg_dest" "$payload"
+	assert_within_dir "$codegraph_extract" "$payload"
+	rm -rf -- "$cg_dest" "$codegraph_extract"
+	mkdir -p "$codegraph_extract"
+	powershell.exe -NoProfile -NonInteractive -Command \
+		"\$ErrorActionPreference = 'Stop'; Expand-Archive -Force -LiteralPath '$(cygpath -w "$zip")' -DestinationPath '$(cygpath -w "$codegraph_extract")'"
+	local extracted
+	extracted="$(find "$codegraph_extract" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+	[ -n "$extracted" ] || { echo "CodeGraph archive layout not recognized" >&2; exit 1; }
+	assert_within_dir "$extracted" "$codegraph_extract"
+	assert_within_dir "$cg_dest" "$payload"
+	mv -- "$extracted" "$cg_dest"
+	assert_within_dir "$codegraph_extract" "$payload"
+	rm -rf -- "$codegraph_extract"
+	[ -f "$cg_dest/node.exe" ] || { echo "CodeGraph runtime missing from archive" >&2; exit 1; }
+	[ -f "$cg_dest/bin/codegraph.cmd" ] || { echo "CodeGraph launcher missing from archive" >&2; exit 1; }
+	[ -f "$cg_dest/lib/package.json" ] || { echo "CodeGraph package metadata missing from archive" >&2; exit 1; }
+	grep -Fq "\"version\": \"${version#v}\"" "$cg_dest/lib/package.json" || { echo "CodeGraph version mismatch in archive" >&2; exit 1; }
 }
 
 copy_stable_windows_installer() {
@@ -113,13 +234,22 @@ verify_windows_installer_archive() {
 	fi
 
 	if [ -z "$seven_zip" ]; then
-		echo "warning: 7-Zip not found; skipped NSIS archive test" >&2
+		echo "warning: 7-Zip not found; skipped Windows archive test" >&2
 		return 0
 	fi
 
-	echo "==> testing NSIS installer integrity"
+	echo "==> testing Windows archive integrity"
 	"$seven_zip" t "$installer"
 }
+
+# Bounded acquisition/staging mode for release review. It deliberately skips
+# version stamping and Wails/frontend compilation.
+if [ "${ORCA_PACKAGING_PREP_ONLY:-}" = "1" ]; then
+	[ "$os" = windows ] || { echo "ORCA_PACKAGING_PREP_ONLY requires a Windows target" >&2; exit 1; }
+	prepare_windows_installer_resources
+	echo "==> verified Windows payload staged; prep-only mode complete"
+	exit 0
+fi
 
 cd "$ROOT/desktop"
 
@@ -232,11 +362,21 @@ windows)
 	portable=$(find build/bin -maxdepth 1 -type f -name "*.exe" ! -iname "*setup*.exe" ! -iname "*installer*.exe" | head -n1 || true)
 	[ -n "$portable" ] || { echo "no portable Windows exe found in build/bin" >&2; exit 1; }
 	staging=$(mktemp -d)
+	staging_parent="$(dirname -- "$staging")"
 	cp "$portable" "$staging/Orca.exe"
-	src_win=$(cygpath -w "$staging/Orca.exe")
+	payload="$ROOT/desktop/build/windows/installer-go/payload"
+	[ -f "$payload/node.exe" ] || { echo "portable payload is missing pinned node.exe" >&2; exit 1; }
+	[ -f "$payload/LICENSE.node.txt" ] || { echo "portable payload is missing Node LICENSE" >&2; exit 1; }
+	[ -f "$payload/codegraph/bin/codegraph.cmd" ] || { echo "portable payload is missing CodeGraph launcher" >&2; exit 1; }
+	cp "$payload/node.exe" "$staging/node.exe"
+	cp "$payload/LICENSE.node.txt" "$staging/LICENSE.node.txt"
+	cp -R "$payload/codegraph" "$staging/codegraph"
+	staging_win=$(cygpath -w "$staging")
 	zip_win=$(cygpath -w "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip")
-	powershell.exe -NoProfile -Command "Compress-Archive -Force -LiteralPath '$src_win' -DestinationPath '$zip_win'"
-	rm -rf "$staging"
+	powershell.exe -NoProfile -NonInteractive -Command "Compress-Archive -Force -Path '${staging_win}\\*' -DestinationPath '$zip_win'"
+	verify_windows_installer_archive "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip"
+	assert_within_dir "$staging" "$staging_parent"
+	rm -rf -- "$staging"
 	# V2 updater compatibility aliases. They intentionally retain the previous
 	# asset names for one major release while all current UI uses O.R.C.A.
 	cp "$packaged_installer" "$ROOT/dist/DeepSeek-Orca-windows-${arch}-installer.exe"

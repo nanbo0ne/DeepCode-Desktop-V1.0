@@ -48,6 +48,22 @@ interface WorkspaceReference {
   isDir?: boolean;
 }
 
+export type ComposerDraftSnapshot = {
+  tabId?: string;
+  text: string;
+  attachments: readonly unknown[];
+  workspaceRefs: readonly unknown[];
+  sessionRefs: readonly unknown[];
+};
+
+export function sameComposerDraft(a: ComposerDraftSnapshot, b: ComposerDraftSnapshot): boolean {
+  return a.tabId === b.tabId
+    && a.text === b.text
+    && a.attachments === b.attachments
+    && a.workspaceRefs === b.workspaceRefs
+    && a.sessionRefs === b.sessionRefs;
+}
+
 const COMPOSER_AUTO_MAX_LINES = 10;
 // Grace after compositionend to swallow a confirm-Enter that lands just after
 // it; the real gap is a few ms, so keep it short or a deliberate quick second
@@ -64,6 +80,21 @@ function promptModeLabelKey(mode: PromptMode): PromptModeLabelKey {
 type WebkitFileEntry = {
   isDirectory?: boolean;
 };
+
+export async function submitComposerDraft(
+  send: () => void | Promise<void>,
+  clearDraft: () => void,
+  reportError: (error: unknown) => void,
+): Promise<boolean> {
+  try {
+    await send();
+    clearDraft();
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}
 
 function baseName(path: string): string {
   const clean = path.replace(/[\\/]+$/, "");
@@ -393,8 +424,8 @@ export function Composer({
   modelLabel: string;
   tabId?: string;
   effort?: EffortInfo;
-  onSend: (displayText: string, submitText?: string) => void;
-  onGuide?: (displayText: string, submitText?: string) => void;
+  onSend: (displayText: string, submitText?: string) => void | Promise<void>;
+  onGuide?: (displayText: string, submitText?: string) => void | Promise<void>;
   // Returns the un-sent text when cancelling before the server replied (so it can
   // be restored to the input); undefined for a normal cancel.
   onCancel: () => string | undefined;
@@ -473,6 +504,8 @@ export function Composer({
   const consumedPasteRequestRef = useRef(0);
   const lastTransientDismissSignal = useRef(transientDismissSignal);
   const submittingRef = useRef(false);
+  const draftSnapshotRef = useRef<ComposerDraftSnapshot>({ tabId, text, attachments, workspaceRefs, sessionRefs });
+  draftSnapshotRef.current = { tabId, text, attachments, workspaceRefs, sessionRefs };
   const nativeClipboardPasteTimerRef = useRef<number | null>(null);
   // Snapshot of the current cwd so async callbacks (openPastChats) can detect
   // workspace switches and discard stale responses (issue #3601).
@@ -911,39 +944,48 @@ export function Composer({
     setComposerPrompt(null);
     submittingRef.current = true;
     setSubmitting(true);
+    const submittedDraft = draftSnapshotRef.current;
     try {
-    const orderedAttachments = sortComposerAttachments(readyAttachments);
-    const refs = [
-      ...workspaceRefs.map((ref) => formatWorkspaceReference(ref.path, ref.isDir)),
-      ...orderedAttachments.map((a) => `@${a.path!}`),
-    ].join(" ");
-    const displayRefs = [
-      ...workspaceRefs.map((ref) => formatWorkspaceReference(ref.path, ref.isDir)),
-      ...orderedAttachments.map(formatAttachmentDisplayReference),
-    ].join(" ");
-    const displayText = [trimmedText, displayRefs].filter(Boolean).join(trimmedText && displayRefs ? " " : "");
-    // PR-B: when past:chats refs are attached, prepend their formatted transcript
-    // to submitText only (displayText stays unchanged so the user still sees their
-    // original prompt in the input preview). With no refs we keep the original
-    // submitText verbatim — no header, no rewording, byte-identical to pre-PR-B.
-    const sessionContext = sessionRefs.length === 0 ? "" : await buildSessionContext(sessionRefs);
-    const attachmentManifest = orderedAttachments.length === 0 ? "" : [
-      `<attachments count="${orderedAttachments.length}">`,
-      ...orderedAttachments.map((attachment, index) => `  <attachment index="${index + 1}" name="${attachmentName(attachment).replace(/["<>]/g, " ")}" path="${attachment.path}" />`),
-      "</attachments>",
-    ].join("\n");
-    const baseSubmitText = [attachmentManifest, trimmedText, refs].filter(Boolean).join("\n");
-    const submitText = sessionContext ? `${sessionContext}${baseSubmitText}` : baseSubmitText;
-    if (running && guide) {
-      if (onGuide) onGuide(displayText, submitText);
-      else onSend(displayText, submitText);
-    } else {
-      onSend(displayText, submitText);
-    }
-    setText("");
-    clearAttachments();
-    setWorkspaceRefs([]);
-    setSessionRefs([]);
+      const orderedAttachments = sortComposerAttachments(readyAttachments);
+      const refs = [
+        ...workspaceRefs.map((ref) => formatWorkspaceReference(ref.path, ref.isDir)),
+        ...orderedAttachments.map((a) => `@${a.path!}`),
+      ].join(" ");
+      const displayRefs = [
+        ...workspaceRefs.map((ref) => formatWorkspaceReference(ref.path, ref.isDir)),
+        ...orderedAttachments.map(formatAttachmentDisplayReference),
+      ].join(" ");
+      const displayText = [trimmedText, displayRefs].filter(Boolean).join(trimmedText && displayRefs ? " " : "");
+      // PR-B: when past:chats refs are attached, prepend their formatted transcript
+      // to submitText only (displayText stays unchanged so the user still sees their
+      // original prompt in the input preview). With no refs we keep the original
+      // submitText verbatim — no header, no rewording, byte-identical to pre-PR-B.
+      const sessionContext = sessionRefs.length === 0 ? "" : await buildSessionContext(sessionRefs);
+      const attachmentManifest = orderedAttachments.length === 0 ? "" : [
+        `<attachments count="${orderedAttachments.length}">`,
+        ...orderedAttachments.map((attachment, index) => `  <attachment index="${index + 1}" name="${attachmentName(attachment).replace(/["<>]/g, " ")}" path="${attachment.path}" />`),
+        "</attachments>",
+      ].join("\n");
+      const baseSubmitText = [attachmentManifest, trimmedText, refs].filter(Boolean).join("\n");
+      const submitText = sessionContext ? `${sessionContext}${baseSubmitText}` : baseSubmitText;
+      await submitComposerDraft(
+        () => {
+          if (running && guide && onGuide) return onGuide(displayText, submitText);
+          return onSend(displayText, submitText);
+        },
+        () => {
+          if (!sameComposerDraft(submittedDraft, draftSnapshotRef.current)) return;
+          setText("");
+          clearAttachments();
+          setWorkspaceRefs([]);
+          setSessionRefs([]);
+        },
+        (error) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          setComposerPrompt(`${t("msg.sendFailed")}${detail ? `: ${detail}` : ""}`);
+          requestAnimationFrame(() => taRef.current?.focus());
+        },
+      );
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -2383,6 +2425,8 @@ export function Composer({
               <Tooltip label={t("composer.send")}>
                 <button
                   className="composer__btn composer__btn--send"
+                  type="button"
+                  aria-label={t("composer.send")}
                   onClick={() => void submit()}
                   disabled={submitting || pendingPaste > 0 || (!hasSendableContent && !(goalModeOn && !activeGoal)) || disabled}
                 >

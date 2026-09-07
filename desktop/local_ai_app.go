@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -303,11 +302,14 @@ func (a *App) prepareLocalRuntimeProviders(ctx context.Context, cfg *config.Conf
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Setenv(localai.ProviderKeyEnv, status.APIKey); err != nil {
-		return nil, err
-	}
-	entry := config.ProviderEntry{Name: localai.ProviderID, Kind: "openai", BaseURL: status.BaseURL, Model: modelID, APIKeyEnv: localai.ProviderKeyEnv, ContextWindow: status.Profile.ContextSize, ModelContextWindows: map[string]int{modelID: status.Profile.ContextSize}, NoProxy: true}
+	entry := localRuntimeProviderEntry(modelID, status)
 	return []config.ProviderEntry{entry}, nil
+}
+
+func localRuntimeProviderEntry(modelID string, status localai.RuntimeStatus) config.ProviderEntry {
+	entry := config.ProviderEntry{Name: localai.ProviderID, Kind: "openai", BaseURL: status.BaseURL, Model: modelID, ContextWindow: status.Profile.ContextSize, ModelContextWindows: map[string]int{modelID: status.Profile.ContextSize}, NoProxy: true}
+	entry.WithAPIKey(status.APIKey)
+	return entry
 }
 
 func (a *App) buildController(ctx context.Context, opts boot.Options) (*control.Controller, error) {
