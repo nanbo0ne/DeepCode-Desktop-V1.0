@@ -429,6 +429,9 @@ jobs:
       # Canary is R2-only and never appears on the GitHub releases page; the mirror
       # job picks up the signed dist via the canary-dist artifact below. Stable
       # publishes a GitHub release as usual.
+      - name: Generate release checksums
+        run: bash scripts/checksum-desktop-release.sh dist
+
       - name: Publish GitHub release
         if: steps.ver.outputs.channel != 'canary'
         env:

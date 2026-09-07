@@ -1,10 +1,54 @@
 package main
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestReleaseChecksumsCoverPayloadAndExcludeManifest(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is required for the release script")
+	}
+	dir := t.TempDir()
+	want := ""
+	for _, name := range []string{"Orca installer.exe", "Orca.zip"} {
+		body := []byte("payload for " + name)
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0600); err != nil {
+			t.Fatal(err)
+		}
+		want += fmt.Sprintf("%x  %s\n", sha256.Sum256(body), name)
+	}
+	for range 2 {
+		cmd := exec.Command(bash, "../scripts/checksum-desktop-release.sh", filepath.ToSlash(dir))
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("checksum script: %v\n%s", err, output)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, "SHA256SUMS.txt"))
+		if err != nil || string(got) != want {
+			t.Fatalf("manifest = %q, error = %v; want %q", got, err, want)
+		}
+	}
+	cmd := exec.Command(bash, "../scripts/checksum-desktop-release.sh", filepath.ToSlash(t.TempDir()))
+	if err := cmd.Run(); err == nil {
+		t.Fatal("empty release directory must not produce a successful manifest")
+	}
+}
+
+func TestReleaseChecksumsAreGeneratedBeforePublication(t *testing.T) {
+	workflow := readDesktopReleaseWorkflow(t)
+	checksums := strings.Index(workflow, "bash scripts/checksum-desktop-release.sh dist")
+	publish := strings.Index(workflow, "- name: Publish GitHub release")
+	manifest := strings.Index(workflow, "- name: Generate manifest")
+	if checksums <= manifest || publish <= checksums {
+		t.Fatal("checksums must include the optional signed manifest and precede publication")
+	}
+}
 
 func readDesktopReleaseWorkflow(t *testing.T) string {
 	t.Helper()
