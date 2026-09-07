@@ -119,22 +119,20 @@ func workspaceGitStatus(base string) ([]gitStatusEntry, error) {
 		return nil, err
 	}
 	entries := parseGitStatusPorcelainZ(raw)
-	topCmd := workspaceGit("-C", base, "rev-parse", "--show-toplevel")
-	topRaw, err := topCmd.Output()
+	// Git's prefix avoids comparing Windows 8.3 paths with its expanded root.
+	prefixCmd := workspaceGit("-C", base, "rev-parse", "--show-prefix")
+	prefixRaw, err := prefixCmd.Output()
 	if err != nil {
 		return nil, err
 	}
-	repoRoot := strings.TrimSpace(string(topRaw))
-	if repoRoot == "" {
-		return entries, nil
-	}
+	prefix := strings.TrimSuffix(strings.TrimSuffix(string(prefixRaw), "\n"), "\r")
 	out := make([]gitStatusEntry, 0, len(entries))
 	for _, entry := range entries {
-		entry.Path = workspaceRelPathFromGitStatus(repoRoot, base, entry.Path)
+		entry.Path = workspaceRelPathFromGitStatus(prefix, entry.Path)
 		if entry.Path == "" {
 			continue
 		}
-		entry.OldPath = workspaceRelPathFromGitStatus(repoRoot, base, entry.OldPath)
+		entry.OldPath = workspaceRelPathFromGitStatus(prefix, entry.OldPath)
 		out = append(out, entry)
 	}
 	return out, nil
@@ -161,7 +159,6 @@ func parseGitStatusPorcelainZ(raw []byte) []gitStatusEntry {
 }
 
 func normalizeWorkspaceRelPath(base, path string) string {
-	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
 	}
@@ -177,15 +174,15 @@ func normalizeWorkspaceRelPath(base, path string) string {
 	return filepath.ToSlash(path)
 }
 
-func workspaceRelPathFromGitStatus(repoRoot, base, path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
+func workspaceRelPathFromGitStatus(prefix, path string) string {
+	if path == "" || filepath.IsAbs(path) {
 		return ""
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(repoRoot, filepath.FromSlash(path))
+	rel, err := filepath.Rel(filepath.Clean(filepath.FromSlash(prefix)), filepath.FromSlash(path))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
 	}
-	return normalizeWorkspaceRelPath(base, path)
+	return filepath.ToSlash(rel)
 }
 
 // workspaceGitBranch returns the current git branch name for the repo rooted

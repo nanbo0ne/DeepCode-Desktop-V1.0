@@ -1814,7 +1814,11 @@ args = ["-y", "@playwright/mcp"]
 	}
 
 	app := NewApp()
-	app.setTestCtrl(control.New(control.Options{Host: plugin.NewHost()}), "")
+	// Keep this parsing test offline: a closed injected host rejects reconnect
+	// before the stdio transport can spawn the configured external command.
+	host := plugin.NewHost()
+	host.Close()
+	app.setTestCtrl(control.New(control.Options{Host: host}), "")
 	defer app.activeCtrl().Close()
 
 	if err := app.UpdateMCPServer("playwright", MCPServerInput{

@@ -46,6 +46,7 @@ The successful file task used `write_file` and `read_file`, returned its final r
 4. Native WebView2 exposed the idle Send button without an accessible name. A localized label was added and covered by a regression test.
 5. Installer path precedence was corrected using a real NSIS command-line probe. Uninstall no longer recursively deletes the selected installation folder. Process closure is limited to that folder, and runtime archives are fixed by version and SHA-256. Portable repackaging after signing retains dependencies. Real account installation was not performed.
 6. Ctrl+K could fail to reopen the command palette because its handler performed a side effect inside a React state updater. After the fix, three open/close cycles and search interactions passed. The missing browser favicon was also resolved.
+7. Windows release CI exposed empty Git change lists when the workspace used an 8.3 alias and Git returned an expanded root. Status paths now use Git's repository prefix. A real short-path repository test covers root/subdirectory views and preserves file-name whitespace. An unrelated MCP parsing test was isolated from launching real network-backed processes.
 
 ## Browser Workflows
 
@@ -70,6 +71,8 @@ The NSIS embedded CRC matched the independent offline calculation, and a one-byt
 The source-frozen frontend tests ran on Node 22.23.2. Production frontend/Wails packaging, root Go tests, all desktop Go packages, and diff whitespace checks passed. The final native process exposed the correct window title, but the external helper's last accessibility snapshot lacked child labels and its screenshot was occluded. That attempt is not counted as another full native interaction pass.
 
 The first release CI run caught a missing Wails binding-generation step in the fresh-checkout frontend gate; publishing was blocked and the step was added. Development dependency advisories were addressed through compatible lockfile updates; `npm audit` then reported zero known vulnerabilities. Legacy PDF fixtures are explicitly binary so checkout cannot change their byte offsets.
+
+Subsequent fresh-platform checks caught Windows packaging's absent parent directory and installer contract tests depending on an untracked Windows-generated include. Both were fixed without removing the native test gates. The public release is created only after all platform jobs succeed.
 
 ## Remaining Boundaries
 
