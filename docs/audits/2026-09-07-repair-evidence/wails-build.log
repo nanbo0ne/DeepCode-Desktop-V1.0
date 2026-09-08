@@ -3,20 +3,20 @@
 
 # Build Options
 
-Platform(s)        | windows/amd64                                       
-Compiler           | C:\Program Files\Go\bin\go.exe                      
-Skip Bindings      | false                                               
-Build Mode         | production                                          
-Devtools           | false                                               
+Platform(s)        | windows/amd64
+Compiler           | C:\Program Files\Go\bin\go.exe
+Skip Bindings      | false
+Build Mode         | production
+Devtools           | false
 Frontend Directory | D:\AI-Reasonix\.tmp\v2.1.3-worktree\desktop\frontend
-Obfuscated         | false                                               
-Skip Frontend      | false                                               
-Compress           | false                                               
-Package            | true                                                
-Clean Bin Dir      | false                                               
-LDFlags            | -X main.version=v3.0.2 -X main.channel=stable       
-Tags               | []                                                  
-Race Detector      | false                                               
+Obfuscated         | false
+Skip Frontend      | false
+Compress           | false
+Package            | true
+Clean Bin Dir      | false
+LDFlags            | -X main.version=v3.0.2 -X main.channel=stable
+Tags               | []
+Race Detector      | false
 
 
 # Building target: windows/amd64

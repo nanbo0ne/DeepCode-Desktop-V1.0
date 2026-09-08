@@ -160,4 +160,3 @@ Get-AuthenticodeSignature 'D:\AI-Reasonix\.tmp\v2.1.3-worktree\dist\O.R.C.A-for-
    explicit `7z t` commands above and require exit code 0.
 7. Existing `github-release-final` files are truncated/corrupt and should not
    be used as release inputs. No cleanup was performed in this read-only review.
-

@@ -1,7 +1,7 @@
 # O.R.C.A v3.0.1 LocalAI Catalog Source核查
 
-核查对象：`D:\AI-Reasonix\.tmp\v2.1.3-worktree`，`HEAD 414225de74b1f1f772bab22ad7e25b422137c037`  
-核查日期：2026-09-07（Asia/Shanghai）  
+核查对象：`D:\AI-Reasonix\.tmp\v2.1.3-worktree`，`HEAD 414225de74b1f1f772bab22ad7e25b422137c037`
+核查日期：2026-09-07（Asia/Shanghai）
 范围：只读核对 `internal/localai/catalog.go` 的 llama.cpp `b10453` runtime 资产和首推 `Qwen3.8-27B-IQ3_XXS` 模型及 `mmproj`。没有下载模型/runtime 大文件，没有启动安装器或安装流程，没有读取/写入密钥。
 
 ## 结论
@@ -75,4 +75,3 @@
 - Hugging Face 的 `HEAD` ETag 是 Xet hash，不是文件 SHA-256；ModelScope 的 `Sha256` 与 HF LFS oid 一致，作为交叉验证，但没有把 ETag 当作 SHA。
 - `b10453` 的 release API 初次 .NET 请求遇到 SSL/403 rate-limit 响应；随后无缓存的 `curl.exe` 请求成功返回 200，官方 release 页面和资产 `HEAD` 也成功。报告采用成功的官方响应，不把 403 解释为资源不存在。
 - `main`/`master` 是可变分支；本报告记录了核查时的响应和 revision，不保证未来同一 URL 的元数据不变。模型固定值要获得可复现发布保证，应改用明确 revision/不可变快照并在发布流水线中验证。
-

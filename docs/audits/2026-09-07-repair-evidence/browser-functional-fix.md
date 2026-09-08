@@ -1,8 +1,8 @@
 # Browser Functional Fix Evidence
 
-Date: 2026-09-07  
-Worktree: `D:\AI-Reasonix\.tmp\v2.1.3-worktree`  
-Branch: `codex/v3.0.0`  
+Date: 2026-09-07
+Worktree: `D:\AI-Reasonix\.tmp\v2.1.3-worktree`
+Branch: `codex/v3.0.0`
 URL: `http://127.0.0.1:41874/?platform=windows`
 
 ## Command
