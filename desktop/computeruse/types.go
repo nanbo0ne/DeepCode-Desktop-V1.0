@@ -15,14 +15,15 @@ const (
 )
 
 type Capabilities struct {
-	Platform          string `json:"platform"`
-	Supported         bool   `json:"supported"`
-	ScreenCapture     bool   `json:"screenCapture"`
-	UIAutomation      bool   `json:"uiAutomation"`
-	InputInjection    bool   `json:"inputInjection"`
-	Overlay           bool   `json:"overlay"`
-	EmergencyStop     bool   `json:"emergencyStop"`
-	UnavailableReason string `json:"unavailableReason,omitempty"`
+	TemporarilyDisabled bool   `json:"temporarilyDisabled"`
+	Platform            string `json:"platform"`
+	Supported           bool   `json:"supported"`
+	ScreenCapture       bool   `json:"screenCapture"`
+	UIAutomation        bool   `json:"uiAutomation"`
+	InputInjection      bool   `json:"inputInjection"`
+	Overlay             bool   `json:"overlay"`
+	EmergencyStop       bool   `json:"emergencyStop"`
+	UnavailableReason   string `json:"unavailableReason,omitempty"`
 }
 
 type Rect struct {
@@ -80,6 +81,7 @@ type Observation struct {
 }
 
 type Action struct {
+	SessionID   string   `json:"sessionId,omitempty"`
 	Type        string   `json:"type"`
 	Generation  uint64   `json:"generation"`
 	ElementID   string   `json:"elementId,omitempty"`
@@ -118,6 +120,9 @@ type ActionLog struct {
 }
 
 type Session struct {
+	ParentTurnID    string       `json:"parentTurnId,omitempty"`
+	ParentSessionID string       `json:"parentSessionId,omitempty"`
+	Escalated       bool         `json:"escalated,omitempty"`
 	ID              string       `json:"id"`
 	TabID           string       `json:"tabId,omitempty"`
 	Goal            string       `json:"goal"`
@@ -136,6 +141,10 @@ type Session struct {
 }
 
 type StartRequest struct {
+	ParentTurnID    string `json:"parentTurnId,omitempty"`
+	ParentSessionID string `json:"parentSessionId,omitempty"`
+	ResumeSessionID string `json:"resumeSessionId,omitempty"`
+	Guidance        string `json:"guidance,omitempty"`
 	TabID           string `json:"tabId,omitempty"`
 	Goal            string `json:"goal"`
 	SuccessCriteria string `json:"successCriteria,omitempty"`

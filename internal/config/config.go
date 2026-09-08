@@ -798,6 +798,15 @@ type AgentConfig struct {
 	CompactForceRatio float64 `toml:"compact_force_ratio"`
 }
 
+const (
+	// VisionSubagentRole is the explicit per-role override used only when a
+	// task requests image inspection.
+	VisionSubagentRole = "vision"
+	// OfficialDeepSeekVisionModel is the provider-qualified model used as the
+	// built-in vision fallback when an official DeepSeek entry exposes it.
+	OfficialDeepSeekVisionModel = "deepseek-v4-flash-vision-exp"
+)
+
 // ProviderEntry declares a model provider instance. ContextWindow is the model's
 // token budget; the harness compacts older history as a turn's prompt approaches
 // it (see agent compaction). 0 disables compaction for the instance.
@@ -2541,6 +2550,42 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 		}
 	}
 	return nil, false
+}
+
+// ResolveVisionModelRef returns the model reference for image-bearing task
+// calls. An explicit vision-role override always wins and is returned as-is so
+// an invalid or custom reference is not silently guessed onto another provider.
+// Without that override, only a configured official DeepSeek endpoint exposing
+// the known vision model is eligible for the built-in fallback. The helper is
+// intentionally read-only so desktop settings can share the same resolution
+// without rewriting user configuration.
+func (c *Config) ResolveVisionModelRef() string {
+	if c == nil {
+		return ""
+	}
+	if ref := strings.TrimSpace(c.Agent.SubagentModels[VisionSubagentRole]); ref != "" {
+		return ref
+	}
+
+	access := desktopProviderAccessMap(c.Desktop.ProviderAccess)
+	var fallback string
+	for i := range c.Providers {
+		entry := &c.Providers[i]
+		if !IsOfficialDeepSeekEntry(entry) || !entry.HasModel(OfficialDeepSeekVisionModel) {
+			continue
+		}
+		if len(access) > 0 && !access[canonicalDesktopOfficialProviderName(entry.Name)] {
+			continue
+		}
+		ref := strings.TrimSpace(entry.Name) + "/" + OfficialDeepSeekVisionModel
+		if strings.TrimSpace(entry.Name) == "deepseek" {
+			return ref
+		}
+		if fallback == "" {
+			fallback = ref
+		}
+	}
+	return fallback
 }
 
 // ResolveModelWithFallback resolves a model reference to the canonical

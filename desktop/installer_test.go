@@ -158,3 +158,201 @@ func TestWindowsPortablePackageIncludesTheVerifiedFullPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsArchiveVerificationDoesNotRunNSISCheckOnZIP(t *testing.T) {
+	body, err := os.ReadFile("../scripts/desktop-build.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	start := strings.Index(script, "verify_windows_installer_archive() {")
+	if start < 0 {
+		t.Fatal("Windows archive verifier is missing")
+	}
+	relEnd := strings.Index(script[start:], "\n}\n\n# Bounded")
+	if relEnd < 0 {
+		t.Fatal("could not isolate Windows archive verifier")
+	}
+	verifier := script[start : start+relEnd]
+	if !strings.Contains(verifier, `*.exe) go -C "$ROOT/desktop" run ./cmd/nsischeck "$installer" ;;`) {
+		t.Fatal("NSIS checker must be restricted to .exe inputs")
+	}
+	if strings.Contains(verifier, `nsischeck "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip"`) {
+		t.Fatal("ZIP must not be passed to the NSIS checker")
+	}
+	if !strings.Contains(verifier, `"$seven_zip" t "$installer"`) {
+		t.Fatal("Windows archive verification must retain the 7-Zip check")
+	}
+	if !strings.Contains(script, `verify_windows_installer_archive "$packaged_installer"`) ||
+		!strings.Contains(script, `verify_windows_installer_archive "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip"`) {
+		t.Fatal("Windows installer and ZIP callers must both use the archive verifier")
+	}
+}
+
+func readWindowsInstallerAcceptance(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile("../scripts/test-desktop-installer.ps1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(body), "\r\n", "\n")
+}
+
+func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
+	script := readWindowsInstallerAcceptance(t)
+	contracts := map[string][]string{
+		"runner_and_paths": {
+			`$env:GITHUB_ACTIONS -cne 'true'`,
+			`$env:RUNNER_ENVIRONMENT -cne 'github-hosted'`,
+			`$env:RUNNER_OS -cne 'Windows'`,
+			`$env:RUNNER_ARCH -cne 'X64'`,
+			`-not $IsWindows -or -not [Environment]::Is64BitProcess`,
+			`$runnerTemp = Get-PlainPath $env:RUNNER_TEMP`,
+			`$runnerTemp.Length -le 3`,
+			`[IO.Path]::GetFullPath($Path)`,
+			`[IO.FileAttributes]::ReparsePoint`,
+			`$full.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)`,
+			`$ownedRoot = Assert-ChildPath (Join-Path $runnerTemp ('orca installer acceptance ' + [guid]::NewGuid().ToString('N'))) $runnerTemp`,
+			`if (Test-Path -LiteralPath $ownedRoot) { throw`,
+			`$repo -ine $workspace`,
+			`@('CurrentUser', 'LocalMachine')`,
+			`@('Registry32', 'Registry64')`,
+			`Runner is not clean: existing`,
+			`Preinstalled WebView2 is required`,
+		},
+		"official_baseline": {
+			`https://api.github.com/repos/nanbo0ne/O.R.C.A-for-Windows/releases/tags/desktop-v3.0.2`,
+			`https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/`,
+			`$release.tag_name -cne 'desktop-v3.0.2' -or $release.draft -or $release.prerelease`,
+			`$assetName = 'O.R.C.A-for-Windows-windows-amd64-installer.exe'`,
+			`@($assetName, 'SHA256SUMS.txt')`,
+			`$assets.Count -ne 1`,
+			`$checksumRows.Count -ne 1`,
+			`[regex]::Escape($assetName)`,
+			`$oldHash -ine $checksumRows[0].Groups[1].Value -or $oldHash -cne $pinnedOldHash`,
+			`5bf27fd4d958fc389a2ef320e401d05875d379b4d96c4ac64a8e8288ea48894d`,
+			`Invoke-WebRequest -Uri $direct -OutFile $destination -TimeoutSec 120`,
+		},
+		"bounded_silent_processes": {
+			`$allowedExecutables.Contains($exe)`,
+			`$info.Arguments = $Arguments`,
+			`$info.UseShellExecute = $false`,
+			`$info.Environment.Remove('GH_TOKEN')`,
+			`$process.WaitForExit(120000)`,
+			`$process.Kill($true)`,
+			`120000 - $timer.ElapsedMilliseconds`,
+			`$streams.Wait($remaining)`,
+			`$process.ExitCode -ne 0`,
+			`Owned-Path 'upgrade target with spaces'`,
+			`Owned-Path 'fresh target with spaces'`,
+			`Invoke-BoundedProcess $oldInstaller "/S /D=$upgradeDir" 'install-302'`,
+			`Invoke-BoundedProcess $newInstaller '/S' 'upgrade-current'`,
+			`Invoke-BoundedProcess $newInstaller "/S /D=$freshDir" 'install-fresh'`,
+			`Invoke-BoundedProcess $uninstaller "/S _?=$target" $Label`,
+			`Assert-NoApplication`,
+			`$evidence.status = 'failed'`,
+			"$evidence['error'] = $_.Exception.Message\n    throw",
+		},
+		"isolated_data_and_restore": {
+			`'AppData' = Owned-Path 'profile\AppData\Roaming'`,
+			`'Local AppData' = Owned-Path 'profile\AppData\Local'`,
+			`@('User Shell Folders', 'Shell Folders')`,
+			`[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames`,
+			`$folderTargets[$saved.Name], $saved.Kind`,
+			`@('System32', 'SysWOW64')`,
+			`[Environment]::GetFolderPath('ApplicationData')`,
+			`[Environment]::GetFolderPath('LocalApplicationData')`,
+			`NSIS shell folder isolation failed`,
+			`sessions\synthetic-session.json`,
+			`models\synthetic-tiny.gguf`,
+			`$markerHashes[$safe] = Get-SHA256 $safe`,
+			`(Get-SHA256 $path) -cne $markerHashes[$path]`,
+			`Assert-Markers 'installed-302'`,
+			`Assert-Markers 'upgraded-current'`,
+			`Assert-Markers $Label`,
+			`Invoke-DefaultUninstall $freshDir 'uninstall-fresh'`,
+			`Invoke-DefaultUninstall $upgradeDir 'uninstall-upgraded'`,
+			`$key.SetValue($saved.Name, $saved.Value, $saved.Kind)`,
+			`throw 'Failed to restore runner shell folder mappings.'`,
+		},
+		"payload_versions_and_evidence": {
+			`desktop\build\bin\Orca.exe`,
+			`desktop\build\windows\installer-go\payload`,
+			`'node.exe', 'LICENSE.node.txt', 'codegraph\node.exe', 'codegraph\bin\codegraph.cmd'`,
+			`Get-ChildItem -Force -Recurse -LiteralPath $codegraph`,
+			`Get-FileHash -LiteralPath $safe -Algorithm SHA256`,
+			`(Get-SHA256 $installed) -cne $expectedHashes[$relative]`,
+			`$actualFiles.Count -ne $expectedCount`,
+			`$key.GetValue('InstallLocation')`,
+			`$key.GetValue('DisplayVersion')`,
+			`GetVersionInfo($installedApp).ProductVersion`,
+			`$location -ine $target`,
+			`Assert-Installation $upgradeDir '3.0.2' 'installed-302'`,
+			`Assert-Installation $upgradeDir $productVersion 'upgraded-current'`,
+			`Assert-CurrentPayload $freshDir 'fresh-directory'`,
+			`Assert-CurrentPayload $upgradeDir 'upgraded-current'`,
+			`Assert-CurrentPayload $upgradeDir 'original-directory-unchanged'`,
+			`'codegraph', 'uninstall.exe'`,
+			`Owned-Path 'evidence\result.json'`,
+		},
+	}
+	for name, required := range contracts {
+		t.Run(name, func(t *testing.T) {
+			for _, want := range required {
+				if !strings.Contains(script, want) {
+					t.Errorf("installer acceptance is missing %q", want)
+				}
+			}
+		})
+	}
+	for _, forbidden := range []string{
+		"/NCRC", "Remove-Item", "Directory]::Delete", "File]::Delete", "Remove-ItemProperty",
+		"DeleteSubKey", "Start-Process", "Invoke-Expression", "$info.ArgumentList",
+		"$allowedExecutables.Add($app)", "$allowedExecutables.Add($candidate)",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("installer acceptance must not contain %q", forbidden)
+		}
+	}
+	guard := strings.Index(script, "$env:GITHUB_ACTIONS -cne 'true'")
+	functions := strings.Index(script, "function Get-PlainPath")
+	firstWrite := strings.Index(script, "[void][IO.Directory]::CreateDirectory($ownedRoot)")
+	checksum := strings.Index(script, "throw 'Official 3.0.2 installer SHA256 mismatch.'")
+	install := strings.Index(script, `Invoke-BoundedProcess $oldInstaller "/S /D=$upgradeDir"`)
+	if guard < 0 || functions <= guard || firstWrite <= functions || checksum < 0 || install <= checksum {
+		t.Fatal("runner guards must precede side effects; baseline verification must precede installation")
+	}
+	restore := strings.LastIndex(script, "} finally {")
+	if restore < 0 || !strings.Contains(script[restore:], "ConvertTo-Json -Depth 10") {
+		t.Fatal("acceptance must write evidence even on failure")
+	}
+}
+
+func TestWindowsInstallerAcceptanceWorkflowGate(t *testing.T) {
+	body, err := os.ReadFile("../.github/workflows/release-desktop.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	integrity := strings.Index(workflow, "- name: Verify Windows package integrity")
+	acceptance := strings.Index(workflow, "- name: Test Windows installer upgrade and data retention")
+	signing := strings.Index(workflow, "- name: Sign artifacts (minisign)")
+	if integrity < 0 || acceptance <= integrity || signing <= acceptance {
+		t.Fatal("Windows real installer acceptance must run after integrity and before minisign")
+	}
+	step := workflow[acceptance:signing]
+	for _, want := range []string{
+		"if: runner.os == 'Windows'\n", "shell: pwsh", "timeout-minutes: 15",
+		"GH_TOKEN: ${{ github.token }}", "ORCA_INSTALLER_EXPECTED_VERSION: ${{ steps.ver.outputs.version }}",
+		"run: ./scripts/test-desktop-installer.ps1 -ExpectedVersion $env:ORCA_INSTALLER_EXPECTED_VERSION",
+	} {
+		if !strings.Contains(step, want) {
+			t.Errorf("installer acceptance workflow step is missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"continue-on-error", "allow_unsigned_windows", "upload-artifact", "canary", "MINISIGN_PRIVATE_KEY"} {
+		if strings.Contains(step, forbidden) {
+			t.Errorf("installer acceptance must be a mandatory isolated gate, found %q", forbidden)
+		}
+	}
+}

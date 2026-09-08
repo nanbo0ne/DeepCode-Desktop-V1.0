@@ -9,7 +9,9 @@
 ##
 ##   1. REQUEST_EXECUTION_LEVEL "user" + InstallDir under $LOCALAPPDATA - install
 ##      without administrator rights. This is what lets the auto-updater re-run a
-##      freshly downloaded installer silently (`/S`) with no UAC prompt.
+##      freshly downloaded installer interactively, with no UAC prompt. The
+##      updater supplies `/D=<current install dir>` and intentionally leaves
+##      the NSIS directory page available for a user override.
 ##   2. Uninstall registry under HKCU (not HKLM). Wails' wails.writeUninstaller /
 ##      wails.deleteUninstaller macros hard-code HKLM, which a non-admin install
 ##      cannot write - so we inline HKCU versions below instead.
@@ -18,9 +20,9 @@
 ##      a build that did not write InstallLocation yet, .onInit falls back to the
 ##      old DisplayIcon path before using the default. Without this, every release
 ##      forces the user back to %LOCALAPPDATA%\Programs\DeepSeek-Orca even if they had
-##      moved the install to a different drive (e.g. D:\Tools\DeepSeek-Orca); the silent
-##      auto-updater would re-run with /S into the wrong dir, leaving the old
-##      install orphaned.
+##      moved the install to a different drive (e.g. D:\Tools\DeepSeek-Orca), leaving
+##      the old install orphaned. The updater now passes the current directory through
+##      interactive `/D=<current install dir>` invocation.
 ##
 ## Everything else mirrors Wails' generated default. Defines below override the
 ## ProjectInfo values that wails_tools.nsh would otherwise populate.
@@ -114,8 +116,8 @@ ShowInstDetails show # This will always show the installation details.
     # via InstallDirRegKey above. Without this, every release would force the
     # user back to %LOCALAPPDATA%\Programs\DeepSeek-Orca even if they had moved
     # the install to a different drive (e.g. D:\Tools\DeepSeek-Orca). The auto-
-    # updater re-runs this installer with /S and trusts the persisted path,
-    # so it has to be present before the silent re-install.
+    # updater supplies the current executable directory with /D and trusts the
+    # persisted path as the fallback for manually opened installers.
     WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
 
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
@@ -196,7 +198,7 @@ Function orca.closeTargetProcesses
     FileOpen $0 "$PLUGINSDIR\orca-close-processes.ps1" w
     FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'$\r$\n"
     FileWrite $0 "$$targetDir = [IO.Path]::GetFullPath($$args[0])$\r$\n"
-    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'))$\r$\n"
+    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'), [IO.Path]::Combine($$targetDir, 'codegraph', 'node.exe'))$\r$\n"
     FileWrite $0 "$$names = @('Orca', 'deepseek-orca-desktop', 'node')$\r$\n"
     FileWrite $0 "function Get-TargetProcesses { @(Get-Process -Name $$names -ErrorAction SilentlyContinue | Where-Object { try { $$path = $$_.Path; $$path -and ($$targetPaths -contains [IO.Path]::GetFullPath($$path)) } catch { $$false } }) }$\r$\n"
     FileWrite $0 "foreach ($$process in @(Get-TargetProcesses)) { if ($$process.MainWindowHandle -ne 0) { [void]$$process.CloseMainWindow() } }$\r$\n"
@@ -230,7 +232,7 @@ Function un.orca.closeTargetProcesses
     FileOpen $0 "$PLUGINSDIR\orca-close-processes.ps1" w
     FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'$\r$\n"
     FileWrite $0 "$$targetDir = [IO.Path]::GetFullPath($$args[0])$\r$\n"
-    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'))$\r$\n"
+    FileWrite $0 "$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'), [IO.Path]::Combine($$targetDir, 'codegraph', 'node.exe'))$\r$\n"
     FileWrite $0 "$$names = @('Orca', 'deepseek-orca-desktop', 'node')$\r$\n"
     FileWrite $0 "function Get-TargetProcesses { @(Get-Process -Name $$names -ErrorAction SilentlyContinue | Where-Object { try { $$path = $$_.Path; $$path -and ($$targetPaths -contains [IO.Path]::GetFullPath($$path)) } catch { $$false } }) }$\r$\n"
     FileWrite $0 "foreach ($$process in @(Get-TargetProcesses)) { if ($$process.MainWindowHandle -ne 0) { [void]$$process.CloseMainWindow() } }$\r$\n"

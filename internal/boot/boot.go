@@ -628,13 +628,25 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	visionModels := func() []string {
 		store := visioncap.Load("")
 		models := make([]string, 0)
+		seen := map[string]bool{}
+		appendSupported := func(modelRef string) {
+			entry, ok := cfg.ResolveModel(modelRef)
+			if !ok || store.Get(entry).Status != visioncap.Supported {
+				return
+			}
+			ref := visioncap.ModelRef(entry)
+			if ref == "" || seen[ref] {
+				return
+			}
+			seen[ref] = true
+			models = append(models, ref)
+		}
+		appendSupported(cfg.ResolveVisionModelRef())
 		for i := range cfg.Providers {
 			for _, model := range cfg.Providers[i].ChatModelList() {
 				e := cfg.Providers[i]
 				e.Model = model
-				if store.Get(&e).Status == visioncap.Supported {
-					models = append(models, visioncap.ModelRef(&e))
-				}
+				appendSupported(visioncap.ModelRef(&e))
 			}
 		}
 		return models
@@ -645,6 +657,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		taskModel, taskEffort, resolveSubagentProvider).
 		WithTranscripts(subagentStore, root, modelName, entry.Effort).
 		WithTranscriptIdentityResolver(subagentIdentity).
+		WithVisionDefault(cfg.ResolveVisionModelRef()).
 		WithVision(visionMode, visionStatus, imageLoader))
 
 	// The `remember` tool lets the model persist durable facts to the project's

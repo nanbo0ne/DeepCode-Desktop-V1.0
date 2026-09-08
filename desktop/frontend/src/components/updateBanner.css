@@ -1,0 +1,118 @@
+.orca-update-banner {
+  position: fixed;
+  top: 58px;
+  right: 16px;
+  z-index: 420;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px;
+  color: var(--text-primary, #1f2933);
+  background: var(--surface-raised, #ffffff);
+  border: 1px solid var(--border-strong, #b8c0c8);
+  border-left: 3px solid var(--accent, #147d92);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 14%);
+}
+
+.orca-update-banner__icon {
+  flex: 0 0 auto;
+  color: var(--accent, #147d92);
+  padding-top: 1px;
+}
+
+.orca-update-banner__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.orca-update-banner__heading,
+.orca-update-banner__progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.orca-update-banner__heading strong {
+  overflow-wrap: anywhere;
+}
+
+.orca-update-banner__source {
+  max-width: 10rem;
+  overflow: hidden;
+  color: var(--text-muted, #66717d);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orca-update-banner__status {
+  margin-top: 3px;
+  color: var(--text-secondary, #52606d);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.orca-update-banner__progress-row {
+  margin-top: 8px;
+}
+
+.orca-update-banner__progress {
+  height: 5px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--surface-sunken, #e7ebee);
+}
+
+.orca-update-banner__progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent, #147d92);
+  transition: width 160ms ease;
+}
+
+.orca-update-banner__percent {
+  min-width: 34px;
+  color: var(--text-muted, #66717d);
+  font-size: 11px;
+  text-align: right;
+}
+
+.orca-update-banner__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.orca-update-banner__spin {
+  animation: orca-update-banner-spin 1s linear infinite;
+}
+
+@keyframes orca-update-banner-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .orca-update-banner {
+    top: 48px;
+    right: 8px;
+    width: calc(100vw - 16px);
+    flex-wrap: wrap;
+  }
+
+  .orca-update-banner__body {
+    flex-basis: calc(100% - 38px);
+  }
+
+  .orca-update-banner__actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-left: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orca-update-banner__spin { animation: none; }
+  .orca-update-banner__progress span { transition: none; }
+}

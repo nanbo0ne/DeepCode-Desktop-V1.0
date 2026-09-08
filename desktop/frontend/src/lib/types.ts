@@ -923,6 +923,8 @@ export interface SettingsView {
   plannerModel: string;
   subagentModel: string;
   subagentEffort: string;
+  visionModel?: string;
+  effectiveVisionModel?: string;
   autoPlan: string;
   providers: ProviderView[];
   officialProviders: ProviderView[];
@@ -1009,6 +1011,7 @@ export interface LocalAICatalogView {
 export interface ComputerUseCapabilities {
   platform: string; supported: boolean; screenCapture: boolean; uiAutomation: boolean;
   inputInjection: boolean; overlay: boolean; emergencyStop: boolean; unavailableReason?: string;
+  temporarilyDisabled?: boolean;
 }
 export interface ComputerUseSession {
   id: string; tabId?: string; goal: string; successCriteria?: string; restrictions?: string; modelRef?: string;
@@ -1023,9 +1026,22 @@ export interface UpdateInfo {
   current: string;
   latest: string;
   notes: string;
+  canDownload: boolean;
   canSelfUpdate: boolean;
   downloadUrl: string;
   assetSize: number;
+  source?: string;
   err?: string;
+}
+
+export type UpdateProgressPhase = "idle" | "downloading" | "verifying" | "ready" | "cancelled" | "applying" | "error";
+
+export interface UpdateProgress {
+  phase: UpdateProgressPhase;
+  received: number;
+  total: number;
+  err?: string;
+  version?: string;
+  canSelfUpdate?: boolean;
 }
 

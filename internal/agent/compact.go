@@ -162,12 +162,36 @@ func estimateMessagesTokens(msgs []provider.Message) int {
 		total += estimateTextTokens(m.ReasoningContent)
 		total += estimateTextTokens(m.Name)
 		total += estimateTextTokens(m.ToolCallID)
+		for _, image := range m.Images {
+			total += estimateImageTokens(image)
+		}
 		for _, tc := range m.ToolCalls {
 			total += 8
 			total += estimateTextTokens(tc.ID)
 			total += estimateTextTokens(tc.Name)
 			total += estimateTextTokens(tc.Arguments)
 		}
+	}
+	return total
+}
+
+const (
+	estimatedImageTokensPerImage    = 1024
+	maxEstimatedImageTokensPerImage = 4096
+)
+
+// estimateImageTokens reserves a bounded, provider-independent budget for an
+// image. Providers tokenize images differently, so this estimate deliberately
+// does not apply a vendor-specific formula or treat base64 length as tokens.
+// Persisted image metadata is still counted so unusually long references cannot
+// disappear from the compaction estimate.
+func estimateImageTokens(image provider.ImageContent) int {
+	total := estimatedImageTokensPerImage +
+		estimateTextTokens(image.Path) +
+		estimateTextTokens(image.Name) +
+		estimateTextTokens(image.MediaType)
+	if total > maxEstimatedImageTokensPerImage {
+		return maxEstimatedImageTokensPerImage
 	}
 	return total
 }

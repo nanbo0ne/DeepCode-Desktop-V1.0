@@ -60,6 +60,7 @@ import type {
   ToolLibrarySettings,
   TopicMeta,
   UpdateInfo,
+  UpdateProgress,
   WireEvent,
   VisionCapability,
   WorkspaceChangesView,
@@ -228,6 +229,7 @@ export interface AppBindings {
   SetPlannerModel(ref: string): Promise<void>;
   SetSubagentModel(ref: string): Promise<void>;
   SetSubagentEffort(level: string): Promise<void>;
+  SetVisionModel(ref: string): Promise<void>;
   SetAutoPlan(mode: string): Promise<void>;
   SaveProvider(p: ProviderView): Promise<void>;
   UpdateProviderModels(name: string, models: string[], defaultModel: string): Promise<void>;
@@ -276,7 +278,11 @@ export interface AppBindings {
   SetBypass(on: boolean): Promise<void>;
   Version(): Promise<string>;
   CheckUpdate(): Promise<UpdateInfo | null>;
+  DownloadUpdate(): Promise<void>;
+  CancelUpdateDownload(): Promise<void>;
+  GetUpdateStatus(): Promise<UpdateProgress>;
   ApplyUpdate(): Promise<void>;
+  OpenDownloadedUpdate(): Promise<void>;
   OpenDownloadPage(): Promise<void>;
   NeedsOnboarding(): Promise<boolean>;
 	GetOnboardingState(): Promise<{ required: boolean; completed: boolean; hasCloudModel: boolean; hasLocalRuntime: boolean; platform: string; providers: ProviderView[] }>;
@@ -369,6 +375,7 @@ declare global {
 // Must match desktop/app.go's eventChannel constant.
 const EVENT_CHANNEL = "agent:event";
 const RUNTIME_SWITCH_EVENT_CHANNEL = "runtime:switch-progress";
+const UPDATER_PROGRESS_EVENT_CHANNEL = "updater:progress";
 
 // Resolve the Wails binding at CALL time, not module-load time: in dev the Wails
 // runtime can inject window.go AFTER this module first evaluates, so snapshotting
@@ -402,6 +409,13 @@ export function onEvent(cb: (e: WireEvent) => void): () => void {
 export function onRuntimeSwitchProgress(cb: (progress: RuntimeSwitchProgress) => void): () => void {
   if (realApp() && typeof window !== "undefined" && window.runtime) {
     return window.runtime.EventsOn(RUNTIME_SWITCH_EVENT_CHANNEL, (payload) => cb(payload as RuntimeSwitchProgress));
+  }
+  return () => {};
+}
+
+export function onUpdaterProgress(cb: (progress: UpdateProgress) => void): () => void {
+  if (realApp() && typeof window !== "undefined" && window.runtime) {
+    return window.runtime.EventsOn(UPDATER_PROGRESS_EVENT_CHANNEL, (payload) => cb(payload as UpdateProgress));
   }
   return () => {};
 }
@@ -2136,6 +2150,9 @@ function makeMockApp(): AppBindings {
     async SetSubagentEffort(level: string) {
       settings.subagentEffort = level;
     },
+    async SetVisionModel(ref: string) {
+      settings.visionModel = ref;
+    },
     async SetAutoPlan(mode: string) {
       settings.autoPlan = mode;
     },
@@ -2409,7 +2426,13 @@ function makeMockApp(): AppBindings {
     async CheckUpdate() {
       return null;
     },
+    async DownloadUpdate() {},
+    async CancelUpdateDownload() {},
+    async GetUpdateStatus() {
+      return { phase: "idle", received: 0, total: 0 } satisfies UpdateProgress;
+    },
     async ApplyUpdate() {},
+    async OpenDownloadedUpdate() {},
     async OpenDownloadPage() {
       if (typeof window !== "undefined") {
         window.open("https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/latest", "_blank", "noopener");
@@ -2442,14 +2465,17 @@ function makeMockApp(): AppBindings {
     async SetLocalModelsDirectory(_path: string) {},
     async SetComputerControlModel(modelRef: string) { settings.computerControlModel = modelRef; },
     async GetComputerUseState() {
-      return { capabilities: { platform: "browser", supported: false, screenCapture: false, uiAutomation: false, inputInjection: false, overlay: false, emergencyStop: false, unavailableReason: "仅 Windows 支持" }, session: { id: "", goal: "", state: "idle", actionCount: 0, logs: [] }, approved: settings.computerUseFullAccessApproved, consentVersion: settings.computerUseFullAccessApproved ? 1 : 0, modelRef: settings.computerControlModel };
+      return { capabilities: { platform: "browser", supported: false, temporarilyDisabled: true, screenCapture: false, uiAutomation: false, inputInjection: false, overlay: false, emergencyStop: false, unavailableReason: t("settings.computer.temporarilyDisabled") }, session: { id: "", goal: "", state: "idle", actionCount: 0, logs: [] }, approved: settings.computerUseFullAccessApproved, consentVersion: settings.computerUseFullAccessApproved ? 1 : 0, modelRef: settings.computerControlModel };
     },
-    async StartComputerUseSession(_request: { tabId?: string; goal: string; successCriteria?: string; restrictions?: string; modelRef?: string }) { throw new Error("computer use is only available in the Windows app"); },
-    async ObserveComputerUse() { throw new Error("computer use is only available in the Windows app"); },
-    async ExecuteComputerAction(_action: any) { throw new Error("computer use is only available in the Windows app"); },
-    async SetComputerUseFullAccess(enabled: boolean) { settings.computerUseFullAccessApproved = enabled; },
+    async StartComputerUseSession(_request: { tabId?: string; goal: string; successCriteria?: string; restrictions?: string; modelRef?: string }) { throw new Error(t("settings.computer.temporarilyDisabled")); },
+    async ObserveComputerUse() { throw new Error(t("settings.computer.temporarilyDisabled")); },
+    async ExecuteComputerAction(_action: any) { throw new Error(t("settings.computer.temporarilyDisabled")); },
+    async SetComputerUseFullAccess(enabled: boolean) {
+      if (enabled) throw new Error(t("settings.computer.temporarilyDisabled"));
+      settings.computerUseFullAccessApproved = false;
+    },
     async PauseComputerUse() { return (await this.GetComputerUseState()).session; },
-    async ResumeComputerUse() { return (await this.GetComputerUseState()).session; },
+    async ResumeComputerUse() { throw new Error(t("settings.computer.temporarilyDisabled")); },
     async StopComputerUse() {},
     async ConnectKey(apiKey: string) {
       if (!apiKey.trim()) throw new Error("key is required");

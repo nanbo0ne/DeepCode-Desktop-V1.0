@@ -33,6 +33,88 @@ subagent_models = { explore = "deepseek-pro", "security-review" = "mimo-pro" }
 	}
 }
 
+func TestResolveVisionModelRefUsesExplicitRole(t *testing.T) {
+	cfg := &Config{
+		Agent: AgentConfig{
+			SubagentModel:  "qwen/general",
+			SubagentModels: map[string]string{VisionSubagentRole: "qwen/qwen-vl"},
+		},
+		Providers: []ProviderEntry{{Name: "qwen", Kind: "openai", BaseURL: "https://qwen.example/v1", Models: []string{"qwen-general", "qwen-vl"}}},
+	}
+
+	if got := cfg.ResolveVisionModelRef(); got != "qwen/qwen-vl" {
+		t.Fatalf("vision model ref = %q, want explicit role", got)
+	}
+	if cfg.Agent.SubagentModel != "qwen/general" {
+		t.Fatalf("general subagent model was changed to %q", cfg.Agent.SubagentModel)
+	}
+}
+
+func TestSetVisionModelOnlyChangesVisionRole(t *testing.T) {
+	cfg := &Config{
+		Agent:     AgentConfig{SubagentModel: "qwen/general"},
+		Providers: []ProviderEntry{{Name: "qwen", Kind: "openai", BaseURL: "https://qwen.example/v1", Models: []string{"qwen-general", "qwen-vl"}}},
+	}
+	if err := cfg.SetVisionModel("qwen/qwen-vl"); err != nil {
+		t.Fatalf("SetVisionModel: %v", err)
+	}
+	if got := cfg.Agent.SubagentModels[VisionSubagentRole]; got != "qwen/qwen-vl" {
+		t.Fatalf("vision role = %q, want qwen/qwen-vl", got)
+	}
+	if cfg.Agent.SubagentModel != "qwen/general" {
+		t.Fatalf("general subagent model changed to %q", cfg.Agent.SubagentModel)
+	}
+	if err := cfg.SetVisionModel(""); err != nil {
+		t.Fatalf("clear vision model: %v", err)
+	}
+	if got := cfg.ResolveVisionModelRef(); got != "" {
+		t.Fatalf("cleared vision role resolved to %q", got)
+	}
+}
+
+func TestResolveVisionModelRefUsesOfficialDeepSeekFallback(t *testing.T) {
+	cfg := &Config{
+		Providers: []ProviderEntry{
+			{Name: "qwen", Kind: "openai", BaseURL: "https://qwen.example/v1", Models: []string{"vision"}},
+			{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com", Models: []string{OfficialDeepSeekVisionModel}},
+		},
+	}
+
+	if got := cfg.ResolveVisionModelRef(); got != "deepseek/"+OfficialDeepSeekVisionModel {
+		t.Fatalf("vision model ref = %q, want official DeepSeek fallback", got)
+	}
+}
+
+func TestResolveVisionModelRefRejectsNonOfficialOrUnrelatedProviders(t *testing.T) {
+	cases := []struct {
+		name      string
+		providers []ProviderEntry
+		access    []string
+	}{
+		{
+			name:      "no deepseek",
+			providers: []ProviderEntry{{Name: "qwen", Kind: "openai", BaseURL: "https://qwen.example/v1", Models: []string{OfficialDeepSeekVisionModel}}},
+		},
+		{
+			name:      "custom endpoint",
+			providers: []ProviderEntry{{Name: "deepseek", Kind: "openai", BaseURL: "https://relay.example/deepseek", Models: []string{OfficialDeepSeekVisionModel}}},
+		},
+		{
+			name:      "provider isolation",
+			providers: []ProviderEntry{{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com", Models: []string{OfficialDeepSeekVisionModel}}},
+			access:    []string{"qwen"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{Providers: tc.providers, Desktop: DesktopConfig{ProviderAccess: tc.access}}
+			if got := cfg.ResolveVisionModelRef(); got != "" {
+				t.Fatalf("vision model ref = %q, want no fallback", got)
+			}
+		})
+	}
+}
+
 func TestAgentSubagentEffortConfigDecodesFromTOML(t *testing.T) {
 	var cfg Config
 	if _, err := toml.Decode(`

@@ -79,6 +79,11 @@ func (a *App) GetWelcomeSuggestions() []string {
 
 func (a *App) runWelcomeSuggestionScheduler() {
 	refresh := func() {
+		done, err := a.beginAppWork()
+		if err != nil {
+			return
+		}
+		defer done()
 		cache := loadWelcomeSuggestionCache()
 		if cache.GeneratedAt > 0 && time.Since(time.UnixMilli(cache.GeneratedAt)) < welcomeSuggestionInterval {
 			return

@@ -7,7 +7,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -95,7 +94,7 @@ func TestEvaluate(t *testing.T) {
 		return &update.Manifest{
 			Version:   version,
 			Notes:     "notes",
-			Platforms: map[string]update.Asset{update.CurrentPlatform(): {Size: 999}},
+			Platforms: map[string]update.Asset{update.CurrentPlatform(): {Size: 999}, "windows-amd64-portable": {Size: 999}},
 		}
 	}
 
@@ -122,8 +121,8 @@ func TestEvaluate(t *testing.T) {
 	if full.Latest != "v1.1.0" || full.Notes != "notes" || full.AssetSize != 999 {
 		t.Errorf("metadata not carried: %+v", full)
 	}
-	if full.CanSelfUpdate != (runtime.GOOS != "darwin") {
-		t.Errorf("CanSelfUpdate = %v on %s", full.CanSelfUpdate, runtime.GOOS)
+	if full.CanSelfUpdate != isInstalledDesktop() {
+		t.Errorf("CanSelfUpdate = %v, want registered installation status", full.CanSelfUpdate)
 	}
 }
 
@@ -141,7 +140,7 @@ func TestChannelSelectsDistinctPointers(t *testing.T) {
 			t.Errorf("stable endpoint leaks into canary: %q", u)
 		}
 	}
-	if !strings.Contains(stable[0], "/latest/latest.json") {
+	if stable[0] != "https://orca.aichat.diy/updates/stable/latest.json" {
 		t.Errorf("stable primary = %q, want the latest/ pointer", stable[0])
 	}
 	for _, u := range canary {

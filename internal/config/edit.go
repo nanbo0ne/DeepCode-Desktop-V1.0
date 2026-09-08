@@ -63,6 +63,28 @@ func (c *Config) SetPlannerModel(name string) error {
 	return nil
 }
 
+// SetVisionModel sets (or clears) the per-role model used by image-bearing
+// task calls. It intentionally writes the vision role only; the general
+// subagent model remains independent.
+func (c *Config) SetVisionModel(ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		if c.Agent.SubagentModels != nil {
+			delete(c.Agent.SubagentModels, VisionSubagentRole)
+		}
+		return nil
+	}
+	entry, ok := c.ResolveModel(ref)
+	if !ok {
+		return fmt.Errorf("unknown vision model %q", ref)
+	}
+	if c.Agent.SubagentModels == nil {
+		c.Agent.SubagentModels = map[string]string{}
+	}
+	c.Agent.SubagentModels[VisionSubagentRole] = entry.Name + "/" + entry.Model
+	return nil
+}
+
 // SetAutoPlan sets the interactive auto-plan gate. "off" keeps plan mode manual;
 // "on" opts into automatic read-only planning for complex-looking turns.
 // "ask" is accepted as a legacy synonym for "on" but is never written back.

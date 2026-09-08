@@ -649,6 +649,8 @@ func (c *Controller) runGoalLoopWithRawDisplay(ctx context.Context, input, raw, 
 }
 
 func (c *Controller) runGoalLoopWithRichDisplay(ctx context.Context, input agent.RichInput, raw, display string) error {
+	ctx, endTurn := agent.WithParentTurn(ctx)
+	defer endTurn()
 	release, err := c.acquireTurnLease(ctx)
 	if err != nil {
 		return err
@@ -673,9 +675,6 @@ func (c *Controller) acquireTurnLease(ctx context.Context) (func(), error) {
 	c.mu.Lock()
 	path := c.sessionPath
 	c.mu.Unlock()
-	if strings.TrimSpace(path) == "" {
-		return func() {}, nil
-	}
 	return c.turnLease(ctx, path)
 }
 
@@ -711,6 +710,8 @@ func (c *Controller) runTurnWithRawDisplay(ctx context.Context, input, raw, disp
 }
 
 func (c *Controller) runTurnWithRichDisplay(ctx context.Context, rich agent.RichInput, raw, display string) error {
+	ctx, endTurn := agent.WithParentTurn(ctx)
+	defer endTurn()
 	input := rich.Text
 	c.maybeSessionStart(ctx)
 	c.maybeAutoPlan(ctx, raw)
@@ -1298,6 +1299,8 @@ func (c *Controller) notice(text string) {
 // headless `deepseek-orca run` path, where the Sink renders to stdout and the caller
 // just needs the exit status — no TurnDone event, no cancel bookkeeping.
 func (c *Controller) Run(ctx context.Context, input string) error {
+	ctx, endTurn := agent.WithParentTurn(ctx)
+	defer endTurn()
 	c.maybeSessionStart(ctx)
 	ctx = agent.WithParentSession(ctx, c.parentSessionID())
 	startMessages := c.messageCount()
@@ -1410,20 +1413,27 @@ func (c *Controller) refreshInteractiveGate() {
 
 // Steer queues mid-turn guidance without interrupting the in-flight request.
 func (c *Controller) Steer(text string) {
+	if !c.SteerRunning(text) {
+		// Agent not running: frontend state may have been stale.
+		go func() { c.SubmitDisplay(text, text) }()
+	}
+}
+
+// SteerRunning delivers guidance without asynchronously starting a new turn.
+// Hosts with admission barriers must perform the idle fallback themselves.
+func (c *Controller) SteerRunning(text string) bool {
 	c.mu.Lock()
 	exec := c.executor
 	running := c.running
 	c.mu.Unlock()
 	if exec == nil {
-		return
+		return true
 	}
 	if running {
 		exec.Steer(text)
-		return
+		return true
 	}
-	// Agent not running — frontend's runningRef was stale.
-	// Convert to a new turn so the user gets a response.
-	go func() { c.SubmitDisplay(text, text) }()
+	return false
 }
 
 // SteerConsumed returns true when the steer queue is empty after the last consume.

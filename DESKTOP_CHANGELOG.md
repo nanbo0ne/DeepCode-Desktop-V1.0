@@ -1,5 +1,16 @@
 # O.R.C.A Desktop Changelog
 
+## V3.0.3
+
+Computer Use is temporarily disabled on all platforms in 3.0.3. Ordinary Vision attachments, conversations, and engineering tools remain supported. Downloads and verification files are listed on the [Release page](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3). See the [validation report](docs/audits/2026-09-08-v3.0.3-validation.md) for test scope and results.
+
+- Reworked the bilingual product documentation around all three work surfaces: Orca, Assistant, and Coding, including providers, role-specific models, workspaces, sessions, attachments, artifacts, engineering tools, subagents, MCP, Skills, bots, automation, memory, local AI, permissions, privacy, Modern, Classic, installation, migration, build, and troubleshooting.
+- Defined the vision routing default for unconfigured vision and retained control roles as the official `deepseek/deepseek-v4-flash-vision-exp`. Ordinary Vision image analysis and attachments remain supported. Explicit role choices are preserved; text subagents do not inherit this default, no API key is shipped, and a retained control role cannot enable Computer Use.
+- Temporarily disabled Computer Use on Windows, macOS, and Linux: no computer-control tool registration, screen capture, or native mouse/keyboard/window actions. Code and configuration remain for restoration after later validation; old consent and Full access cannot re-enable it. Usage examples now cover ordinary images, files, and workspaces.
+- Kept historical native failures as deferred restoration checks. All-platform disablement and bypass prevention are covered by dedicated tests; detailed evidence remains in the validation report.
+- Updated the updater: macOS primary stable manifest at [`https://orca.aichat.diy/updates/stable/latest.json`](https://orca.aichat.diy/updates/stable/latest.json), GitHub fallback with signed manifest and payload, explicit Windows download/exit/install flow without automatic downloading, and download-page/package opening on other platforms.
+- Older versions require one manual 3.0.3 installation from the Release page. Signed update metadata and payloads do not replace OS trust: Windows packages lack a publisher signature, and macOS is not notarized.
+
 ## V3.0.2 - 2026-09-07
 
 - Fixed Modern header/footer spacing, narrow Composer controls, modal focus, and settings error recovery. Kept the Classic blue-and-white layout and corrected its overlapping search control.

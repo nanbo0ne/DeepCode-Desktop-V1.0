@@ -31,11 +31,9 @@ import (
 // has no Wails dependency so the logic is unit-tested directly; updater_app.go is
 // the thin Wails binding that wires these into App methods and progress events.
 
-// Manifest endpoints — R2 CDN first (fast, especially in CN), GitHub releases as
-// fallback. The build channel picks the rolling pointer so a canary build polls
-// the canary line and a stable build polls latest; the two never cross.
+// Stable and canary use separate signed pointers. GitHub mirrors stable releases.
 const (
-	r2Base         = "https://dl.orca-agent.dev"
+	macUpdateBase  = "https://orca.aichat.diy/updates"
 	ghReleasesBase = "https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases"
 	ghReleasesAPI  = "https://api.github.com/repos/nanbo0ne/O.R.C.A-for-Windows/releases?per_page=20"
 	httpTimeout    = 15 * time.Second
@@ -115,16 +113,16 @@ func evaluateGitHubRelease(current string, release githubRelease) UpdateInfo {
 	return info
 }
 
-// manifestEndpoints returns the primary (R2) then fallback (GitHub) manifest URLs
+// manifestEndpoints returns the primary (Mac) then fallback (GitHub) manifest URLs
 // for the running build's channel.
 func manifestEndpoints() []string {
 	if channel == "canary" {
-		// Canary publishes only to R2 (no GitHub release), so there is no
+		// Canary has no public GitHub release, so there is no
 		// GitHub fallback for this channel.
-		return []string{r2Base + "/canary/latest.json"}
+		return []string{macUpdateBase + "/canary/latest.json"}
 	}
 	return []string{
-		r2Base + "/latest/latest.json",
+		macUpdateBase + "/stable/latest.json",
 		ghReleasesBase + "/latest/download/latest.json",
 	}
 }
@@ -140,6 +138,8 @@ func downloadPage() string {
 
 // UpdateInfo is the CheckUpdate result that drives the frontend's update banner.
 type UpdateInfo struct {
+	CanDownload   bool   `json:"canDownload"`
+	Source        string `json:"source,omitempty"`
 	Available     bool   `json:"available"`
 	Current       string `json:"current"`
 	Latest        string `json:"latest"`
@@ -153,10 +153,12 @@ type UpdateInfo struct {
 // updateProgress is the payload of the "updater:progress" Wails event emitted
 // throughout ApplyUpdate.
 type updateProgress struct {
-	Phase    string `json:"phase"` // downloading | verifying | applying | done | error
-	Received int64  `json:"received"`
-	Total    int64  `json:"total"`
-	Err      string `json:"err,omitempty"`
+	Version       string `json:"version,omitempty"`
+	CanSelfUpdate bool   `json:"canSelfUpdate"`
+	Phase         string `json:"phase"` // downloading | verifying | applying | done | error
+	Received      int64  `json:"received"`
+	Total         int64  `json:"total"`
+	Err           string `json:"err,omitempty"`
 }
 
 func httpClient() (*http.Client, error) {
@@ -167,10 +169,8 @@ func httpClient() (*http.Client, error) {
 	return netclient.NewHTTPClient(cfg.NetworkProxySpec(), netclient.TransportOptions{})
 }
 
-// canSelfUpdate reports whether in-place update is possible. macOS is excluded:
-// without a Developer ID signature + notarization, swapping the .app and relaunching
-// trips Gatekeeper, so macOS falls back to a manual download.
-func canSelfUpdate() bool { return runtime.GOOS != "darwin" }
+// Only a registered Windows installation is eligible for an in-place update.
+func canSelfUpdate() bool { return isInstalledDesktop() }
 
 // normalizeVersion canonicalizes a version to semver "vX.Y.Z". It reports ok=false
 // for the un-injected "dev" build (and anything not valid semver), so a dev build
@@ -194,17 +194,14 @@ func normalizeVersion(v string) (string, bool) {
 func fetchManifest(ctx context.Context, c *http.Client) (*update.Manifest, error) {
 	var lastErr error
 	for _, url := range manifestEndpoints() {
-		b, err := fetchBytes(ctx, c, url)
+		attempt, cancel := context.WithTimeout(ctx, 12*time.Second)
+		m, err := fetchSignedManifestAt(attempt, c, url, update.Verify)
+		cancel()
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		var m update.Manifest
-		if err := json.Unmarshal(b, &m); err != nil {
-			lastErr = err
-			continue
-		}
-		return &m, nil
+		return m, nil
 	}
 	return nil, fmt.Errorf("update: fetch manifest: %w", lastErr)
 }
@@ -233,10 +230,20 @@ func evaluate(current string, m *update.Manifest) UpdateInfo {
 	if okCur && semver.Compare(latest, cur) > 0 {
 		info.Available = true
 	}
-	if a, ok := m.Asset(); ok {
+	if a, ok := selectedUpdateAsset(m); ok {
 		info.AssetSize = a.Size
+		info.CanDownload = info.Available && a.Size > 0
 	}
 	return info
+}
+
+func selectedUpdateAsset(m *update.Manifest) (update.Asset, bool) {
+	key := update.CurrentPlatform()
+	if runtime.GOOS == "windows" && !isInstalledDesktop() {
+		key += "-portable"
+	}
+	asset, ok := m.Platforms[key]
+	return asset, ok
 }
 
 // fetchBytes GETs a URL fully into memory.

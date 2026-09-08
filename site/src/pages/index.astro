@@ -4,9 +4,9 @@ import community from '../data/community.json';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/nanbo0ne/O.R.C.A-for-Windows';
-const R2 = `${repo}/releases/download/desktop-v3.0.2`;
+const R2 = 'https://orca.aichat.diy/releases/desktop-v3.0.3';
 
-const goVer = '3.0.2';
+const goVer = '3.0.3';
 
 const fmtN = (n) => Number(n).toLocaleString('en-US');
 const avClass = (i) => 'av' + (i % 5 === 2 ? ' sm' : i % 7 === 3 ? ' lg' : '');
@@ -14,11 +14,11 @@ const half = Math.ceil(community.list.length / 2);
 const rowA = community.list.slice(0, half);
 const rowB = community.list.slice(half);
 
-const desc = "Open Reasoning & Computing Agent: a provider-neutral desktop workspace for coding, everyday work, optional local Qwen inference, and guarded Windows Computer Use.";
+const desc = "Open Reasoning & Computing Agent: a workspace for coding, everyday work, Vision attachments, and optional local AI. Computer Use is temporarily disabled on all platforms in 3.0.3.";
 const ld = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'O.R.C.A',
+  name: 'O.R.C.A.',
   description: desc,
   url: repo,
   applicationCategory: 'DeveloperApplication',
@@ -59,15 +59,16 @@ const ld = {
   <section class="hero">
     <canvas class="hero-dots"></canvas>
     <div class="wrap">
-      <div class="eyebrow reveal"><span class="dot"></span><span class="l-en">Cloud or local · Windows computer use · MIT</span><span class="l-zh">云端或本地 · Windows 电脑控制 · MIT</span></div>
+      <div class="eyebrow reveal"><span class="dot"></span><span class="l-en">Cloud or local · Vision attachments · MIT</span><span class="l-zh">云端或本地 · Vision 附件识图 · MIT</span></div>
       <h1 class="reveal" style="--d:0.06s">
         <span class="l-en"><span class="grad">Open Reasoning</span><br />& Computing Agent.</span>
         <span class="l-zh"><span class="grad">开放推理</span>与<br />计算智能体。</span>
       </h1>
       <p class="sub reveal" style="--d:0.12s">
-        <span class="l-en">Choose cloud providers or a managed local Qwen model, then let O.R.C.A code, research, create work artifacts, and operate Windows through a controlled computer-use loop.</span>
-        <span class="l-zh">自由选择云端供应商或由 O.R.C.A 管理的本地 Qwen，让它编程、调研、制作办公产物，并通过受控循环操作 Windows。</span>
+        <span class="l-en">Choose cloud providers or a managed local Qwen model, then use O.R.C.A to code, research, analyze images you attach, and create work artifacts.</span>
+        <span class="l-zh">自由选择云端供应商或由 O.R.C.A 管理的本地 Qwen，使用它编程、调研、分析你附上的图片和制作办公产物。</span>
       </p>
+      <p class="reveal"><span class="l-en">3.0.3 temporarily disables Computer Use on Windows, macOS, and Linux: no computer-control tools, screen captures, or native input. Code and configuration remain for restoration after later validation. Ordinary attachments and default Vision remain supported.</span><span class="l-zh">3.0.3 在 Windows、macOS、Linux 所有平台暂时禁用电脑操控，不注册电脑工具、不截图、不执行原生输入。代码和配置保留，待后续验收后恢复；普通附件和默认 Vision 识图仍支持。</span></p>
       <div class="hero-cta reveal" style="--d:0.18s">
         <a class="btn btn-dark" data-os-dl data-goto="desktop" href="#start"><span class="l-en">Download for <span class="os-name">macOS</span></span><span class="l-zh">下载 <span class="os-name">macOS</span> 版</span></a>
         <span class="install"><span class="ps1">$</span>npm i -g orca-agent<button data-copy="npm i -g orca-agent">Copy</button></span>
@@ -91,7 +92,7 @@ const ld = {
       <div class="sec-head split reveal">
         <span class="kicker"><span class="l-en">Features</span><span class="l-zh">特性</span></span>
         <h2><span class="l-en">Built for long, <span class="em">cheap</span> sessions.</span><span class="l-zh">为长会话、<span class="em">低成本</span>而生。</span></h2>
-        <p><span class="l-en">O.R.C.A keeps stable prompt prefixes cache-friendly across supported providers while separating coding, assistant, and computer-control contexts.</span><span class="l-zh">O.R.C.A 在支持的供应商之间保持缓存友好的稳定提示词前缀，并隔离编程、助手与电脑控制上下文。</span></p>
+        <p><span class="l-en">O.R.C.A keeps stable prompt prefixes cache-friendly across supported providers while separating Coding, Assistant, and Orca session contexts.</span><span class="l-zh">O.R.C.A 在支持的供应商之间保持缓存友好的稳定提示词前缀，并隔离编程、助手与 Orca 会话上下文。</span></p>
       </div>
       <div class="feat-grid">
         <div class="feat reveal">
@@ -285,7 +286,7 @@ const ld = {
             <a class="btn btn-light" href={`${R2}/O.R.C.A-linux-amd64.tar.gz`} download><span class="l-en">Download · v<span class="rxv">{goVer}</span></span><span class="l-zh">下载 · v<span class="rxv">{goVer}</span></span></a>
           </div>
         </div>
-        <div class="dl-note"><span class="l-en">v<span class="rxv">{goVer}</span> · built-in auto-updates · same engine as the CLI · <a href={`${repo}/releases`}>all releases →</a></span><span class="l-zh">v<span class="rxv">{goVer}</span> · 内置自动更新 · 与 CLI 同一引擎 · <a href={`${repo}/releases`}>全部版本 →</a></span></div>
+        <div class="dl-note"><span class="l-en">v<span class="rxv">{goVer}</span> downloads and verification files follow the <a href={`${repo}/releases/tag/desktop-v${goVer}`}>Release page assets</a>. Installed Windows builds require explicit download and exit to install, with no automatic download. Other platforms open the download page/package. Computer Use is temporarily disabled on all platforms.</span><span class="l-zh">v<span class="rxv">{goVer}</span> 下载与校验文件以 <a href={`${repo}/releases/tag/desktop-v${goVer}`}>Release 页资产</a>为准。Windows 安装版需主动下载并退出安装，不会自动下载；其他平台打开下载页或包。所有平台电脑操控暂时禁用。</span></div>
       </div>
     </div>
   </section>

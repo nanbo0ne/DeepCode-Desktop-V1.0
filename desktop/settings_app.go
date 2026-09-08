@@ -154,6 +154,8 @@ type SettingsView struct {
 	AutomationModel      string          `json:"automationModel"`
 	PlannerModel         string          `json:"plannerModel"`
 	SubagentModel        string          `json:"subagentModel"`
+	VisionModel          string          `json:"visionModel"`
+	EffectiveVisionModel string          `json:"effectiveVisionModel"`
 	SubagentEffort       string          `json:"subagentEffort"`
 	AutoPlan             string          `json:"autoPlan"`
 	Providers            []ProviderView  `json:"providers"`
@@ -393,14 +395,16 @@ func (a *App) Settings() SettingsView {
 		bash = "enforce"
 	}
 	v := SettingsView{
-		DefaultModel:      cfg.DefaultModel,
-		AutomationModel:   cfg.Bot.Model,
-		PlannerModel:      cfg.Agent.PlannerModel,
-		SubagentModel:     cfg.Agent.SubagentModel,
-		SubagentEffort:    cfg.Agent.SubagentEffort,
-		AutoPlan:          desktopAutoPlanMode(cfg.Agent.AutoPlan),
-		Providers:         []ProviderView{},
-		OfficialProviders: []ProviderView{},
+		DefaultModel:         cfg.DefaultModel,
+		AutomationModel:      cfg.Bot.Model,
+		PlannerModel:         cfg.Agent.PlannerModel,
+		SubagentModel:        cfg.Agent.SubagentModel,
+		VisionModel:          cfg.Agent.SubagentModels[config.VisionSubagentRole],
+		EffectiveVisionModel: cfg.ResolveVisionModelRef(),
+		SubagentEffort:       cfg.Agent.SubagentEffort,
+		AutoPlan:             desktopAutoPlanMode(cfg.Agent.AutoPlan),
+		Providers:            []ProviderView{},
+		OfficialProviders:    []ProviderView{},
 		Permissions: PermissionsView{
 			Mode:            orDefault(cfg.Permissions.Mode, "ask"),
 			AutoReviewModel: cfg.Permissions.AutoReviewModel,
@@ -843,6 +847,21 @@ func (a *App) SetSubagentModel(ref string) error {
 		}
 		c.Agent.SubagentModel = ref
 		return nil
+	})
+}
+
+// SetVisionModel changes only the explicit image-task role, not general subagents.
+func (a *App) SetVisionModel(ref string) error {
+	return a.applyConfigChange(func(c *config.Config) error {
+		ref = strings.TrimSpace(ref)
+		if ref != "" {
+			resolved, err := selectableDesktopModelRef(c, ref)
+			if err != nil {
+				return err
+			}
+			ref = resolved
+		}
+		return c.SetVisionModel(ref)
 	})
 }
 
@@ -1714,7 +1733,7 @@ func (a *App) rebuildAutomationTabModel(tab *WorkspaceTab, modelRef string, expe
 		TurnContext:             turnContext,
 		TurnLease:               a.sessionGate.Acquire,
 		RefreshOnLease:          true,
-	})
+	}, tab.ID)
 	if err != nil {
 		a.noticeForTab(tab.ID, fmt.Sprintf("could not switch Orca model: %v", err))
 		return

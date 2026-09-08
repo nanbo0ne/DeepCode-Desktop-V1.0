@@ -304,6 +304,11 @@ func (a *App) hasRunnableAssistantMemoryPending() bool {
 }
 
 func (a *App) processPendingAssistantMemories() bool {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return true
+	}
+	defer done()
 	for {
 		if a.anyTabRunning() {
 			return true

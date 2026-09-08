@@ -3,6 +3,7 @@
 package computeruse
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"syscall"
@@ -13,6 +14,21 @@ import (
 	uia "github.com/auuunya/go-element"
 	"golang.org/x/sys/windows"
 )
+
+func TestCancelledNativeActionsDoNotInspectOrInject(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	b := &WindowsBackend{}
+	obs := Observation{}
+	for _, kind := range []string{"click", "scroll", "key_combo", "type_text", "invoke", "set_value"} {
+		if err := b.Execute(ctx, obs, Action{Type: kind}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled %s: %v", kind, err)
+		}
+	}
+	if err := b.uiaAction(ctx, obs, Action{Type: "invoke"}, 0, 0); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled UIA action: %v", err)
+	}
+}
 
 func TestIntegrityLevelFromTokenInfoReadsSIDSubAuthority(t *testing.T) {
 	labelSize := int(unsafe.Sizeof(windows.Tokenmandatorylabel{}))
@@ -72,6 +88,16 @@ func TestReleaseInjectedInputRetriesFailedEvents(t *testing.T) {
 	}
 	if keyAttempts != 2 || buttonAttempts != 2 {
 		t.Fatalf("attempts = key %d, button %d; want two each", keyAttempts, buttonAttempts)
+	}
+}
+
+func TestUnicodeReleaseRetainsFailedUnits(t *testing.T) {
+	b := &WindowsBackend{pressedUnicode: map[uint16]bool{0x4e2d: true}}
+	if err := b.releaseUnicodeInput(func(uint16) error { return errors.New("synthetic failure") }); err == nil || len(b.pressedUnicode) != 1 {
+		t.Fatal("failed Unicode release must remain pending")
+	}
+	if err := b.releaseUnicodeInput(func(uint16) error { return nil }); err != nil || len(b.pressedUnicode) != 0 {
+		t.Fatal("successful Unicode release must clear pending state")
 	}
 }
 
@@ -162,5 +188,17 @@ func TestStopSafetyHooksReportsPostFailureWithoutWaiting(t *testing.T) {
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("stop waited for hook completion after PostThreadMessage failure")
+	}
+}
+
+func TestDisplayTargetCannotExpandObservedCrop(t *testing.T) {
+	b := &WindowsBackend{displays: map[string]Rect{"display": {X: 0, Y: 0, Width: 1920, Height: 1080}}}
+	o := Observation{Generation: 3, DisplayID: "display", Crop: Rect{X: 100, Y: 200, Width: 101, Height: 101}}
+	_, x, y, err := b.resolveTarget(o, Action{Generation: 3, DisplayID: "display", X: .5, Y: .5})
+	if err != nil || x != 150 || y != 250 {
+		t.Fatalf("coordinates escaped crop: %d,%d err=%v", x, y, err)
+	}
+	if _, _, _, err := b.resolveTarget(o, Action{Generation: 3, DisplayID: "unobserved"}); !errors.Is(err, ErrStaleObservation) {
+		t.Fatal(err)
 	}
 }

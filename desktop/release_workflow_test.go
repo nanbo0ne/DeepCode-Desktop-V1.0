@@ -43,7 +43,7 @@ func TestReleaseChecksumsCoverPayloadAndExcludeManifest(t *testing.T) {
 func TestReleaseChecksumsAreGeneratedBeforePublication(t *testing.T) {
 	workflow := readDesktopReleaseWorkflow(t)
 	checksums := strings.Index(workflow, "bash scripts/checksum-desktop-release.sh dist")
-	publish := strings.Index(workflow, "- name: Publish GitHub release")
+	publish := strings.Index(workflow, "- name: Publish draft GitHub release")
 	manifest := strings.Index(workflow, "- name: Generate manifest")
 	if checksums <= manifest || publish <= checksums {
 		t.Fatal("checksums must include the optional signed manifest and precede publication")
@@ -90,6 +90,15 @@ func TestReleaseWorkflowPreservesReleaseGatesAndTarget(t *testing.T) {
 	}
 }
 
+func TestStableManualDispatchIsMainOnlyBeforeBuild(t *testing.T) {
+	workflow := readDesktopReleaseWorkflow(t)
+	guard := strings.Index(workflow, "- name: Require stable manual dispatch on main")
+	build := strings.Index(workflow, "  build:")
+	if guard < 0 || build < 0 || guard > build {
+		t.Fatal("stable manual dispatch must be restricted to main before platform builds")
+	}
+}
+
 func TestReleaseWorkflowRepackagesSignedPortablePayload(t *testing.T) {
 	workflow := readDesktopReleaseWorkflow(t)
 	section := workflowSection(workflow, "- name: Repackage Windows installer with signed app", "- name: Upload unsigned Windows installer for SignPath")
@@ -125,7 +134,7 @@ func TestReleaseFrontendGateGeneratesNativeBindings(t *testing.T) {
 
 func TestReleaseWorkflowValidatesExistingAnnotatedTagBeforePublish(t *testing.T) {
 	workflow := readDesktopReleaseWorkflow(t)
-	section := workflowSection(workflow, "- name: Validate stable tag target", "# Canary is R2-only")
+	section := workflowSection(workflow, "- name: Validate stable tag target", "# Canary never appears")
 	if section == "" {
 		t.Fatal("stable tag validation step is missing")
 	}
@@ -146,20 +155,23 @@ func TestReleaseWorkflowValidatesExistingAnnotatedTagBeforePublish(t *testing.T)
 	}
 }
 
-func TestReleaseWorkflowSkipsR2WithoutMinisign(t *testing.T) {
+func TestReleaseWorkflowUsesDraftOnlyAndDoesNotRewriteSignedManifest(t *testing.T) {
 	workflow := readDesktopReleaseWorkflow(t)
-	if !strings.Contains(workflow, `HAS_MINISIGN: ${{ secrets.MINISIGN_PRIVATE_KEY != '' && secrets.MINISIGN_PASSWORD != '' }}`) {
-		t.Fatal("mirror job is missing its Minisign availability guard")
+	for _, forbidden := range []string{"R2", "Rewrite latest.json", "--clobber", "gh release edit"} {
+		if strings.Contains(workflow, forbidden) {
+			t.Fatalf("obsolete public mirror/mutation path remains: %q", forbidden)
+		}
 	}
-	section := workflowSection(workflow, "name: mirror to R2", "")
 	for _, want := range []string{
-		`env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true'`,
-		`Skip R2 mirror without Minisign`,
-		`env.HAS_R2 == 'true' && env.HAS_MINISIGN != 'true'`,
-		`existing R2 latest/ is unchanged`,
+		"- name: Sign manifest (minisign)",
+		"- name: Validate packages, manifest, and signatures",
+		"RELEASE_NOTES: ../docs/releases/${{ steps.ver.outputs.tag }}.md",
+		"- name: Publish draft GitHub release",
+		"--draft",
+		"--notes-file \"docs/releases/${{ steps.ver.outputs.tag }}.md\"",
 	} {
-		if !strings.Contains(section, want) {
-			t.Fatalf("R2 guard is missing %q", want)
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("draft signed release workflow is missing %q", want)
 		}
 	}
 }

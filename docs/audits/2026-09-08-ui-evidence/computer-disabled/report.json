@@ -1,0 +1,1958 @@
+{
+  "purpose": "Read-only Computer Use render verification; isolated in-memory fixtures only.",
+  "nativeDesktopStarted": false,
+  "backendConnected": false,
+  "authorizationActionsClicked": false,
+  "cases": [
+    {
+      "id": "modern-zh-1366-approved",
+      "approved": true,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "已授权，可撤销",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 99,
+          "width": 1020,
+          "height": 760,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 346,
+            "y": 257.578125,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.765625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 992,
+              "y": 314.609375,
+              "width": 276,
+              "height": 21,
+              "right": 1268,
+              "bottom": 335.609375
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "已授权，可撤销",
+            "rect": {
+              "x": 1131,
+              "y": 369.796875,
+              "width": 137,
+              "height": 34,
+              "right": 1268,
+              "bottom": 403.796875
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-zh-1366-approved.png"
+    },
+    {
+      "id": "modern-zh-760-approved",
+      "approved": true,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "已授权，可撤销",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 118.796875,
+          "width": 734,
+          "height": 768.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 42,
+            "y": 265.375,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 301.5625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 358.25,
+              "width": 276,
+              "height": 21,
+              "right": 318,
+              "bottom": 379.25
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "已授权，可撤销",
+            "rect": {
+              "x": 42,
+              "y": 448.9375,
+              "width": 137,
+              "height": 34,
+              "right": 179,
+              "bottom": 482.9375
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-zh-760-approved.png"
+    },
+    {
+      "id": "modern-zh-1366-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "暂不可授权",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 99,
+          "width": 1020,
+          "height": 760,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 346,
+            "y": 257.578125,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.765625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 992,
+              "y": 314.609375,
+              "width": 276,
+              "height": 21,
+              "right": 1268,
+              "bottom": 335.609375
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "暂不可授权",
+            "rect": {
+              "x": 1157,
+              "y": 369.796875,
+              "width": 111,
+              "height": 34,
+              "right": 1268,
+              "bottom": 403.796875
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-zh-1366-unapproved.png"
+    },
+    {
+      "id": "modern-zh-760-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "暂不可授权",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 118.796875,
+          "width": 734,
+          "height": 768.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 42,
+            "y": 265.375,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 301.5625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 358.25,
+              "width": 276,
+              "height": 21,
+              "right": 318,
+              "bottom": 379.25
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "暂不可授权",
+            "rect": {
+              "x": 42,
+              "y": 448.9375,
+              "width": 111,
+              "height": 34,
+              "right": 153,
+              "bottom": 482.9375
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-zh-760-unapproved.png"
+    },
+    {
+      "id": "modern-en-1366-approved",
+      "approved": true,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorized; revoke",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 99,
+          "width": 1020,
+          "height": 760,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 346,
+            "y": 257.578125,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.765625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 977,
+              "y": 321.859375,
+              "width": 291,
+              "height": 21,
+              "right": 1268,
+              "bottom": 342.859375
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "Authorized; revoke",
+            "rect": {
+              "x": 1097.578125,
+              "y": 391.546875,
+              "width": 170.421875,
+              "height": 34,
+              "right": 1268,
+              "bottom": 425.546875
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-en-1366-approved.png"
+    },
+    {
+      "id": "modern-en-760-approved",
+      "approved": true,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorized; revoke",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 118.796875,
+          "width": 734,
+          "height": 768.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 42,
+            "y": 265.375,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 301.5625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 358.25,
+              "width": 291,
+              "height": 21,
+              "right": 333,
+              "bottom": 379.25
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "Authorized; revoke",
+            "rect": {
+              "x": 42,
+              "y": 448.9375,
+              "width": 170.421875,
+              "height": 34,
+              "right": 212.421875,
+              "bottom": 482.9375
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-en-760-approved.png"
+    },
+    {
+      "id": "modern-en-1366-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorization unavailable",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 99,
+          "width": 1020,
+          "height": 760,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 346,
+            "y": 257.578125,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.765625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 977,
+              "y": 321.859375,
+              "width": 291,
+              "height": 21,
+              "right": 1268,
+              "bottom": 342.859375
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "Authorization unavailable",
+            "rect": {
+              "x": 1063.09375,
+              "y": 391.546875,
+              "width": 204.90625,
+              "height": 34,
+              "right": 1268,
+              "bottom": 425.546875
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-en-1366-unapproved.png"
+    },
+    {
+      "id": "modern-en-760-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorization unavailable",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "modern",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 118.796875,
+          "width": 734,
+          "height": 768.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 42,
+            "y": 265.375,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 301.5625
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 358.25,
+              "width": 291,
+              "height": 21,
+              "right": 333,
+              "bottom": 379.25
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "Authorization unavailable",
+            "rect": {
+              "x": 42,
+              "y": 448.9375,
+              "width": 204.90625,
+              "height": 34,
+              "right": 246.90625,
+              "bottom": 482.9375
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "modern-en-760-unapproved.png"
+    },
+    {
+      "id": "classic-zh-1366-approved",
+      "approved": true,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "已授权，可撤销",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 100,
+          "width": 1020,
+          "height": 759,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 346,
+            "y": 256.984375,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.171875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 992,
+              "y": 314.015625,
+              "width": 276,
+              "height": 21,
+              "right": 1268,
+              "bottom": 335.015625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "已授权，可撤销",
+            "rect": {
+              "x": 1131,
+              "y": 369.203125,
+              "width": 137,
+              "height": 34,
+              "right": 1268,
+              "bottom": 403.203125
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-zh-1366-approved.png"
+    },
+    {
+      "id": "classic-zh-760-approved",
+      "approved": true,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "已授权，可撤销",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 119.796875,
+          "width": 734,
+          "height": 767.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 42,
+            "y": 264.78125,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 300.96875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 357.65625,
+              "width": 276,
+              "height": 21,
+              "right": 318,
+              "bottom": 378.65625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "已授权，可撤销",
+            "rect": {
+              "x": 42,
+              "y": 448.34375,
+              "width": 137,
+              "height": 34,
+              "right": 179,
+              "bottom": 482.34375
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-zh-760-approved.png"
+    },
+    {
+      "id": "classic-zh-1366-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "暂不可授权",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 100,
+          "width": 1020,
+          "height": 759,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 346,
+            "y": 256.984375,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.171875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 992,
+              "y": 314.015625,
+              "width": 276,
+              "height": 21,
+              "right": 1268,
+              "bottom": 335.015625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "暂不可授权",
+            "rect": {
+              "x": 1157,
+              "y": 369.203125,
+              "width": 111,
+              "height": 34,
+              "right": 1268,
+              "bottom": 403.203125
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-zh-1366-unapproved.png"
+    },
+    {
+      "id": "classic-zh-760-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "电脑控制",
+        "title": "Windows 电脑控制",
+        "notice": "本版本暂时停用电脑控制",
+        "modelHint": "模型配置保留可编辑，保存不会启用电脑控制。",
+        "accessHint": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+        "authorization": "暂不可授权",
+        "authorize": "授权一次"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "zh-CN",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 119.796875,
+          "width": 734,
+          "height": 767.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "本版本暂时停用电脑控制",
+          "rect": {
+            "x": 42,
+            "y": 264.78125,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 300.96875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "自动选择合格模型saved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 357.65625,
+              "width": 276,
+              "height": 21,
+              "right": 318,
+              "bottom": 378.65625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "暂不可授权",
+            "rect": {
+              "x": 42,
+              "y": 448.34375,
+              "width": 111,
+              "height": 34,
+              "right": 153,
+              "bottom": 482.34375
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "模型配置保留可编辑，保存不会启用电脑控制。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "已保存的授权予以保留，可撤销，暂不可新增授权。",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-zh-760-unapproved.png"
+    },
+    {
+      "id": "classic-en-1366-approved",
+      "approved": true,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorized; revoke",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 100,
+          "width": 1020,
+          "height": 759,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 346,
+            "y": 256.984375,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.171875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 977,
+              "y": 321.265625,
+              "width": 291,
+              "height": 21,
+              "right": 1268,
+              "bottom": 342.265625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "Authorized; revoke",
+            "rect": {
+              "x": 1097.578125,
+              "y": 390.953125,
+              "width": 170.421875,
+              "height": 34,
+              "right": 1268,
+              "bottom": 424.953125
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-en-1366-approved.png"
+    },
+    {
+      "id": "classic-en-760-approved",
+      "approved": true,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorized; revoke",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 119.796875,
+          "width": 734,
+          "height": 767.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 42,
+            "y": 264.78125,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 300.96875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 357.65625,
+              "width": 291,
+              "height": 21,
+              "right": 333,
+              "bottom": 378.65625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--primary",
+            "label": "Authorized; revoke",
+            "rect": {
+              "x": 42,
+              "y": 448.34375,
+              "width": 170.421875,
+              "height": 34,
+              "right": 212.421875,
+              "bottom": 482.34375
+            },
+            "disabled": false,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-en-760-approved.png"
+    },
+    {
+      "id": "classic-en-1366-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorization unavailable",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 1366,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 48,
+          "y": 40,
+          "width": 1270,
+          "height": 820,
+          "right": 1318,
+          "bottom": 860
+        },
+        "content": {
+          "x": 297,
+          "y": 100,
+          "width": 1020,
+          "height": 759,
+          "right": 1317,
+          "bottom": 859
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 346,
+            "y": 256.984375,
+            "width": 922,
+            "height": 36.1875,
+            "right": 1268,
+            "bottom": 293.171875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 977,
+              "y": 321.265625,
+              "width": 291,
+              "height": 21,
+              "right": 1268,
+              "bottom": 342.265625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "Authorization unavailable",
+            "rect": {
+              "x": 1063.09375,
+              "y": 390.953125,
+              "width": 204.90625,
+              "height": 34,
+              "right": 1268,
+              "bottom": 424.953125
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-en-1366-unapproved.png"
+    },
+    {
+      "id": "classic-en-760-unapproved",
+      "approved": false,
+      "expected": {
+        "tab": "Computer Use",
+        "title": "Windows Computer Use",
+        "notice": "Computer use is temporarily disabled in this version.",
+        "modelHint": "Model settings are kept. Editing them will not enable computer use.",
+        "accessHint": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+        "authorization": "Authorization unavailable",
+        "authorize": "Authorize once"
+      },
+      "checks": {
+        "expectedStyle": true,
+        "expectedLocale": true,
+        "noticeFullyVisible": true,
+        "savedModelRetainedAndEditable": true,
+        "authorizationState": true,
+        "noNewAuthorizationOrStart": true,
+        "preservedSettingsExplanation": true,
+        "noHorizontalOverflow": true,
+        "noControlClipping": true,
+        "noOverlap": true
+      },
+      "pass": true,
+      "geometry": {
+        "viewport": {
+          "width": 760,
+          "height": 900,
+          "dpr": 1
+        },
+        "style": "classic",
+        "language": "en",
+        "rootHorizontalOverflow": 0,
+        "modal": {
+          "x": 12,
+          "y": 12,
+          "width": 736,
+          "height": 876,
+          "right": 748,
+          "bottom": 888
+        },
+        "content": {
+          "x": 13,
+          "y": 119.796875,
+          "width": 734,
+          "height": 767.203125,
+          "right": 747,
+          "bottom": 887
+        },
+        "notice": {
+          "text": "Computer use is temporarily disabled in this version.",
+          "rect": {
+            "x": 42,
+            "y": 264.78125,
+            "width": 676,
+            "height": 36.1875,
+            "right": 718,
+            "bottom": 300.96875
+          },
+          "textClipped": false
+        },
+        "controls": [
+          {
+            "tag": "SELECT",
+            "class": "settings-select",
+            "label": "Automatically choose a compatible modelsaved-provider/saved-control-modeldeepseek/deepseek-v4-flashdeepseek/deepseek-v4-prodeepseek/deepseek-v4-flash-vision-expmimo-token-plan/mimo-v2.5-pro",
+            "rect": {
+              "x": 42,
+              "y": 357.65625,
+              "width": 291,
+              "height": 21,
+              "right": 333,
+              "bottom": 378.65625
+            },
+            "disabled": false,
+            "value": "saved-provider/saved-control-model"
+          },
+          {
+            "tag": "BUTTON",
+            "class": "btn btn--ghost",
+            "label": "Authorization unavailable",
+            "rect": {
+              "x": 42,
+              "y": 448.34375,
+              "width": 204.90625,
+              "height": 34,
+              "right": 246.90625,
+              "bottom": 482.34375
+            },
+            "disabled": true,
+            "value": ""
+          }
+        ],
+        "clippedControls": [],
+        "overflowingContainers": [],
+        "overlaps": [],
+        "hints": [
+          {
+            "text": "Model settings are kept. Editing them will not enable computer use.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          },
+          {
+            "text": "Saved authorization is kept and can be revoked. New authorization is unavailable.",
+            "ellipsized": false,
+            "textOverflow": "clip"
+          }
+        ]
+      },
+      "screenshot": "classic-en-760-unapproved.png"
+    }
+  ],
+  "contexts": [
+    {
+      "style": "modern",
+      "lang": "zh",
+      "approved": true,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "modern",
+      "lang": "zh",
+      "approved": false,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "modern",
+      "lang": "en",
+      "approved": true,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "modern",
+      "lang": "en",
+      "approved": false,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "classic",
+      "lang": "zh",
+      "approved": true,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "classic",
+      "lang": "zh",
+      "approved": false,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "classic",
+      "lang": "en",
+      "approved": true,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    },
+    {
+      "style": "classic",
+      "lang": "en",
+      "approved": false,
+      "errors": [],
+      "blockedRequests": [],
+      "allowedRequests": 145,
+      "bridge": {
+        "calls": [
+          "Settings",
+          "Settings",
+          "Version",
+          "Version",
+          "GetComputerUseState",
+          "GetComputerUseState"
+        ],
+        "prohibitedCalls": []
+      }
+    }
+  ],
+  "sourceHashBefore": "4676b804c4e9e87d1a39b177b373065898e27bccc0f5c874b11940dd4ad2c8f2",
+  "sourceHashAfter": "4676b804c4e9e87d1a39b177b373065898e27bccc0f5c874b11940dd4ad2c8f2",
+  "sourceUnchanged": true,
+  "pass": true
+}

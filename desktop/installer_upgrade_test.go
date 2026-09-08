@@ -88,6 +88,20 @@ func TestWindowsInstallerUpgradeAndUninstallContracts(t *testing.T) {
 	}
 }
 
+func TestWindowsInstallerClosesOnlyExactRuntimePaths(t *testing.T) {
+	script := readWindowsInstallerSource(t)
+	want := `$$targetPaths = @([IO.Path]::Combine($$targetDir, 'Orca.exe'), [IO.Path]::Combine($$targetDir, 'deepseek-orca-desktop.exe'), [IO.Path]::Combine($$targetDir, 'node.exe'), [IO.Path]::Combine($$targetDir, 'codegraph', 'node.exe'))`
+	if strings.Count(script, want) != 2 {
+		t.Fatalf("installer must use the exact root and codegraph node paths in install and uninstall, count=%d", strings.Count(script, want))
+	}
+	if !strings.Contains(script, `Get-Process -Name $$names -ErrorAction SilentlyContinue | Where-Object`) {
+		t.Fatal("runtime process matching must filter by resolved full path")
+	}
+	if strings.Contains(script, `taskkill.exe" /IM`) || strings.Contains(script, `taskkill /IM`) {
+		t.Fatal("installer must not terminate runtimes by image name alone")
+	}
+}
+
 func TestWindowsProductNamePreservesUpgradeIdentifiers(t *testing.T) {
 	data, err := os.ReadFile("wails.json")
 	if err != nil {

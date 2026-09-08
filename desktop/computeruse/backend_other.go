@@ -2,4 +2,4 @@
 
 package computeruse
 
-func NewPlatformBackend() Backend { return nil }
+func newNativeBackend() Backend { return nil }

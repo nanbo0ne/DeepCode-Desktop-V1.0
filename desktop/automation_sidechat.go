@@ -29,6 +29,11 @@ func (a *App) PauseAutomation(id string) error {
 }
 
 func (a *App) ResumeAutomation(id string) error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	if hosttools.ResumeAutomation(id) {
 		return nil
 	}
@@ -144,6 +149,11 @@ func (a *App) CancelSideChat(tabID string) error {
 }
 
 func (a *App) SendSideChat(tabID, input string) error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return nil

@@ -5,12 +5,12 @@
 #
 # Output lands in <repo>/dist/ with stable, platform-keyed names that
 # desktop/cmd/sign's `manifest` subcommand maps back to update.PlatformKey:
-#   macOS:   O.R.C.A-darwin-<arch>.zip                       (ditto archive; updater channel)
-#            O.R.C.A-darwin-universal.dmg                    (drag-to-install; human download)
+#   macOS:   O.R.C.A-macos-universal.dmg                     (manifest/release artifact)
+#            O.R.C.A-darwin-<arch>.zip                       (auxiliary app archive)
 #   Windows: O.R.C.A-for-Windows-windows-<arch>-installer.exe (NSIS per-user installer)
 #            O.R.C.A-for-Windows-windows-<arch>.zip           (portable human download)
-#   Linux:   O.R.C.A-linux-<arch>.tar.gz                     (bare binary; updater channel)
-#            O.R.C.A-linux-<arch>.deb                        (Debian/Ubuntu package; human download)
+#   Linux:   O.R.C.A-linux-<arch>.deb                        (manifest/release artifact)
+#            O.R.C.A-linux-<arch>.tar.gz                     (auxiliary bare binary archive)
 #
 # Usage: scripts/desktop-build.sh <os/arch> <version> [channel]
 #   e.g. scripts/desktop-build.sh darwin/arm64 v1.1.0
@@ -225,6 +225,9 @@ copy_stable_windows_installer() {
 
 verify_windows_installer_archive() {
 	local installer="$1"
+	case "$installer" in
+		*.exe) go -C "$ROOT/desktop" run ./cmd/nsischeck "$installer" ;;
+	esac
 	local seven_zip=""
 
 	if command -v 7z >/dev/null 2>&1; then
@@ -324,9 +327,9 @@ darwin)
 	else
 		ditto -c -k --keepParent "$app" "$ROOT/dist/${ARTIFACT_BASE}-darwin-${arch}.zip"
 	fi
-	# A drag-to-Applications .dmg for first-time human download. Named -universal so
-	# cmd/sign's substring match (darwin-arm64/darwin-amd64) skips it: the .zip stays
-	# the updater channel, the .dmg is release-page only. create-dmg can exit nonzero
+	# A drag-to-Applications .dmg for the manifest and first-time human download.
+	# Named -universal so it is one artifact for both darwin manifest keys. The .zip
+	# remains an auxiliary app archive. create-dmg can exit nonzero
 	# while still writing the image, so gate on the file existing, not the exit code.
 	dmgsrc=$(mktemp -d)
 	cp -R "$app" "$dmgsrc/${APPNAME}.app"
@@ -386,9 +389,9 @@ windows)
 	;;
 linux)
 	tar -czf "$ROOT/dist/${ARTIFACT_BASE}-linux-${arch}.tar.gz" -C build/bin "$BINNAME"
-	# Also build a .deb for Debian/Ubuntu users (goreleaser/nfpm; see
-	# desktop/build/linux/nfpm.yaml). Human-download only: the Linux updater channel
-	# stays the tarball and cmd/sign's manifest skips .deb files. nfpm reads
+	# Also build the manifest/release .deb for Debian/Ubuntu users (goreleaser/nfpm;
+	# see desktop/build/linux/nfpm.yaml). The tar.gz remains an auxiliary bare-binary
+	# archive. nfpm reads
 	# $DEB_VERSION/$DEB_ARCH — dpkg wants a strict numeric version, so reuse numver.
 	DEB_VERSION="$numver" DEB_ARCH="$arch" \
 		nfpm package --config build/linux/nfpm.yaml --packager deb \

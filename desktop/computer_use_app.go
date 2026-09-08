@@ -11,12 +11,19 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/desktop/computeruse"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/boot"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/config"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/localai"
-	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/visioncap"
 )
 
 const computerUseConsentVersion = 1
+
+func (a *App) computerUseAvailability() error {
+	if a.computerUse == nil {
+		return computeruse.ErrNotSupported
+	}
+	return a.computerUse.Availability()
+}
 
 type ComputerUseState struct {
 	Capabilities   computeruse.Capabilities `json:"capabilities"`
@@ -32,7 +39,14 @@ func (a *App) GetComputerUseState() ComputerUseState {
 		state.Capabilities = a.computerUse.Capabilities()
 		state.Session = a.computerUse.Current()
 	}
-	if cfg, err := config.LoadForRoot(a.activeWorkspaceRoot()); err == nil {
+	var cfg *config.Config
+	var err error
+	if state.Session.TabID != "" {
+		cfg, err = a.computerTaskConfig(state.Session.TabID)
+	} else {
+		cfg, err = config.LoadForRoot(a.activeWorkspaceRoot())
+	}
+	if err == nil {
 		state.Approved = cfg.Desktop.ComputerUseFullAccess && cfg.Desktop.ComputerUseConsent == computerUseConsentVersion
 		state.ConsentVersion = cfg.Desktop.ComputerUseConsent
 		state.ModelRef = strings.TrimSpace(cfg.Desktop.ComputerControlModel)
@@ -41,6 +55,11 @@ func (a *App) GetComputerUseState() ComputerUseState {
 }
 
 func (a *App) SetComputerUseFullAccess(enabled bool) error {
+	if enabled {
+		if err := a.computerUseAvailability(); err != nil {
+			return err
+		}
+	}
 	if !enabled && a.computerUse != nil {
 		_ = a.computerUse.Stop("authorization revoked")
 	}
@@ -56,10 +75,22 @@ func (a *App) SetComputerUseFullAccess(enabled bool) error {
 }
 
 func (a *App) StartComputerUseSession(request computeruse.StartRequest) (computeruse.Session, error) {
-	if a.computerUse == nil || !a.computerUse.Capabilities().Supported {
-		return computeruse.Session{}, computeruse.ErrNotSupported
+	done, err := a.beginAppWork()
+	if err != nil {
+		return computeruse.Session{}, err
 	}
-	cfg, err := config.LoadForRoot(a.activeWorkspaceRoot())
+	defer done()
+	if err := a.computerUseAvailability(); err != nil {
+		return computeruse.Session{}, err
+	}
+	if request.ResumeSessionID != "" {
+		return computeruse.Session{}, fmt.Errorf("resume through computer_task so the isolated controller is restarted")
+	}
+	request, err = a.computerTaskRequest(request)
+	if err != nil {
+		return computeruse.Session{}, err
+	}
+	cfg, err := a.computerTaskConfig(request.TabID)
 	if err != nil {
 		return computeruse.Session{}, err
 	}
@@ -71,6 +102,17 @@ func (a *App) StartComputerUseSession(request computeruse.StartRequest) (compute
 		return computeruse.Session{}, err
 	}
 	request.ModelRef = modelRef
+	entry, err := a.computerProviderEntry(a.bootContext(), cfg, modelRef)
+	if err != nil {
+		return computeruse.Session{}, err
+	}
+	prov, err := boot.NewProviderWithProxy(entry, cfg.NetworkProxySpec())
+	if err != nil {
+		return computeruse.Session{}, err
+	}
+	if err := qualifyComputerProvider(a.bootContext(), prov, entry); err != nil {
+		return computeruse.Session{}, err
+	}
 	return a.computerUse.Start(a.bootContext(), request)
 }
 
@@ -96,8 +138,13 @@ func (a *App) PauseComputerUse() (computeruse.Session, error) {
 }
 
 func (a *App) ResumeComputerUse() (computeruse.Session, error) {
-	if a.computerUse == nil {
-		return computeruse.Session{}, computeruse.ErrNotSupported
+	done, err := a.beginAppWork()
+	if err != nil {
+		return computeruse.Session{}, err
+	}
+	defer done()
+	if err := a.computerUseAvailability(); err != nil {
+		return computeruse.Session{}, err
 	}
 	return a.computerUse.Resume(a.bootContext())
 }
@@ -110,30 +157,37 @@ func (a *App) StopComputerUse() error {
 }
 
 func (a *App) resolveComputerControlModel(cfg *config.Config, requested string) (string, error) {
-	candidates := []string{strings.TrimSpace(requested), strings.TrimSpace(cfg.Desktop.ComputerControlModel), strings.TrimSpace(cfg.Agent.SubagentModel), strings.TrimSpace(cfg.DefaultModel)}
-	seen := map[string]bool{}
-	for _, ref := range candidates {
-		if ref == "" || seen[ref] {
-			continue
-		}
-		seen[ref] = true
-		entry, ok := cfg.ResolveModel(ref)
-		if !ok {
-			continue
-		}
-		canonical := entry.Name + "/" + entry.Model
-		if entry.Name == localai.ProviderID {
-			if spec, ok := localai.ModelByID(entry.Model); ok && spec.Vision && spec.ToolUse {
-				return canonical, nil
-			}
-			continue
-		}
-		capability := visioncap.Load("").Get(entry)
-		if capability.Status == visioncap.Supported {
-			return canonical, nil
+	ref := strings.TrimSpace(requested)
+	if ref == "" {
+		ref = strings.TrimSpace(cfg.Desktop.ComputerControlModel)
+	}
+	if ref == "" {
+		ref = cfg.ResolveVisionModelRef()
+	}
+	entry, ok := cfg.ResolveModel(ref)
+	if ref == "" || !ok {
+		return "", fmt.Errorf("unknown or unset computer control model %q", ref)
+	}
+	if entry.Name == localai.ProviderID {
+		spec, ok := localai.ModelByID(entry.Model)
+		if !ok || !spec.Vision || !spec.ToolUse {
+			return "", fmt.Errorf("computer control model %q requires image and structured tool support", ref)
 		}
 	}
-	return "", fmt.Errorf("没有已确认支持图片和结构化动作的电脑控制模型，请先在设置中选择并完成视觉能力检测")
+	// Cloud ability is measured separately before Start; metadata is not proof.
+	return entry.Name + "/" + entry.Model, nil
+}
+
+func (a *App) computerTaskConfig(tabID string) (*config.Config, error) {
+	a.mu.RLock()
+	tab := a.tabs[strings.TrimSpace(tabID)]
+	if tab == nil || strings.TrimSpace(tab.WorkspaceRoot) == "" {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("computer task requires a valid owning tab and workspace")
+	}
+	root := tab.WorkspaceRoot
+	a.mu.RUnlock()
+	return config.LoadForRoot(root)
 }
 
 func (a *App) onComputerUseEvent(event computeruse.Event) {

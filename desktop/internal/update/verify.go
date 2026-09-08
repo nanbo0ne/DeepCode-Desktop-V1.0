@@ -3,23 +3,40 @@ package update
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"aead.dev/minisign"
 )
 
 // publicKey is the minisign public key that desktop release artifacts are signed
 // with. The public half is safe to embed; the private half lives only in CI
-// secrets (generated with `cmd/sign genkey`). Key ID AF12CA46F4A9EBB0. If the
+// secrets (generated with `cmd/sign genkey`). Key ID 178D39527CF1DEF1. If the
 // signing key is ever rotated, regenerate and update this constant in lockstep
 // with the CI secret.
-const publicKey = `untrusted comment: minisign public key: AF12CA46F4A9EBB0
-RWSw66n0RsoSr6Zhh6qt5YO95YkpCayTOCMFVDNUQSjJYwxoYngNVBSq`
+const publicKey = `untrusted comment: minisign public key: 178D39527CF1DEF1
+RWTx3vF8UjmNF95ecGsXiIO9rbaIF21gn2MW0extHtfijgpEETX0Mrrl`
 
 // Verify reports whether sig (the contents of a .minisig file) is a valid minisign
 // signature of data under the embedded public key. A nil return means the artifact
 // is authentic; any error means do not trust it. Callers MUST verify before
 // touching disk — never apply an update whose signature has not checked out.
 func Verify(data, sig []byte) error { return verifyWith(publicKey, data, sig) }
+
+// VerifyReader verifies a prehashed Minisign signature without buffering a package.
+func VerifyReader(r io.Reader, sig []byte) error {
+	var key minisign.PublicKey
+	if err := key.UnmarshalText([]byte(publicKey)); err != nil {
+		return err
+	}
+	reader := minisign.NewReader(r)
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return err
+	}
+	if !reader.Verify(key, sig) {
+		return errors.New("update: signature verification failed")
+	}
+	return nil
+}
 
 // PublicKey returns the embedded public key in its canonical two-line text form,
 // so docs/UI can surface it for manual `minisign -Vm <file>` verification.

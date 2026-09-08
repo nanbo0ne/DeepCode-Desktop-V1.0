@@ -11,7 +11,7 @@ import { persistUIStyle, UI_STYLES, type UIStyle } from "../lib/uiStyle";
 import { checkDesktopUpdate } from "../lib/updateCheck";
 import type { BotConnectionView, BotInstallStartResult, BotSettingsView, ComputerUseState, LocalAICatalogView, NetworkView, ProcessDisplayMode, ProductCapabilities, PromptMode, ProviderView, SettingsTab, SettingsView, VisionCapability } from "../lib/types";
 import { normalizeLocalAICatalog } from "../lib/localAI";
-import { localDownloadActions, wrappedFocusIndex, type LocalDownloadAction } from "../lib/settingsPanelState";
+import { canChangeComputerUseAuthorization, localDownloadActions, wrappedFocusIndex, type LocalDownloadAction } from "../lib/settingsPanelState";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { InlineConfirmButton } from "./InlineConfirmButton";
 import { Tooltip } from "./Tooltip";
@@ -488,16 +488,28 @@ function ComputerUseSection({ s, busy, apply }: SectionProps) {
   const [state, setState] = useState<ComputerUseState | null>(null);
   const reload = () => { void app.GetComputerUseState().then(setState).catch(() => {}); };
   useEffect(() => { reload(); return onComputerUseChanged(reload); }, []);
-  const modelOptions = s.providers.flatMap((provider) => provider.models.map((model) => `${provider.name}/${model}`));
+  const temporarilyDisabled = state?.capabilities.temporarilyDisabled === true;
+  const authorizationAllowed = canChangeComputerUseAuthorization(state?.capabilities, s.computerUseFullAccessApproved);
+  const modelOptions = [...new Set([
+    s.computerControlModel,
+    ...s.providers.flatMap((provider) => provider.models.map((model) => `${provider.name}/${model}`)),
+  ].filter(Boolean))];
+  const changeAuthorization = () => {
+    if (busy || !authorizationAllowed) return;
+    void apply(() => app.SetComputerUseFullAccess(!s.computerUseFullAccessApproved));
+  };
   return <>
-    <SettingsSection title={t("settings.computer.title")} description={t("settings.computer.description")}>
-      <SettingsField label={t("settings.computer.controlModel")} hint={t("settings.computer.modelHint")}>
+    <SettingsSection title={t("settings.computer.title")} description={temporarilyDisabled ? undefined : t("settings.computer.description")}>
+      {temporarilyDisabled && <div className="banner banner--error" role="status"><strong>{t("settings.computer.temporarilyDisabled")}</strong></div>}
+      <SettingsField label={t("settings.computer.controlModel")} hint={t(temporarilyDisabled ? "settings.computer.disabledModelHint" : "settings.computer.modelHint")}>
         <select className="settings-select" disabled={busy} value={s.computerControlModel || ""} onChange={(event) => void apply(() => app.SetComputerControlModel(event.target.value))}><option value="">{t("settings.computer.autoSelect")}</option>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select>
       </SettingsField>
-      <SettingsField label={t("settings.computer.fullAccess")} hint={t("settings.computer.fullAccessHint")}>
-        <button className={`btn ${s.computerUseFullAccessApproved ? "btn--primary" : "btn--ghost"}`} disabled={busy || !state?.capabilities.supported} onClick={() => void apply(() => app.SetComputerUseFullAccess(!s.computerUseFullAccessApproved))}>{s.computerUseFullAccessApproved ? <><ShieldCheck size={14} />{t("settings.computer.authorized")}</> : <><ShieldCheck size={14} />{t("settings.computer.authorize")}</>}</button>
+      <SettingsField label={t("settings.computer.fullAccess")} hint={t(temporarilyDisabled ? "settings.computer.disabledAccessHint" : "settings.computer.fullAccessHint")}>
+        <button className={`btn ${s.computerUseFullAccessApproved ? "btn--primary" : "btn--ghost"}`} disabled={busy || !authorizationAllowed} onClick={changeAuthorization}>
+          <ShieldCheck size={14} />{s.computerUseFullAccessApproved ? t("settings.computer.authorized") : t(temporarilyDisabled ? "settings.computer.authorizationUnavailable" : "settings.computer.authorize")}
+        </button>
       </SettingsField>
-      {state && <div className="settings-field__hint-line">{state.capabilities.supported ? t("settings.computer.capabilities", { details: [state.capabilities.uiAutomation ? t("settings.computer.uiAutomation") : t("settings.computer.noUiAutomation"), state.capabilities.screenCapture ? t("settings.computer.screenCapture") : t("settings.computer.noScreenCapture"), state.capabilities.overlay ? t("settings.computer.overlay") : t("settings.computer.noOverlay")].join(", ") }) : t("settings.computer.unavailable", { reason: state.capabilities.unavailableReason || t("settings.computer.platformUnsupported") })}</div>}
+      {state && !temporarilyDisabled && <div className="settings-field__hint-line">{state.capabilities.supported ? t("settings.computer.capabilities", { details: [state.capabilities.uiAutomation ? t("settings.computer.uiAutomation") : t("settings.computer.noUiAutomation"), state.capabilities.screenCapture ? t("settings.computer.screenCapture") : t("settings.computer.noScreenCapture"), state.capabilities.overlay ? t("settings.computer.overlay") : t("settings.computer.noOverlay")].join(", ") }) : t("settings.computer.unavailable", { reason: state.capabilities.unavailableReason || t("settings.computer.platformUnsupported") })}</div>}
     </SettingsSection>
   </>;
 }
@@ -576,7 +588,7 @@ function settingsTabMeta(id: SettingsTab, s: SettingsView, t: ReturnType<typeof 
 		case "localAI":
 			return "llama.cpp";
 		case "computer":
-			return s.computerUseFullAccessApproved ? t("settings.computer.authorized") : t("settings.computer.authorize");
+			return t("settings.computer.controlModel");
 		case "about":
 			return "O.R.C.A.";
   }
@@ -2079,6 +2091,18 @@ function ModelsSection({ s, busy, apply, backgroundApply }: ModelsSectionProps) 
                   </option>
                 ))}
               </select>
+            </SettingsField>
+
+            <SettingsField label={t("settings.visionModel")} hint={t("settings.visionModelHint")}>
+              <ModelPicker
+                s={s}
+                refs={refs}
+                value={s.visionModel ?? ""}
+                disabled={busy}
+                emptyOptionLabel={t("settings.visionModelAuto")}
+                emptyOptionHint={s.effectiveVisionModel || t("common.auto")}
+                onPick={(ref) => void apply(() => app.SetVisionModel(ref))}
+              />
             </SettingsField>
 
             <SettingsField label={t("settings.visionEnabled")} hint={t("settings.visionEnabledHint")}>

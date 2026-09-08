@@ -1,4 +1,13 @@
+import type { ComputerUseCapabilities } from "./types";
+
 export type LocalDownloadAction = "pause" | "resume" | "cancel" | "retry" | "redownload";
+
+export function canChangeComputerUseAuthorization(
+  capabilities: Pick<ComputerUseCapabilities, "supported" | "temporarilyDisabled"> | null | undefined,
+  approved: boolean,
+): boolean {
+  return approved || (capabilities?.supported === true && capabilities.temporarilyDisabled !== true);
+}
 
 // Keep the UI state machine explicit: a task should never offer resume while it
 // is verifying, and terminal states need a path back to a fresh download.

@@ -8,6 +8,7 @@ import { app, onFilesDropped } from "../lib/bridge";
 import { SPINNER_WORDS, useI18n } from "../lib/i18n";
 import { clearLayoutSize } from "../lib/layoutPreferences";
 import { composerDraftState } from "../lib/composerRunningAction";
+import { clearComposerDraft, ComposerDraftFlushError, loadComposerDraft, persistComposerDraft, registerComposerDraftFlusher } from "../lib/composerDraftPersistence";
 import { useToast } from "../lib/toast";
 import { type CollaborationMode, type CommandInfo, type ComposerInsertRequest, type DirEntry, type EffortInfo, type HistoryMessage, type Mode, type PromptMode, type RuntimeSwitchProgress, type SessionMeta, type SessionReference, type SlashArgItem, type SlashArgsResult, type ToolApprovalMode } from "../lib/types";
 import {
@@ -54,6 +55,7 @@ export type ComposerDraftSnapshot = {
   attachments: readonly unknown[];
   workspaceRefs: readonly unknown[];
   sessionRefs: readonly unknown[];
+  pendingPaste?: number;
 };
 
 export function sameComposerDraft(a: ComposerDraftSnapshot, b: ComposerDraftSnapshot): boolean {
@@ -94,6 +96,12 @@ export async function submitComposerDraft(
     reportError(error);
     return false;
   }
+}
+
+function hasUnsettledDraftAttachment(attachment: unknown): boolean {
+  if (typeof attachment !== "object" || attachment === null) return true;
+  const item = attachment as { status?: unknown; path?: unknown };
+  return item.status !== "ready" || typeof item.path !== "string" || item.path.length === 0;
 }
 
 function baseName(path: string): string {
@@ -459,9 +467,13 @@ export function Composer({
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const now = useTick(running);
-  const [text, setText] = useState("");
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [workspaceRefs, setWorkspaceRefs] = useState<WorkspaceReference[]>([]);
+  const initialDraftRef = useRef(loadComposerDraft(tabId));
+  const [text, setText] = useState(() => initialDraftRef.current?.text ?? "");
+  const [attachments, setAttachments] = useState<Attachment[]>(() => (initialDraftRef.current?.attachments ?? []).map((attachment) => ({
+    ...attachment,
+    status: "ready" as const,
+  })));
+  const [workspaceRefs, setWorkspaceRefs] = useState<WorkspaceReference[]>(() => initialDraftRef.current?.workspaceRefs ?? []);
   const [pendingPaste, setPendingPaste] = useState(0);
   const attachmentSequenceRef = useRef(0);
   const [active, setActive] = useState(0);
@@ -479,7 +491,7 @@ export function Composer({
   const [showPastChats, setShowPastChats] = useState(false);
   const [pastChats, setPastChats] = useState<SessionMeta[]>([]);
   const [pastChatQuery, setPastChatQuery] = useState("");
-  const [sessionRefs, setSessionRefs] = useState<SessionReference[]>([]);
+  const [sessionRefs, setSessionRefs] = useState<SessionReference[]>(() => initialDraftRef.current?.sessionRefs ?? []);
   const [loadingPastChats, setLoadingPastChats] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [composerPrompt, setComposerPrompt] = useState<string | null>(null);
@@ -504,8 +516,43 @@ export function Composer({
   const consumedPasteRequestRef = useRef(0);
   const lastTransientDismissSignal = useRef(transientDismissSignal);
   const submittingRef = useRef(false);
-  const draftSnapshotRef = useRef<ComposerDraftSnapshot>({ tabId, text, attachments, workspaceRefs, sessionRefs });
-  draftSnapshotRef.current = { tabId, text, attachments, workspaceRefs, sessionRefs };
+  const draftSnapshotRef = useRef<ComposerDraftSnapshot>({ tabId, text, attachments, workspaceRefs, sessionRefs, pendingPaste });
+  draftSnapshotRef.current = { tabId, text, attachments, workspaceRefs, sessionRefs, pendingPaste };
+  useEffect(() => {
+    persistComposerDraft({ tabId, text, attachments, workspaceRefs, sessionRefs });
+  }, [tabId, text, attachments, workspaceRefs, sessionRefs]);
+  useEffect(() => {
+    const flush = () => {
+      const snapshot = draftSnapshotRef.current;
+      if ((snapshot.pendingPaste ?? 0) > 0 || snapshot.attachments.some(hasUnsettledDraftAttachment)) {
+        throw new ComposerDraftFlushError();
+      }
+      persistComposerDraft(snapshot, { strict: true });
+    };
+    const unregister = registerComposerDraftFlusher(flush);
+    return () => {
+      unregister();
+      try {
+        flush();
+      } catch {
+        // An unfinished upload is reported by the updater before installation.
+      }
+    };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const restorable = attachments.filter((attachment) => attachment.status === "ready" && attachment.path && !attachment.previewUrl);
+    if (restorable.length === 0) return;
+    for (const attachment of restorable) {
+      void app.AttachmentDataURL(attachment.path!).then((previewUrl) => {
+        if (cancelled || !previewUrl) return;
+        setAttachments((current) => current.map((item) => item.id === attachment.id ? { ...item, previewUrl } : item));
+      }).catch(() => {
+        // The persisted file may have moved; keep its metadata so it remains visible.
+      });
+    }
+    return () => { cancelled = true; };
+  }, [attachments]);
   const nativeClipboardPasteTimerRef = useRef<number | null>(null);
   // Snapshot of the current cwd so async callbacks (openPastChats) can detect
   // workspace switches and discard stale responses (issue #3601).
@@ -979,6 +1026,7 @@ export function Composer({
           clearAttachments();
           setWorkspaceRefs([]);
           setSessionRefs([]);
+          clearComposerDraft(tabId);
         },
         (error) => {
           const detail = error instanceof Error ? error.message : String(error);

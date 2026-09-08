@@ -10,6 +10,7 @@ import (
 type sessionExecutionGate struct {
 	mu    sync.Mutex
 	locks map[string]*sessionExecutionLock
+	admit func() (func(), error)
 }
 
 type sessionExecutionLock struct {
@@ -22,12 +23,23 @@ func newSessionExecutionGate() *sessionExecutionGate {
 }
 
 func (g *sessionExecutionGate) Acquire(ctx context.Context, path string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if g == nil {
 		return func() {}, nil
 	}
+	finish := func() {}
+	if g.admit != nil {
+		var err error
+		finish, err = g.admit()
+		if err != nil {
+			return nil, err
+		}
+	}
 	key := canonicalExecutionPath(path)
 	if key == "" {
-		return func() {}, nil
+		return finish, nil
 	}
 	g.mu.Lock()
 	lock := g.locks[key]
@@ -42,10 +54,11 @@ func (g *sessionExecutionGate) Acquire(ctx context.Context, path string) (func()
 	select {
 	case <-ctx.Done():
 		g.releaseRef(key, lock, false)
+		finish()
 		return nil, ctx.Err()
 	case <-lock.token:
 		var once sync.Once
-		return func() { once.Do(func() { g.releaseRef(key, lock, true) }) }, nil
+		return func() { once.Do(func() { g.releaseRef(key, lock, true); finish() }) }, nil
 	}
 }
 

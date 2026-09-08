@@ -523,6 +523,8 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 }
 
 func (a *Agent) RunRich(ctx context.Context, input RichInput) error {
+	ctx, endTurn := WithParentTurn(ctx)
+	defer endTurn()
 	defer a.clearSteerQueue()
 	a.steerMu.Lock()
 	a.steerConsumed = false

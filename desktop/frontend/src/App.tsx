@@ -42,6 +42,7 @@ import { AppChrome } from "./components/AppChrome";
 import { ProjectTree } from "./components/ProjectTree";
 import { NewSessionChooser } from "./components/NewSessionChooser";
 import { CopyButton } from "./components/CopyButton";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { AutomationPanel } from "./components/AutomationPanel";
 import { ToolLibraryPanel } from "./components/ToolLibraryPanel";
 import { SideChatPanel } from "./components/SideChatPanel";
@@ -68,6 +69,7 @@ import {
   type UpdateInfo,
 } from "./lib/types";
 import { checkDesktopUpdate, UPDATE_AVAILABLE_EVENT, UPDATE_CHECK_INTERVAL_MS } from "./lib/updateCheck";
+import { acceptUpdate, dismissUpdate, reopenUpdate, shouldShowUpdate } from "./lib/updaterBannerState";
 import {
   controllerCollaborationMode,
   displayedCollaborationMode,
@@ -551,6 +553,7 @@ export default function App() {
 	const activeUIStyleRef = useRef<UIStyle>(getUIStyle());
   const [checkUpdatesEnabled, setCheckUpdatesEnabled] = useState<boolean | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateDismissal, setUpdateDismissal] = useState({ version: "", dismissed: false });
   const [automationPanelOpen, setAutomationPanelOpen] = useState(false);
   const [toolLibraryPanelOpen, setToolLibraryPanelOpen] = useState(false);
   const [histView, setHistView] = useState<HistoryViewState | null>(null);
@@ -765,9 +768,13 @@ export default function App() {
   }, [applyDesktopPreferences]);
 
   useEffect(() => {
+    const acceptAvailableUpdate = (info: UpdateInfo) => {
+      setUpdateInfo(info);
+      setUpdateDismissal((current) => acceptUpdate(current, info.latest));
+    };
     const onUpdate = (event: Event) => {
       const detail = (event as CustomEvent<UpdateInfo>).detail;
-      if (detail?.available) setUpdateInfo(detail);
+      if (detail?.available) acceptAvailableUpdate(detail);
     };
     window.addEventListener(UPDATE_AVAILABLE_EVENT, onUpdate);
     return () => window.removeEventListener(UPDATE_AVAILABLE_EVENT, onUpdate);
@@ -776,6 +783,7 @@ export default function App() {
   useEffect(() => {
     if (!checkUpdatesEnabled) {
       setUpdateInfo(null);
+      setUpdateDismissal({ version: "", dismissed: false });
       return undefined;
     }
     let cancelled = false;
@@ -783,7 +791,10 @@ export default function App() {
       try {
         const currentVersion = await app.Version();
         const info = await checkDesktopUpdate(currentVersion);
-        if (!cancelled && info?.available) setUpdateInfo(info);
+        if (!cancelled && info?.available) {
+          setUpdateInfo(info);
+          setUpdateDismissal((current) => acceptUpdate(current, info.latest));
+        }
       } catch {
         // Automatic checks are intentionally silent.
       }
@@ -798,12 +809,26 @@ export default function App() {
   }, [checkUpdatesEnabled]);
 
   const openUpdatePage = useCallback(() => {
+    if (updateInfo && !updateInfo.canDownload) {
+      if (updateInfo.downloadUrl) openExternal(updateInfo.downloadUrl);
+      else void app.OpenDownloadPage();
+      return;
+    }
+    if (updateInfo && !shouldShowUpdate(updateDismissal, updateInfo.latest)) {
+      setUpdateDismissal((current) => reopenUpdate(current, updateInfo.latest));
+      return;
+    }
+    const banner = document.querySelector<HTMLElement>(".orca-update-banner");
+    if (banner) {
+      banner.focus({ preventScroll: false });
+      return;
+    }
     if (updateInfo?.downloadUrl) {
       openExternal(updateInfo.downloadUrl);
       return;
     }
     void app.OpenDownloadPage();
-  }, [updateInfo]);
+  }, [updateDismissal, updateInfo]);
 
   // Open settings when the native menu item (CmdOrCtrl+,) is activated.
   useEffect(() => {
@@ -2921,6 +2946,7 @@ export default function App() {
               )}
             </div>
             <Composer
+              key={activeTabId || "global-composer"}
 			  uiStyle={desktopUIStyle}
               running={state.running}
               collaborationMode={collaborationMode}
@@ -3107,6 +3133,14 @@ export default function App() {
           </aside>
         )}
       </div>
+
+      {updateInfo?.available && shouldShowUpdate(updateDismissal, updateInfo.latest) && (
+        <UpdateBanner
+          info={updateInfo}
+          platform={desktopPlatform}
+          onDismiss={() => setUpdateDismissal((current) => dismissUpdate(current, updateInfo.latest))}
+        />
+      )}
 
       {histView !== null && (
         <HistoryPanel

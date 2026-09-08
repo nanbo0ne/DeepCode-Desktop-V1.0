@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Resolve tag/version/channel/prerelease for one desktop release run, shared by the
-# build, publish, and mirror jobs so they agree on a single value. Reads the run's
+# build and publish jobs so they agree on a single value. Reads the run's
 # context from env and writes the four outputs to $GITHUB_OUTPUT.
 #
 #   stable: from a desktop-v* tag push, or a manual dispatch with `tag`.

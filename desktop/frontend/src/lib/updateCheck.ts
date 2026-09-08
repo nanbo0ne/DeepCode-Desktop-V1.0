@@ -26,7 +26,7 @@ export function readCachedUpdate(
     const parsed = JSON.parse(storage.getItem(UPDATE_CACHE_KEY) ?? "null") as CachedUpdateCheck | null;
     if (!parsed || parsed.currentVersion !== currentVersion || !Number.isFinite(parsed.checkedAt)) return null;
     if (now - parsed.checkedAt < 0 || now - parsed.checkedAt >= UPDATE_CHECK_INTERVAL_MS) return null;
-    return parsed.info;
+    return { ...parsed.info, canDownload: parsed.info.canDownload === true };
   } catch {
     return null;
   }
@@ -61,7 +61,8 @@ export async function checkDesktopUpdate(currentVersion: string, force = false):
   }
   const info = await app.CheckUpdate();
   if (!info) return null;
-  writeCachedUpdate(currentVersion, info);
-  publishUpdate(info);
-  return info;
+  const normalizedInfo = { ...info, canDownload: info.canDownload === true };
+  writeCachedUpdate(currentVersion, normalizedInfo);
+  publishUpdate(normalizedInfo);
+  return normalizedInfo;
 }

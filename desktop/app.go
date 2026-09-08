@@ -44,6 +44,7 @@ import (
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/product"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/skill"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool/hosttools"
 )
 
 // eventChannel is the Wails runtime event name the frontend subscribes to for the
@@ -106,6 +107,12 @@ type App struct {
 	sessionInfoCache             map[string]sessionInfoCacheEntry
 	updateMu                     sync.RWMutex
 	updateURL                    string
+	updatePending                *pendingDesktopUpdate
+	updateState                  updateProgress
+	updateCancel                 context.CancelFunc
+	updateApplying               atomic.Bool
+	workAdmission                sync.RWMutex
+	admittedWork                 atomic.Int64
 	configWriteMu                sync.Mutex
 	visionProbeMu                sync.Mutex
 	visionProbeRunMu             sync.Mutex
@@ -303,6 +310,7 @@ func NewApp() *App {
 		visionProbing:    map[string]bool{},
 		sessionGate:      newSessionExecutionGate(),
 	}
+	a.sessionGate.admit = a.beginAppWork
 	a.conversationBroker = NewConversationBroker(a)
 	a.localServer = localai.NewRuntimeServer(a.emitLocalRuntimeStatus)
 	a.computerUse = computeruse.NewService(computeruse.NewPlatformBackend(), a.onComputerUseEvent)
@@ -327,6 +335,7 @@ func (a *App) Platform() string {
 // off the initialization in a background goroutine so the webview loads immediately.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	hosttools.SetAutomationWorkAdmission(a.beginAppWork)
 	installSystemQuitHook()
 	a.startTray()
 
@@ -702,6 +711,7 @@ func (a *App) snapshotAllTabs() {
 
 // shutdown snapshots all tabs, saves the final window geometry, and closes tabs.
 func (a *App) shutdown(context.Context) {
+	_ = a.CancelUpdateDownload()
 	a.stopDesktopBotGateway()
 	if a.computerUse != nil {
 		_ = a.computerUse.Stop("application shutdown")
@@ -798,6 +808,11 @@ func (a *App) Submit(input string) error {
 }
 
 func (a *App) SubmitToTab(tabID, input string) error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	if tab := a.tabByID(tabID); tab != nil && tab.ReadOnly {
 		return fmt.Errorf("此自动化历史为只读，请在 Orca 主对话中继续。")
 	}
@@ -813,7 +828,7 @@ func (a *App) SubmitToTab(tabID, input string) error {
 	if ctrl == nil {
 		return workspaceNotReadyErr(a.tabByID(tabID))
 	}
-	ctrl.SubmitDisplay(input, input)
+	a.submitAdmittedController(ctrl, input, input)
 	return nil
 }
 
@@ -824,6 +839,12 @@ func (a *App) RunShell(command string) {
 }
 
 func (a *App) RunShellForTab(tabID, command string) {
+	done, err := a.beginAppWork()
+	if err != nil {
+		a.noticeForTab(tabID, err.Error())
+		return
+	}
+	defer done()
 	if tab := a.tabByID(tabID); tab != nil && tab.ReadOnly {
 		a.noticeForTab(tab.ID, "此自动化历史为只读，请在 Orca 主对话中继续。")
 		return
@@ -840,6 +861,11 @@ func (a *App) SubmitDisplay(display, input string) error {
 }
 
 func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	if tab := a.tabByID(tabID); tab != nil && tab.ReadOnly {
 		return fmt.Errorf("此自动化历史为只读，请在 Orca 主对话中继续。")
 	}
@@ -856,7 +882,7 @@ func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
 		a.saveTabsLocked()
 	}
 	a.mu.Unlock()
-	ctrl.SubmitDisplay(display, input)
+	a.submitAdmittedController(ctrl, display, input)
 	return nil
 }
 
@@ -919,8 +945,16 @@ func (a *App) Steer(text string) {
 
 // SteerForTab sends mid-turn guidance to a specific tab's agent.
 func (a *App) SteerForTab(tabID, text string) {
+	done, err := a.beginAppWork()
+	if err != nil {
+		a.notice(err.Error())
+		return
+	}
+	defer done()
 	if ctrl := a.ctrlByTabID(tabID); ctrl != nil {
-		ctrl.Steer(text)
+		if !ctrl.SteerRunning(text) {
+			a.submitAdmittedController(ctrl, text, text)
+		}
 	}
 }
 
@@ -1131,6 +1165,11 @@ func (a *App) AnswerQuestionForTab(tabID, id string, answers []QuestionAnswer) {
 // Compact runs a plain compaction pass (the "compact now" button). Focus-guided
 // compaction goes through Submit("/compact <focus>") instead.
 func (a *App) Compact() error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	a.mu.RLock()
 	ctrl := a.activeCtrlLocked()
 	a.mu.RUnlock()
@@ -1152,6 +1191,11 @@ func workspaceNotReadyErr(tab *WorkspaceTab) error {
 
 // NewSession snapshots the current conversation and rotates to a fresh one.
 func (a *App) NewSession() error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1240,6 +1284,11 @@ func messagesHaveConversationContent(messages []provider.Message) bool {
 
 // ClearSession discards the current conversation and rotates to a fresh unsaved one.
 func (a *App) ClearSession() error {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return err
+	}
+	defer done()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1308,6 +1357,11 @@ func (a *App) CheckpointsForTab(tabID string) []CheckpointMeta {
 // "conversation", or "both" (anything else is treated as "both"). The frontend
 // re-reads History after this resolves.
 func (a *App) Rewind(turn int, scope string) error {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer releaseWork()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	var ctrl *control.Controller
@@ -1340,6 +1394,11 @@ func (a *App) Rewind(turn int, scope string) error {
 // Fork branches the conversation at the start of turn into a new session tab
 // (preserving the current tab), keeping code intact, and switches to the new tab.
 func (a *App) Fork(turn int) (TabMeta, error) {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return TabMeta{}, admissionErr
+	}
+	defer releaseWork()
 	a.mu.RLock()
 	sourceTab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1732,6 +1791,11 @@ func (a *App) ResumeSession(path string) ([]HistoryMessage, error) {
 // matching tab should resume on that exact controller instead of whichever tab is
 // active by the time the async call reaches the backend.
 func (a *App) ResumeSessionForTab(tabID, path string) ([]HistoryMessage, error) {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	defer releaseWork()
 	tab := a.tabByID(tabID)
 	if tab == nil || tab.Ctrl == nil {
 		return []HistoryMessage{}, fmt.Errorf("tab is not ready")
@@ -2613,6 +2677,12 @@ func (a *App) PauseTab(tabID string) {
 }
 
 func (a *App) ResumeTab(tabID string) {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		a.notice(admissionErr.Error())
+		return
+	}
+	defer releaseWork()
 	if ctrl := a.ctrlByTabID(tabID); ctrl != nil {
 		ctrl.SetPaused(false)
 	}
@@ -2623,6 +2693,12 @@ func (a *App) SetGoal(goal string) {
 }
 
 func (a *App) SetGoalForTab(tabID, goal string) {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		a.notice(admissionErr.Error())
+		return
+	}
+	defer releaseWork()
 	goal = strings.TrimSpace(goal)
 	a.mu.Lock()
 	tab := a.tabByIDLocked(tabID)
@@ -2820,6 +2896,11 @@ func messagesHaveVisibleConversationContent(messages []provider.Message) bool {
 }
 
 func (a *App) SetConversationModeForTab(tabID string, mode string) (retErr error) {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer releaseWork()
 	if tab := a.tabByID(tabID); tab != nil && tab.Scope == scopeAutomation {
 		if strings.ToLower(strings.TrimSpace(mode)) == promptModeOrca {
 			return nil
@@ -4276,6 +4357,11 @@ func (a *App) SetModel(name string) error {
 }
 
 func (a *App) SetModelForTab(tabID, name string) error {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer releaseWork()
 	if a.ctx == nil || name == "" {
 		return nil
 	}
@@ -4421,6 +4507,11 @@ func (a *App) SetEffort(level string) error {
 }
 
 func (a *App) SetEffortForTab(tabID, level string) error {
+	releaseWork, admissionErr := a.beginAppWork()
+	if admissionErr != nil {
+		return admissionErr
+	}
+	defer releaseWork()
 	tab := a.tabByID(tabID)
 	if tab == nil {
 		if strings.TrimSpace(tabID) == "" {

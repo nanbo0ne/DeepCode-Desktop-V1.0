@@ -312,7 +312,7 @@ func localRuntimeProviderEntry(modelID string, status localai.RuntimeStatus) con
 	return entry
 }
 
-func (a *App) buildController(ctx context.Context, opts boot.Options) (*control.Controller, error) {
+func (a *App) buildController(ctx context.Context, opts boot.Options, ownerTabID ...string) (*control.Controller, error) {
 	cfg, err := config.LoadForRoot(opts.WorkspaceRoot)
 	if err != nil {
 		return nil, err
@@ -326,8 +326,8 @@ func (a *App) buildController(ctx context.Context, opts boot.Options) (*control.
 		return nil, err
 	}
 	opts.RuntimeProviders = append(opts.RuntimeProviders, providers...)
-	if runtime.GOOS == "windows" {
-		opts.ExtraTools = append(opts.ExtraTools, a.computerTools("")...)
+	if runtime.GOOS == "windows" && len(ownerTabID) > 0 && strings.TrimSpace(ownerTabID[0]) != "" {
+		opts.ExtraTools = append(opts.ExtraTools, a.computerTools(ownerTabID[0])...)
 	}
 	ctrl, err := boot.Build(ctx, opts)
 	if err != nil {

@@ -60,7 +60,7 @@ func TestTaskToolRoutesValidatedImagesToSupportedSubagent(t *testing.T) {
 		}, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
 			image.Data = "HYDRATED_IMAGE_DATA"
 			return image, nil
-		})
+		}).WithVisionDefault("base-model")
 	ctx := WithTurnImages(testTaskContext(), []provider.ImageContent{{
 		Name:      "chart.png",
 		Path:      ".orca/attachments/chart.png",
@@ -75,15 +75,96 @@ func TestTaskToolRoutesValidatedImagesToSupportedSubagent(t *testing.T) {
 	}
 }
 
+func TestTaskToolVisionDefaultOnlyAppliesToImageTasks(t *testing.T) {
+	sub := &mockProvider{name: "vision-sub", streams: [][]provider.Chunk{
+		{{Type: provider.ChunkText, Text: "general"}, {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "vision"}, {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "explicit"}, {Type: provider.ChunkDone}},
+	}}
+	var models []string
+	resolve := func(model, _ string) (provider.Provider, *provider.Pricing, int, error) {
+		models = append(models, model)
+		return sub, nil, 0, nil
+	}
+	task := newTestTaskTool(t, sub, tool.NewRegistry(), "sys", "general-model", "", resolve).
+		WithVisionDefault("vision-model").
+		WithVision("on", nil, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
+			image.Data = "hydrated"
+			return image, nil
+		})
+	ctx := WithTurnImages(testTaskContext(), []provider.ImageContent{{Name: "chart.png", Path: "chart.png", MediaType: "image/png"}})
+
+	for _, args := range []string{
+		`{"prompt":"ordinary task"}`,
+		`{"prompt":"inspect chart","images":["chart.png"]}`,
+		`{"prompt":"inspect chart explicitly","model":"explicit-model","images":["chart.png"]}`,
+	} {
+		if _, err := task.Execute(ctx, []byte(args)); err != nil {
+			t.Fatalf("Execute(%s): %v", args, err)
+		}
+	}
+	if got, want := strings.Join(models, ","), "general-model,vision-model,explicit-model"; got != want {
+		t.Fatalf("resolved models = %q, want %q", got, want)
+	}
+}
+
+func TestTaskToolRejectsImplicitImageRoutingWithoutVisionDefault(t *testing.T) {
+	sub := &mockProvider{name: "qwen-general", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "should not run"},
+		{Type: provider.ChunkDone},
+	}}
+	task := newTestTaskTool(t, sub, tool.NewRegistry(), "sys", "qwen-general", "", func(model, _ string) (provider.Provider, *provider.Pricing, int, error) {
+		return sub, nil, 0, nil
+	}).WithVision("auto", func(string) string { return "supported" }, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
+		image.Data = "hydrated"
+		return image, nil
+	})
+	ctx := WithTurnImages(testTaskContext(), []provider.ImageContent{{Name: "chart.png", Path: "chart.png", MediaType: "image/png"}})
+
+	args := []byte(`{"prompt":"inspect chart","images":["chart.png"]}`)
+	if profile := task.ResolveProfile(args); profile != nil {
+		t.Fatalf("profile = %+v, want nil until Execute reports missing vision configuration", profile)
+	}
+	_, err := task.Execute(ctx, args)
+	if err == nil || !strings.Contains(err.Error(), "configured vision model") {
+		t.Fatalf("Execute error = %v, want configured-vision-model error", err)
+	}
+	if len(sub.requests) != 0 {
+		t.Fatalf("implicit image routing invoked general provider %d time(s)", len(sub.requests))
+	}
+}
+
+func TestTaskToolAllowsExplicitImageModelWithoutVisionDefault(t *testing.T) {
+	sub := &mockProvider{name: "explicit-vision", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "explicit"}, {Type: provider.ChunkDone},
+	}}
+	var gotModel string
+	task := newTestTaskTool(t, sub, tool.NewRegistry(), "sys", "qwen-general", "", func(model, _ string) (provider.Provider, *provider.Pricing, int, error) {
+		gotModel = model
+		return sub, nil, 0, nil
+	}).WithVision("on", nil, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
+		image.Data = "hydrated"
+		return image, nil
+	})
+	ctx := WithTurnImages(testTaskContext(), []provider.ImageContent{{Name: "chart.png", Path: "chart.png", MediaType: "image/png"}})
+
+	if _, err := task.Execute(ctx, []byte(`{"prompt":"inspect chart","model":"explicit-vision","images":["chart.png"]}`)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if gotModel != "explicit-vision" {
+		t.Fatalf("resolved model = %q, want explicit model", gotModel)
+	}
+}
+
 func TestTaskToolRejectsDisallowedImageRouting(t *testing.T) {
 	available := []provider.ImageContent{{Name: "allowed.png", Path: ".orca/attachments/allowed.png", MediaType: "image/png"}}
 	ctx := WithTurnImages(testTaskContext(), available)
 	newTask := func(mode, capability string) *TaskTool {
 		return newTestTaskTool(t, &mockProvider{name: "sub"}, tool.NewRegistry(), "sys", "", "", nil).
-			WithVision(mode, func(string) string { return capability }, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
-				image.Data = "data"
-				return image, nil
-			})
+			WithVisionDefault("base-model").WithVision(mode, func(string) string { return capability }, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
+			image.Data = "data"
+			return image, nil
+		})
 	}
 	for _, tc := range []struct {
 		name       string

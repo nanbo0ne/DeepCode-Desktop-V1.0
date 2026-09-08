@@ -79,6 +79,30 @@ func TestTailStart(t *testing.T) {
 	}
 }
 
+func TestEstimateMessagesTokensIncludesBoundedImageBudget(t *testing.T) {
+	image := provider.ImageContent{Path: ".orca/attachments/chart.png", Name: "chart.png", MediaType: "image/png", Size: 5 * 1024 * 1024}
+	base := EstimateContextTokens([]provider.Message{{Role: provider.RoleUser, Content: "inspect"}})
+	one := EstimateContextTokens([]provider.Message{{Role: provider.RoleUser, Content: "inspect", Images: []provider.ImageContent{image}}})
+	two := EstimateContextTokens([]provider.Message{{Role: provider.RoleUser, Content: "inspect", Images: []provider.ImageContent{image, image}}})
+	if one <= base {
+		t.Fatalf("one image estimate = %d, base = %d; image budget was omitted", one, base)
+	}
+	if got, want := two-one, one-base; got != want {
+		t.Fatalf("second image delta = %d, first image delta = %d; image count should be additive", got, want)
+	}
+
+	withHugeData := image
+	withHugeData.Data = strings.Repeat("A", 64*1024*1024)
+	if got := EstimateContextTokens([]provider.Message{{Role: provider.RoleUser, Images: []provider.ImageContent{withHugeData}}}); got != EstimateContextTokens([]provider.Message{{Role: provider.RoleUser, Images: []provider.ImageContent{image}}}) {
+		t.Fatalf("base64 payload changed estimate; hydrated image data must not inflate compaction accounting")
+	}
+
+	longMetadata := provider.ImageContent{Path: strings.Repeat("p", 64*1024), Name: strings.Repeat("n", 64*1024), MediaType: "image/png"}
+	if got := estimateImageTokens(longMetadata); got != maxEstimatedImageTokensPerImage {
+		t.Fatalf("long metadata estimate = %d, want cap %d", got, maxEstimatedImageTokensPerImage)
+	}
+}
+
 func TestTailStartSmallSession(t *testing.T) {
 	sys := provider.Message{Role: provider.RoleSystem}
 	usr := provider.Message{Role: provider.RoleUser, Content: "hi"}

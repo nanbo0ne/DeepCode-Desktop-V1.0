@@ -8,10 +8,11 @@ package update
 import "runtime"
 
 // Manifest is the latest.json published alongside a desktop release. The updater
-// fetches it from the R2 mirror (primary) or GitHub releases (fallback), compares
+// fetches it from the Mac-hosted site or GitHub releases (fallback), compares
 // Version against the running build, and looks up the running platform's artifact
 // via Asset.
 type Manifest struct {
+	Source       string           `json:"-"`
 	Version      string           `json:"version"`       // release version, e.g. "v1.1.0"
 	Notes        string           `json:"notes"`         // markdown release notes
 	PubDate      string           `json:"pub_date"`      // RFC3339, optional
@@ -22,10 +23,12 @@ type Manifest struct {
 // Asset is one platform's downloadable artifact plus the metadata the updater
 // needs to verify and report on it.
 type Asset struct {
-	URL    string `json:"url"`    // direct download URL for the artifact
-	Sig    string `json:"sig"`    // URL of the detached minisign (.minisig) signature
-	Size   int64  `json:"size"`   // artifact size in bytes (download-progress denominator)
-	SHA256 string `json:"sha256"` // lowercase hex digest, for a second integrity check after verify
+	URL         string `json:"url"`    // direct download URL for the artifact
+	Sig         string `json:"sig"`    // URL of the detached minisign (.minisig) signature
+	Size        int64  `json:"size"`   // artifact size in bytes (download-progress denominator)
+	SHA256      string `json:"sha256"` // lowercase hex digest, for a second integrity check after verify
+	FallbackURL string `json:"fallback_url,omitempty"`
+	FallbackSig string `json:"fallback_sig,omitempty"`
 }
 
 // PlatformKey is the map key used in Manifest.Platforms for the given OS/arch.

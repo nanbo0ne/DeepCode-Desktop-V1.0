@@ -426,10 +426,15 @@ func runAutomation(ctx context.Context, item *automationItem) {
 			timer.Stop()
 			return
 		}
+		finish, err := acquireAutomationWork(ctx)
+		if err != nil {
+			return
+		}
 		automations.mu.Lock()
-		if item.Status != "scheduled" {
+		if item.Status != "scheduled" || ctx.Err() != nil {
 			item.cancel = nil
 			automations.mu.Unlock()
+			finish()
 			return
 		}
 		item.Status = "running"
@@ -447,6 +452,7 @@ func runAutomation(ctx context.Context, item *automationItem) {
 			item.cancel = nil
 			automations.persistLocked()
 			automations.mu.Unlock()
+			finish()
 			return
 		}
 		item.Status = "scheduled"
@@ -455,6 +461,7 @@ func runAutomation(ctx context.Context, item *automationItem) {
 		item.NextRunAt = nextAutomationRun(item, time.Now())
 		automations.persistLocked()
 		automations.mu.Unlock()
+		finish()
 	}
 }
 

@@ -667,6 +667,14 @@ func (m *Manager) markCompletedLocked(id string, generation uint64) (DownloadTas
 	if task == nil || m.generations[id] != generation || task.State != TaskInstalling {
 		return DownloadTask{}, false
 	}
+	// Completion is the externally visible end of a worker's lifecycle. Clear
+	// the current worker handles under the same lock so observers cannot see a
+	// completed task while still counting its finished worker as active.
+	delete(m.workerDone, id)
+	if m.cancelGenerations[id] == generation {
+		delete(m.cancels, id)
+		delete(m.cancelGenerations, id)
+	}
 	task.State, task.Error, task.DownloadedBytes, task.BytesPerSecond, task.ETASeconds, task.UpdatedAt = TaskCompleted, "", task.TotalBytes, 0, 0, time.Now().UnixMilli()
 	m.saveStateLocked()
 	return *task, true

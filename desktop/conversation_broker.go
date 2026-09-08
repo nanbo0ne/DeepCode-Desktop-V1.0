@@ -265,6 +265,16 @@ func (b *ConversationBroker) findCatalogEntry(sourceTopicID, targetID string) (C
 }
 
 func (b *ConversationBroker) Dispatch(sourceTabID, sourceTopicID, targetID, instruction string) (*DispatchTask, error) {
+	done, err := b.app.beginAppWork()
+	if err != nil {
+		return nil, err
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			done()
+		}
+	}()
 	entry, ok := b.findCatalogEntry(sourceTopicID, targetID)
 	if !ok {
 		return nil, fmt.Errorf("conversation %q not found or is not dispatchable", targetID)
@@ -314,7 +324,8 @@ func (b *ConversationBroker) Dispatch(sourceTabID, sourceTopicID, targetID, inst
 	}
 	b.mu.Unlock()
 
-	go b.runDispatch(task, tab, lock, instruction)
+	transferred = true
+	go func() { defer done(); b.runDispatch(task, tab, lock, instruction) }()
 	return cloneDispatchTask(task), nil
 }
 

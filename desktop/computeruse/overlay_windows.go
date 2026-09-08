@@ -4,9 +4,9 @@ package computeruse
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/kbinani/screenshot"
@@ -45,15 +45,17 @@ var (
 	procBeginPaint                 = user32DLL.NewProc("BeginPaint")
 	procEndPaint                   = user32DLL.NewProc("EndPaint")
 	procDefWindowProcW             = user32DLL.NewProc("DefWindowProcW")
+	procTranslateMessage           = user32DLL.NewProc("TranslateMessage")
+	procDispatchMessageW           = user32DLL.NewProc("DispatchMessageW")
 	procFillRect                   = user32DLL.NewProc("FillRect")
-	procSetBkMode                  = user32DLL.NewProc("SetBkMode")
-	procSetTextColor               = user32DLL.NewProc("SetTextColor")
-	procTextOutW                   = user32DLL.NewProc("TextOutW")
-	procMoveToEx                   = user32DLL.NewProc("MoveToEx")
-	procLineTo                     = user32DLL.NewProc("LineTo")
-	procEllipse                    = user32DLL.NewProc("Ellipse")
 
 	gdi32DLL             = windows.NewLazySystemDLL("gdi32.dll")
+	procSetBkMode        = gdi32DLL.NewProc("SetBkMode")
+	procSetTextColor     = gdi32DLL.NewProc("SetTextColor")
+	procTextOutW         = gdi32DLL.NewProc("TextOutW")
+	procMoveToEx         = gdi32DLL.NewProc("MoveToEx")
+	procLineTo           = gdi32DLL.NewProc("LineTo")
+	procEllipse          = gdi32DLL.NewProc("Ellipse")
 	procCreatePen        = gdi32DLL.NewProc("CreatePen")
 	procCreateSolidBrush = gdi32DLL.NewProc("CreateSolidBrush")
 	procSelectObject     = gdi32DLL.NewProc("SelectObject")
@@ -169,31 +171,52 @@ func (o *nativeOverlay) Hide() {
 }
 
 func (o *nativeOverlay) loop(commands <-chan overlayCommand, done chan<- struct{}, state OverlayState, ready chan<- error) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	defer close(done)
+	restoreDPI, err := physicalCoordinateScope()
+	if err != nil {
+		ready <- err
+		return
+	}
+	defer restoreDPI()
 	list, err := createOverlayWindows(state)
 	if err != nil {
 		ready <- err
 		return
 	}
 	ready <- nil
-	for command := range commands {
-		switch command.kind {
-		case "update":
-			for _, window := range list {
-				window.state = command.state
-				procInvalidateRect.Call(window.hwnd, 0, 0)
-				procUpdateWindow.Call(window.hwnd)
+	pump := time.NewTicker(8 * time.Millisecond)
+	defer pump.Stop()
+	for {
+		select {
+		case command := <-commands:
+			switch command.kind {
+			case "update":
+				for _, window := range list {
+					window.state = command.state
+					procInvalidateRect.Call(window.hwnd, 0, 0)
+					procUpdateWindow.Call(window.hwnd)
+				}
+			case "hide":
+				for _, window := range list {
+					procDestroyWindow.Call(window.hwnd)
+				}
+				if command.ack != nil {
+					command.ack <- nil
+				}
+				return
 			}
-		case "hide":
-			for _, window := range list {
-				procDestroyWindow.Call(window.hwnd)
+		case <-pump.C:
+		}
+		// A channel alone does not service cross-thread SendMessage calls from
+		// window discovery/UI Automation. Keep this window-owning thread pumping.
+		var message message
+		for {
+			available, _, _ := procPeekMessageW.Call(uintptr(unsafe.Pointer(&message)), 0, 0, 0, 1)
+			if available == 0 {
+				break
 			}
-			if command.ack != nil {
-				command.ack <- nil
-			}
-			return
+			procTranslateMessage.Call(uintptr(unsafe.Pointer(&message)))
+			procDispatchMessageW.Call(uintptr(unsafe.Pointer(&message)))
 		}
 	}
 }

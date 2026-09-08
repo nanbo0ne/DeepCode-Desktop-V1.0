@@ -1379,14 +1379,24 @@ func (a *App) CloseTab(tabID string) error {
 // same way buildController works for the single-controller App. On success it
 // wires the controller and flips Ready; on failure it stores StartupErr.
 func (a *App) startTabControllerBuild(tab *WorkspaceTab) {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return
+	}
 	if a.ctx == nil {
+		defer done()
 		a.buildTabController(tab)
 		return
 	}
-	go a.buildTabController(tab)
+	go func() { defer done(); a.buildTabController(tab) }()
 }
 
 func (a *App) buildTabController(tab *WorkspaceTab) {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return
+	}
+	defer done()
 	generation := a.beginTabRuntimeReconfigure(tab)
 	tab.runtimeMu.Lock()
 	defer tab.runtimeMu.Unlock()
@@ -1555,7 +1565,7 @@ func (a *App) buildTabController(tab *WorkspaceTab) {
 		TurnContext:             turnContext,
 		TurnLease:               a.sessionGate.Acquire,
 		RefreshOnLease:          true,
-	})
+	}, tab.ID)
 	if err != nil {
 		a.mu.Lock()
 		tab.StartupErr = err.Error()
@@ -1669,6 +1679,11 @@ func (a *App) beginTabRuntimeReconfigure(tab *WorkspaceTab) uint64 {
 	if tab == nil {
 		return 0
 	}
+	done, err := a.beginAppWork()
+	if err != nil {
+		return 0
+	}
+	defer done()
 	a.mu.Lock()
 	tab.runtimeGeneration++
 	tab.runtimeReconfiguring = true
@@ -1690,6 +1705,11 @@ func (a *App) finishTabRuntimeReconfigure(tab *WorkspaceTab, generation uint64, 
 	if tab == nil {
 		return
 	}
+	done, err := a.beginAppWork()
+	if err != nil {
+		return
+	}
+	defer done()
 	a.mu.Lock()
 	if tab.runtimeGeneration != generation {
 		a.mu.Unlock()
@@ -1702,11 +1722,17 @@ func (a *App) finishTabRuntimeReconfigure(tab *WorkspaceTab, generation uint64, 
 	}
 	a.mu.Unlock()
 	if success && len(queued) > 0 {
-		go a.drainRuntimeSubmits(tab, queued)
+		a.admittedWork.Add(1)
+		go func() { defer a.admittedWork.Add(-1); a.drainRuntimeSubmits(tab, queued) }()
 	}
 }
 
 func (a *App) drainRuntimeSubmits(tab *WorkspaceTab, queued []pendingRuntimeSubmit) {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return
+	}
+	defer done()
 	for _, pending := range queued {
 		for {
 			ctrl := a.ctrlByTabID(tab.ID)
@@ -1714,11 +1740,11 @@ func (a *App) drainRuntimeSubmits(tab *WorkspaceTab, queued []pendingRuntimeSubm
 				return
 			}
 			if !ctrl.Running() {
-				if pending.display != "" && pending.display != pending.input {
-					ctrl.SubmitDisplay(pending.display, pending.input)
-				} else {
-					ctrl.Submit(pending.input)
+				display := pending.display
+				if display == "" {
+					display = pending.input
 				}
+				a.submitAdmittedController(ctrl, display, pending.input)
 				break
 			}
 			select {
@@ -1892,6 +1918,11 @@ func (a *App) tabSnapshotLoop(tab *WorkspaceTab) {
 }
 
 func (a *App) maybeAutoTitleTopic(tab *WorkspaceTab) bool {
+	done, err := a.beginAppWork()
+	if err != nil {
+		return false
+	}
+	defer done()
 	if tab == nil || strings.TrimSpace(tab.TopicID) == "" || tab.Ctrl == nil {
 		return false
 	}

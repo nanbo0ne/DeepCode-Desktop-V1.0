@@ -44,7 +44,7 @@ func TestComputerCompletionRequiresIndependentEvidence(t *testing.T) {
 			if (err == nil) != tc.ok {
 				t.Fatalf("verification err=%v", err)
 			}
-			if len(p.request.Messages) != 2 || len(p.request.Tools) != 0 || p.request.Temperature != 0 {
+			if len(p.request.Messages) != 2 || len(p.request.Tools) != 0 || p.request.Temperature != 0 || !p.request.DisableThinking {
 				t.Fatalf("verifier request not isolated: %+v", p.request)
 			}
 		})

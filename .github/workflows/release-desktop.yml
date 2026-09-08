@@ -7,14 +7,13 @@ name: Release desktop
 #
 # Wails cannot cross-compile a CGO/WebKit binary, so build/ fans out to one native
 # runner per platform. Artifacts are minisign-signed (MINISIGN_* secrets), a
-# latest.json manifest is generated, and everything is published to a GitHub
-# release and mirrored to R2 (the updater reads R2 first, GitHub as fallback).
+# signed latest.json manifest is generated, and stable output is published as a
+# maintainer-reviewed GitHub draft release.
 #
 # The same build/sign/manifest pipeline serves two channels. A `desktop-v*` tag
-# (or manual stable dispatch) publishes a GitHub release and moves R2's latest/
-# pointer. A manual `channel: canary` dispatch builds with -X main.channel=canary
-# and uploads only to R2's canary/ pointer — no GitHub release, so canary never
-# shows on the releases page and never touches latest/.
+# (or manual stable dispatch) publishes a GitHub draft release. A manual
+# `channel: canary` dispatch builds with -X main.channel=canary and uploads only
+# a workflow artifact — no GitHub release, so canary remains isolated.
 on:
   push:
     tags: ["desktop-v*"]
@@ -49,6 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Require stable manual dispatch on main
+        if: github.event_name == 'workflow_dispatch' && inputs.channel != 'canary'
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::stable manual desktop releases must be dispatched from main"
+            exit 1
+          fi
 
       - uses: actions/setup-go@v6
         with:
@@ -196,6 +203,13 @@ jobs:
           echo "::error::SignPath configuration is required; unsigned Windows releases need an explicit manual override"
           exit 1
 
+      - name: Require Minisign release signing
+        run: |
+          if [ "$HAS_MINISIGN" != "true" ]; then
+            echo "::error::MINISIGN_PRIVATE_KEY and MINISIGN_PASSWORD are required for every desktop release"
+            exit 1
+          fi
+
       - name: Build and package
         env:
           # macOS Developer ID + notarization path turns on only when all five
@@ -337,17 +351,21 @@ jobs:
           "$seven_zip" t dist/O.R.C.A-for-Windows-windows-amd64-installer.exe
           "$seven_zip" t dist/O.R.C.A-for-Windows-windows-amd64.zip
 
+      - name: Test Windows installer upgrade and data retention
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORCA_INSTALLER_EXPECTED_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./scripts/test-desktop-installer.ps1 -ExpectedVersion $env:ORCA_INSTALLER_EXPECTED_VERSION
+
       - name: Sign artifacts (minisign)
-        if: env.HAS_MINISIGN == 'true'
         working-directory: desktop
         env:
           MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: go run ./cmd/sign sign ../dist/*
-
-      - name: Skip signing notice
-        if: env.HAS_MINISIGN != 'true'
-        run: echo "MINISIGN secrets are not configured; publishing unsigned desktop artifacts without updater manifest."
 
       - uses: actions/upload-artifact@v7
         with:
@@ -390,12 +408,29 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           RUN_NUMBER: ${{ github.run_number }}
 
-      # Generate latest.json with GitHub release download URLs; the mirror step
-      # rewrites them to R2 afterwards. GITHUB_REPOSITORY is provided by the runner.
       - name: Generate manifest
-        if: env.HAS_MINISIGN == 'true'
         working-directory: desktop
+        env:
+          RELEASE_NOTES: ../docs/releases/${{ steps.ver.outputs.tag }}.md
         run: go run ./cmd/sign manifest ../dist "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.tag }}"
+
+      - name: Sign manifest (minisign)
+        working-directory: desktop
+        env:
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: go run ./cmd/sign sign ../dist/latest.json
+
+      - name: Validate packages, manifest, and signatures
+        working-directory: desktop
+        run: |
+          go run ./cmd/sign validate ../dist "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.tag }}"
+          for payload in ../dist/*; do
+            case "$payload" in
+              *.minisig|../dist/SHA256SUMS.txt) continue ;;
+            esac
+            go run ./cmd/sign verify "$payload"
+          done
 
       - name: Validate stable tag target
         if: steps.ver.outputs.channel != 'canary'
@@ -426,119 +461,28 @@ jobs:
           fi
           echo "tag ${TAG} resolves to expected commit ${EXPECTED_SHA}"
 
-      # Canary is R2-only and never appears on the GitHub releases page; the mirror
-      # job picks up the signed dist via the canary-dist artifact below. Stable
-      # publishes a GitHub release as usual.
+      # Canary never appears on the GitHub releases page; retain its signed dist
+      # only as a workflow artifact. Stable publishes a maintainer-reviewed draft.
       - name: Generate release checksums
         run: bash scripts/checksum-desktop-release.sh dist
 
-      - name: Publish GitHub release
+      - name: Publish draft GitHub release
         if: steps.ver.outputs.channel != 'canary'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          args=(--title "O.R.C.A. ${{ steps.ver.outputs.version }}" --target "${{ github.sha }}" --generate-notes)
-          [ "${{ steps.ver.outputs.prerelease }}" = "true" ] && args+=(--prerelease)
           if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
-            echo "Release ${{ steps.ver.outputs.tag }} already exists; updating title and replacing assets."
-            gh release edit "${{ steps.ver.outputs.tag }}" --title "O.R.C.A. ${{ steps.ver.outputs.version }}"
-            gh release upload "${{ steps.ver.outputs.tag }}" dist/* --clobber
-          else
-            gh release create "${{ steps.ver.outputs.tag }}" dist/* "${args[@]}"
+            echo "::error::Release ${{ steps.ver.outputs.tag }} already exists; refusing public release mutation"
+            exit 1
           fi
+          args=(--title "O.R.C.A. ${{ steps.ver.outputs.version }}" --target "${{ github.sha }}" --draft --notes-file "docs/releases/${{ steps.ver.outputs.tag }}.md")
+          [ "${{ steps.ver.outputs.prerelease }}" = "true" ] && args+=(--prerelease)
+          gh release create "${{ steps.ver.outputs.tag }}" dist/* "${args[@]}"
 
-      - name: Upload canary dist for mirror
+      - name: Upload isolated canary dist
         if: steps.ver.outputs.channel == 'canary'
         uses: actions/upload-artifact@v7
         with:
           name: canary-dist
           path: dist/*
           if-no-files-found: error
-
-  mirror:
-    name: mirror to R2
-    needs: publish
-    runs-on: ubuntu-latest
-    # Skip cleanly when R2 isn't configured; GitHub release still works as fallback.
-    if: ${{ github.repository_owner == 'nanbo0ne' }}
-    env:
-      HAS_R2: ${{ secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_ACCOUNT_ID != '' && secrets.R2_BUCKET != '' }}
-      HAS_MINISIGN: ${{ secrets.MINISIGN_PRIVATE_KEY != '' && secrets.MINISIGN_PASSWORD != '' }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Resolve version
-        id: ver
-        run: bash scripts/resolve-desktop-release.sh
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          IN_CHANNEL: ${{ inputs.channel }}
-          IN_TAG: ${{ inputs.tag }}
-          IN_BASE_VERSION: ${{ inputs.base_version }}
-          REF_NAME: ${{ github.ref_name }}
-          RUN_NUMBER: ${{ github.run_number }}
-
-      # Canary has no GitHub release — pull the signed dist from the workflow
-      # artifact. Stable pulls from the published release.
-      - name: Download canary dist
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true' && steps.ver.outputs.channel == 'canary'
-        uses: actions/download-artifact@v8
-        with:
-          name: canary-dist
-          path: assets
-
-      - name: Download release assets
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true' && steps.ver.outputs.channel != 'canary'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p assets
-          gh release download "${{ steps.ver.outputs.tag }}" -R "${{ github.repository }}" -D assets
-
-      # Rewrite both url and sig inside latest.json from github.com to the R2 CDN,
-      # so the updater pulls the manifest AND the heavy artifacts from R2.
-      - name: Rewrite latest.json URLs to R2
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true'
-        env:
-          R2_PUBLIC_BASE: https://dl.orca-agent.io
-          TAG: ${{ steps.ver.outputs.tag }}
-        run: |
-          f=assets/latest.json
-          jq --arg base "$R2_PUBLIC_BASE" --arg tag "$TAG" '
-            .platforms |= with_entries(
-              .value.url |= sub("https://github.com/[^/]+/[^/]+/releases/download/[^/]+/"; "\($base)/\($tag)/")
-              | .value.sig |= sub("https://github.com/[^/]+/[^/]+/releases/download/[^/]+/"; "\($base)/\($tag)/")
-            )
-          ' "$f" > "$f.new"
-          mv "$f.new" "$f"
-          cat "$f"
-
-      - name: Configure AWS CLI for R2
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true'
-        run: |
-          aws configure set aws_access_key_id "${{ secrets.R2_ACCESS_KEY_ID }}"
-          aws configure set aws_secret_access_key "${{ secrets.R2_SECRET_ACCESS_KEY }}"
-          aws configure set region auto
-
-      - name: Mirror to R2
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN == 'true'
-        env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          TAG: ${{ steps.ver.outputs.tag }}
-        run: |
-          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          aws s3 cp assets/ "s3://${R2_BUCKET}/${TAG}/" --recursive --endpoint-url "$ENDPOINT"
-          # The pointer a release moves is its channel's alone: canary writes
-          # canary/, stable writes latest/. A stable prerelease (rc) moves neither.
-          if [ "${{ steps.ver.outputs.channel }}" = "canary" ]; then
-            aws s3 cp assets/ "s3://${R2_BUCKET}/canary/" --recursive --endpoint-url "$ENDPOINT"
-          elif [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
-            echo "prerelease — leaving R2 latest/ untouched"
-          else
-            aws s3 cp assets/ "s3://${R2_BUCKET}/latest/" --recursive --endpoint-url "$ENDPOINT"
-          fi
-
-      - name: Skip R2 mirror without Minisign
-        if: env.HAS_R2 == 'true' && env.HAS_MINISIGN != 'true'
-        run: echo "::warning::Skipping all R2 mirror steps because Minisign is not configured; existing R2 latest/ is unchanged"

@@ -73,6 +73,7 @@ type TaskTool struct {
 	baseModel         string
 	baseEffort        string
 	identityProfile   func(modelRef, effort string) (string, string)
+	visionModel       string
 	visionMode        string
 	visionCapability  func(modelRef string) string
 	imageLoader       func(context.Context, provider.ImageContent) (provider.ImageContent, error)
@@ -125,6 +126,14 @@ func (t *TaskTool) WithTranscriptIdentityResolver(resolve func(modelRef, effort 
 	return t
 }
 
+// WithVisionDefault configures the model reference used for image-bearing task
+// calls that do not provide an explicit model. It never changes the ordinary
+// subagent default and is consulted only when the task includes images.
+func (t *TaskTool) WithVisionDefault(modelRef string) *TaskTool {
+	t.visionModel = strings.TrimSpace(modelRef)
+	return t
+}
+
 func (t *TaskTool) WithVision(mode string, capability func(string) string, loader func(context.Context, provider.ImageContent) (provider.ImageContent, error)) *TaskTool {
 	t.visionMode, t.visionCapability, t.imageLoader = strings.TrimSpace(mode), capability, loader
 	return t
@@ -163,13 +172,19 @@ func (t *TaskTool) ReadOnly() bool { return false }
 // ResolveProfile extracts model/effort from task args and applies config defaults.
 func (t *TaskTool) ResolveProfile(args json.RawMessage) *event.Profile {
 	var p struct {
-		Model  string `json:"model"`
-		Effort string `json:"effort"`
+		Model  string   `json:"model"`
+		Effort string   `json:"effort"`
+		Images []string `json:"images"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return nil
 	}
-	model, effort := t.effectiveProfile(p.Model, p.Effort)
+	if len(p.Images) > 0 && strings.TrimSpace(p.Model) == "" &&
+		strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" &&
+		strings.TrimSpace(t.visionModel) == "" {
+		return nil
+	}
+	model, effort := t.effectiveProfileForImages(p.Model, p.Effort, len(p.Images) > 0)
 	if model == "" && effort == "" {
 		return nil
 	}
@@ -177,8 +192,15 @@ func (t *TaskTool) ResolveProfile(args json.RawMessage) *event.Profile {
 }
 
 func (t *TaskTool) effectiveProfile(model, effort string) (string, string) {
+	return t.effectiveProfileForImages(model, effort, false)
+}
+
+func (t *TaskTool) effectiveProfileForImages(model, effort string, hasImages bool) (string, string) {
 	model = strings.TrimSpace(model)
 	effort = strings.TrimSpace(effort)
+	if model == "" && hasImages && strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" && t.visionModel != "" {
+		model = t.visionModel
+	}
 	if model == "" {
 		model = strings.TrimSpace(t.subagentModel)
 	}
@@ -207,6 +229,11 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	if p.Prompt == "" {
 		return "", fmt.Errorf("prompt is required")
 	}
+	if len(p.Images) > 0 && strings.TrimSpace(p.Model) == "" &&
+		strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" &&
+		strings.TrimSpace(t.visionModel) == "" {
+		return "", fmt.Errorf("image task requires a configured vision model; set agent.subagent_models[%q] or provide an explicit model", "vision")
+	}
 
 	maxSteps := p.MaxSteps
 	if maxSteps <= 0 {
@@ -224,7 +251,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 
 	subReg := t.buildSubReg(p.Tools)
-	modelRef, effortRef := t.effectiveProfile(p.Model, p.Effort)
+	modelRef, effortRef := t.effectiveProfileForImages(p.Model, p.Effort, len(p.Images) > 0)
 	selectedImages, err := t.selectImages(ctx, p.Images, modelRef)
 	if err != nil {
 		return "", err
