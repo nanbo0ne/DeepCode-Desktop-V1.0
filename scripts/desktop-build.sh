@@ -290,6 +290,8 @@ darwin)
 	generated_app=$(find build/bin -maxdepth 1 -type d -name "*.app" -print -quit)
 	[ -n "$generated_app" ] || { echo "no macOS app bundle found in build/bin" >&2; exit 1; }
 	cp -R "$generated_app" "$app"
+	# Reject invalid bundle metadata before signing or archiving it.
+	plutil -lint "$app/Contents/Info.plist"
 
 	# Two signing paths, selected by HAS_APPLE_CERT (set by release-desktop.yml when
 	# the APPLE_* secrets are present). With a real Developer ID cert + notarization
@@ -317,6 +319,7 @@ darwin)
 		# still need `xattr -dr com.apple.quarantine` (see desktop/README.md).
 		codesign --force --deep -s - "$app"
 	fi
+	codesign --verify --deep --strict "$app"
 
 	if [ "$arch" = universal ]; then
 		# One universal .app covers Intel + Apple Silicon; publish it under both
@@ -353,6 +356,7 @@ darwin)
 			--issuer "$APPLE_API_ISSUER_ID" --wait
 		xcrun stapler staple "$dmg"
 	fi
+	bash "$ROOT/scripts/test-desktop-dmg.sh" "$dmg" "$numver" "$arch"
 	rm -rf "$staging" "$dmgsrc"
 	;;
 windows)

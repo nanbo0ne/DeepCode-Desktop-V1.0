@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleName</key>
+        <string>O.R.C.A.</string>
+        <key>CFBundleExecutable</key>
+        <string>{{.OutputFilename | html}}</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.wails.{{.Name | html}}</string>
+        <key>CFBundleVersion</key>
+        <string>{{.Info.ProductVersion | html}}</string>
+        <key>CFBundleGetInfoString</key>
+        <string>{{.Info.Comments | html}}</string>
+        <key>CFBundleShortVersionString</key>
+        <string>{{.Info.ProductVersion | html}}</string>
+        <key>CFBundleIconFile</key>
+        <string>iconfile</string>
+        <key>LSMinimumSystemVersion</key>
+        <string>10.13.0</string>
+        <key>NSHighResolutionCapable</key>
+        <true/>
+        <key>NSHumanReadableCopyright</key>
+        <string>{{.Info.Copyright | html}}</string>
+        {{if .Info.FileAssociations}}
+        <key>CFBundleDocumentTypes</key>
+        <array>
+          {{range .Info.FileAssociations}}
+          <dict>
+            <key>CFBundleTypeExtensions</key>
+            <array><string>{{.Ext | html}}</string></array>
+            <key>CFBundleTypeName</key>
+            <string>{{.Name | html}}</string>
+            <key>CFBundleTypeRole</key>
+            <string>{{.Role | html}}</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>{{.IconName | html}}</string>
+          </dict>
+          {{end}}
+        </array>
+        {{end}}
+        {{if .Info.Protocols}}
+        <key>CFBundleURLTypes</key>
+        <array>
+          {{range .Info.Protocols}}
+          <dict>
+            <key>CFBundleURLName</key>
+            <string>com.wails.{{.Scheme | html}}</string>
+            <key>CFBundleURLSchemes</key>
+            <array><string>{{.Scheme | html}}</string></array>
+            <key>CFBundleTypeRole</key>
+            <string>{{.Role | html}}</string>
+          </dict>
+          {{end}}
+        </array>
+        {{end}}
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
+    </dict>
+</plist>
