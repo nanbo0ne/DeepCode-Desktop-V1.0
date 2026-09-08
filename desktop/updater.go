@@ -138,27 +138,33 @@ func downloadPage() string {
 
 // UpdateInfo is the CheckUpdate result that drives the frontend's update banner.
 type UpdateInfo struct {
-	CanDownload   bool   `json:"canDownload"`
-	Source        string `json:"source,omitempty"`
-	Available     bool   `json:"available"`
-	Current       string `json:"current"`
-	Latest        string `json:"latest"`
-	Notes         string `json:"notes"`
-	CanSelfUpdate bool   `json:"canSelfUpdate"` // win/linux true; macOS false (unsigned → manual download)
-	DownloadURL   string `json:"downloadUrl"`   // human-facing releases page (macOS path / fallback link)
-	AssetSize     int64  `json:"assetSize"`     // running platform's artifact size, for the progress bar
-	Err           string `json:"err,omitempty"` // set when the check itself failed (both endpoints down)
+	CanDownload   bool     `json:"canDownload"`
+	Source        string   `json:"source,omitempty"`
+	Sources       []string `json:"sources,omitempty"`
+	Available     bool     `json:"available"`
+	Current       string   `json:"current"`
+	Latest        string   `json:"latest"`
+	Notes         string   `json:"notes"`
+	CanSelfUpdate bool     `json:"canSelfUpdate"` // win/linux true; macOS false (unsigned → manual download)
+	DownloadURL   string   `json:"downloadUrl"`   // human-facing releases page (macOS path / fallback link)
+	AssetSize     int64    `json:"assetSize"`     // running platform's artifact size, for the progress bar
+	Err           string   `json:"err,omitempty"` // set when the check itself failed (both endpoints down)
 }
 
 // updateProgress is the payload of the "updater:progress" Wails event emitted
 // throughout ApplyUpdate.
 type updateProgress struct {
-	Version       string `json:"version,omitempty"`
-	CanSelfUpdate bool   `json:"canSelfUpdate"`
-	Phase         string `json:"phase"` // downloading | verifying | applying | done | error
-	Received      int64  `json:"received"`
-	Total         int64  `json:"total"`
-	Err           string `json:"err,omitempty"`
+	Version          string   `json:"version,omitempty"`
+	CanSelfUpdate    bool     `json:"canSelfUpdate"`
+	Phase            string   `json:"phase"` // downloading | verifying | applying | done | error
+	Source           string   `json:"source,omitempty"`
+	Sources          []string `json:"sources,omitempty"`
+	Received         int64    `json:"received"`
+	Total            int64    `json:"total"`
+	SpeedBPS         int64    `json:"speedBps,omitempty"`
+	ETASeconds       int64    `json:"etaSeconds,omitempty"`
+	SuggestAlternate bool     `json:"suggestAlternate,omitempty"`
+	Err              string   `json:"err,omitempty"`
 }
 
 func httpClient() (*http.Client, error) {
@@ -219,6 +225,7 @@ func evaluate(current string, m *update.Manifest) UpdateInfo {
 		Notes:         m.Notes,
 		CanSelfUpdate: canSelfUpdate(),
 		DownloadURL:   page,
+		Source:        m.Source,
 	}
 	cur, okCur := normalizeVersion(current)
 	latest, okLatest := normalizeVersion(m.Version)
@@ -232,9 +239,36 @@ func evaluate(current string, m *update.Manifest) UpdateInfo {
 	}
 	if a, ok := selectedUpdateAsset(m); ok {
 		info.AssetSize = a.Size
+		info.Sources = updateAssetSources(a)
 		info.CanDownload = info.Available && a.Size > 0
 	}
 	return info
+}
+
+const (
+	updateSourceMac    = "mac"
+	updateSourceGitHub = "github"
+)
+
+func updateAssetSources(asset update.Asset) []string {
+	sources := make([]string, 0, 2)
+	for _, candidate := range orderedPackageSources(asset, "") {
+		if candidate.url == "" {
+			continue
+		}
+		source := candidate.name
+		seen := false
+		for _, existing := range sources {
+			if existing == source {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			sources = append(sources, source)
+		}
+	}
+	return sources
 }
 
 func selectedUpdateAsset(m *update.Manifest) (update.Asset, bool) {

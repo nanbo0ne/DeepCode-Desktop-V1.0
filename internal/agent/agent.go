@@ -152,6 +152,7 @@ type Agent struct {
 	executorHandoffGuard bool
 	temperature          float64
 	pricing              *provider.Pricing
+	providerEndpoint     string
 
 	// sink receives the turn's typed event stream (reasoning/text deltas, tool
 	// dispatch/results, usage, notices). The agent no longer formats output
@@ -425,6 +426,9 @@ type Options struct {
 	MaxStepsKey string
 	Temperature float64
 	Pricing     *provider.Pricing // optional, for per-turn cost display
+	// ProviderEndpoint is the actual configured endpoint used for this agent's
+	// requests. It is required for authoritative provider-specific cost claims.
+	ProviderEndpoint string
 
 	// Gate is the per-call permission gate. nil disables gating.
 	Gate Gate
@@ -492,6 +496,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		maxStepsKey:                  maxStepsKey,
 		temperature:                  opts.Temperature,
 		pricing:                      opts.Pricing,
+		providerEndpoint:             strings.TrimSpace(opts.ProviderEndpoint),
 		sink:                         sink,
 		gate:                         gate,
 		hooks:                        hooks,
@@ -533,7 +538,8 @@ func (a *Agent) RunRich(ctx context.Context, input RichInput) error {
 		a.evidence.Reset()
 	}
 	a.repeatSuccessCounts = nil
-	a.sink.Emit(event.Event{Kind: event.TurnStarted})
+	turnID, _ := ParentTurn(ctx)
+	a.sink.Emit(event.Event{Kind: event.TurnStarted, TurnID: turnID})
 	a.session.Add(provider.Message{Role: provider.RoleUser, Content: input.Text, Images: append([]provider.ImageContent(nil), input.Images...)})
 
 	finalReadinessBlocks := 0
@@ -565,7 +571,8 @@ func (a *Agent) RunRich(ctx context.Context, input RichInput) error {
 		}
 
 		requestPricing := a.pricing.SnapshotAt(time.Now())
-		text, reasoning, signature, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1)
+		requestID := event.NewRequestID()
+		text, reasoning, signature, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1, requestID)
 		if err != nil {
 			if interrupted && streamRecoveries < maxStreamRecoveries {
 				streamRecoveries++
@@ -591,8 +598,8 @@ func (a *Agent) RunRich(ctx context.Context, input RichInput) error {
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage)
 		a.lastPrefixShape = prefixShape
 		a.haveLastPrefixShape = true
-		if usage != nil && usage.TotalTokens > 0 {
-			a.sink.Emit(event.Event{Kind: event.Usage, Usage: usage, Pricing: requestPricing,
+		if usageHasTokens(usage) {
+			a.sink.Emit(event.Event{Kind: event.Usage, RequestID: requestID, ProviderEndpoint: a.providerEndpoint, Usage: usage, Pricing: requestPricing,
 				CacheDiagnostics: &cacheDiagnostics,
 				SessionHit:       int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
 		}
@@ -827,11 +834,12 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 // stream so a sink can re-render the streamed raw text as styled markdown. The
 // accumulated text and reasoning are also returned so the caller can round-trip
 // reasoning on the next turn.
-func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, error) {
+func (a *Agent) stream(ctx context.Context, turn int, requestID string) (string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, error) {
 	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
 		a.sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max})
 	})
 	ch, err := a.prov.Stream(ctx, provider.Request{
+		RequestID:   requestID,
 		Messages:    a.hydrateImageMessages(ctx, a.session.Messages),
 		Tools:       a.tools.Schemas(),
 		Temperature: a.temperature,
@@ -923,6 +931,10 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		a.sink.Emit(event.Event{Kind: event.Message, Text: text.String(), Reasoning: display})
 	}
 	return text.String(), stored, signature, calls, usage, false, false, nil
+}
+
+func usageHasTokens(u *provider.Usage) bool {
+	return u != nil && (u.TotalTokens > 0 || u.PromptTokens > 0 || u.CompletionTokens > 0 || u.CacheHitTokens > 0 || u.CacheMissTokens > 0 || u.ReasoningTokens > 0)
 }
 
 func (a *Agent) hydrateImageMessages(ctx context.Context, messages []provider.Message) []provider.Message {

@@ -1,0 +1,61 @@
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/benchmarks/context-maintenance-e2e	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/deepseek-orca	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/deepseek-orca-plugin-example	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/e2ebench	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/orca	[no test files]
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/acp	0.785s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent	8.151s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent/testutil	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/artifact	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/billing	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/boot	36.654s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot	1.077s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/feishu	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/qq	0.271s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/weixin	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/checkpoint	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/cli	12.672s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/codegraph	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/command	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/config	2.277s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control	4.988s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/diff	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/doctor	1.396s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/documentextract	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/evidence	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileref	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileutil	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileutil/encoding	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/frontmatter	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/hook	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/i18n	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/inspect	0.362s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/installsource	2.358s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/instruction	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/jobs	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/localai	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/lsp	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/mcpdiag	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/memory	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/modelmeta	0.336s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/netclient	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/nilutil	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/notify	0.300s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/outputstyle	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/permission	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/plugin	13.708s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/proc	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/product	0.264s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/promptprofile	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider/anthropic	0.390s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider/openai	2.111s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/sandbox	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/serve	0.687s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/skill	1.324s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/sysproxy	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool/builtin	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool/hosttools	(cached)
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/visioncap	0.250s

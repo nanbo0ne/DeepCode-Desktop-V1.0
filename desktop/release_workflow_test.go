@@ -122,12 +122,40 @@ func TestReleaseWorkflowRepackagesSignedPortablePayload(t *testing.T) {
 		`cp "$payload/node.exe" "$staging/node.exe"`,
 		`cp "$payload/LICENSE.node.txt" "$staging/LICENSE.node.txt"`,
 		`cp -R "$payload/codegraph" "$staging/codegraph"`,
+		`[ -f "THIRD-PARTY-NOTICES.txt" ]`,
+		`cp "THIRD-PARTY-NOTICES.txt" "$staging/THIRD-PARTY-NOTICES.txt"`,
 		`Compress-Archive -Force -Path '${staging_win}\\*'`,
 		`rm -rf -- "$staging"`,
 	} {
 		if !strings.Contains(section, want) {
 			t.Fatalf("signed portable repackage is missing %q", want)
 		}
+	}
+}
+
+func TestInstallerAcceptanceUsesPublished303Baseline(t *testing.T) {
+	body, err := os.ReadFile("../scripts/test-desktop-installer.ps1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, want := range []string{
+		"$ExpectedVersion = '3.0.4'",
+		"releases/tags/desktop-v3.0.3",
+		"Assert-Installation $upgradeDir '3.0.3' 'installed-303'",
+		"'SHA256SUMS.txt'",
+		"7437055c8680e564311c3455f5d6d1ddea06e9a1b69ee2e56d3e52960b9cc75b",
+		"$oldHash -ine $checksumRows[0].Groups[1].Value -or $oldHash -cne $pinnedOldHash",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("installer acceptance is missing published-baseline check %q", want)
+		}
+	}
+	if strings.Contains(script, "3.0.2") {
+		t.Fatal("installer acceptance must not retain the 3.0.2 upgrade baseline")
+	}
+	if strings.Contains(script, "5bf27fd4d958fc389a2ef320e401d05875d379b4d96c4ac64a8e8288ea48894d") {
+		t.Fatal("installer acceptance must not retain the 3.0.2 baseline hash")
 	}
 }
 
@@ -185,5 +213,19 @@ func TestReleaseWorkflowUsesDraftOnlyAndDoesNotRewriteSignedManifest(t *testing.
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("draft signed release workflow is missing %q", want)
 		}
+	}
+}
+
+func TestNextDesktopReleaseDoesNotGenerateLegacyArtifactAliases(t *testing.T) {
+	workflow := readDesktopReleaseWorkflow(t)
+	if strings.Contains(workflow, "DeepSeek-Orca-windows-") {
+		t.Fatal("next desktop release workflow must not publish DeepSeek-Orca artifact aliases")
+	}
+	body, err := os.ReadFile("../scripts/desktop-build.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "DeepSeek-Orca-windows-") {
+		t.Fatal("desktop build must not generate DeepSeek-Orca artifact aliases")
 	}
 }

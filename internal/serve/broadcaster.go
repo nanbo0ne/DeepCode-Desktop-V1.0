@@ -26,6 +26,11 @@ func NewBroadcaster() *Broadcaster {
 // a subscriber whose buffer is full rather than blocking. A marshal failure is
 // dropped silently — one bad event shouldn't stall the stream.
 func (b *Broadcaster) Emit(e event.Event) {
+	if e.Kind == event.ChildStarted || e.Kind == event.ChildDone {
+		// Background-child accounting is internal to turn telemetry and is not a
+		// user-facing SSE frame.
+		return
+	}
 	data, err := json.Marshal(toWire(e))
 	if err != nil {
 		return

@@ -10,7 +10,7 @@ import { FONT_FAMILIES, applyFontFamily, getFontFamily, type FontFamily } from "
 import { persistUIStyle, UI_STYLES, type UIStyle } from "../lib/uiStyle";
 import { checkDesktopUpdate } from "../lib/updateCheck";
 import type { BotConnectionView, BotInstallStartResult, BotSettingsView, ComputerUseState, LocalAICatalogView, NetworkView, ProcessDisplayMode, ProductCapabilities, PromptMode, ProviderView, SettingsTab, SettingsView, VisionCapability } from "../lib/types";
-import { normalizeLocalAICatalog } from "../lib/localAI";
+import { LOCAL_AI_ENABLED, normalizeLocalAICatalog } from "../lib/localAI";
 import { canChangeComputerUseAuthorization, localDownloadActions, wrappedFocusIndex, type LocalDownloadAction } from "../lib/settingsPanelState";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { InlineConfirmButton } from "./InlineConfirmButton";
@@ -31,7 +31,7 @@ const SETTINGS_TABS: SettingsTab[] = [
   "permissions",
   "sandbox",
   "network",
-	"localAI",
+	...(LOCAL_AI_ENABLED ? ["localAI" as const] : []),
 	"computer",
   "appearance",
 	"about",
@@ -525,7 +525,7 @@ function AboutSection() {
 
 function normalizeInitialSettingsTab(tab?: SettingsTab): SettingsTab {
   if (tab === "providers") return "models";
-  return tab ?? "general";
+  return tab && SETTINGS_TABS.includes(tab) ? tab : "general";
 }
 
 function settingsTabLabel(id: SettingsTab, t: ReturnType<typeof useT>): string {
@@ -2696,8 +2696,6 @@ type OfficialProviderKind = "deepseek" | "mimo-api" | "mimo-token-plan";
 
 const OFFICIAL_PROVIDER_CHOICES: Array<{ kind: OfficialProviderKind; labelKey: DictKey; descKey: DictKey; keyEnv: string }> = [
   { kind: "deepseek", labelKey: "settings.addProvider.official.deepseek", descKey: "settings.addProvider.official.deepseekDesc", keyEnv: "DEEPSEEK_API_KEY" },
-  { kind: "mimo-api", labelKey: "settings.addProvider.official.mimoApi", descKey: "settings.addProvider.official.mimoApiDesc", keyEnv: "MIMO_API_KEY" },
-  { kind: "mimo-token-plan", labelKey: "settings.addProvider.official.mimoTokenPlan", descKey: "settings.addProvider.official.mimoTokenPlanDesc", keyEnv: "MIMO_API_KEY" },
 ];
 
 function AddProviderPanel({

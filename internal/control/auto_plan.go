@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent"
 )
 
 const (
@@ -54,7 +56,17 @@ func (c *Controller) shouldAutoPlan(ctx context.Context, input string) bool {
 	if classifier != nil && score <= 2 {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		needsPlan, reason, err := classifier.NeedsPlan(ctx, input, score)
+		var needsPlan bool
+		var reason string
+		var err error
+		if attributed, ok := classifier.(interface {
+			NeedsPlanWithParentTurn(context.Context, string, int, string) (bool, string, error)
+		}); ok {
+			parentTurnID, _ := agent.ParentTurn(ctx)
+			needsPlan, reason, err = attributed.NeedsPlanWithParentTurn(ctx, input, score, parentTurnID)
+		} else {
+			needsPlan, reason, err = classifier.NeedsPlan(ctx, input, score)
+		}
 		if err == nil {
 			if needsPlan && reason != "" {
 				c.notice("auto plan classifier: " + reason)

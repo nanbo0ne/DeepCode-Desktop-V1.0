@@ -64,6 +64,7 @@ func TestHistoryMessagesUsePersistedFinalIdentity(t *testing.T) {
 	}
 	turns := []turnTelemetryRecord{{
 		TurnID: "turn-1", Outcome: event.TurnOutcomeSuccess, ElapsedMs: 2500, Tokens: 42,
+		Cost: 0.0012, Currency: "$", CostAvailable: true,
 		FinalItemID: "item-final", FinalMessageID: "message-final",
 		Items: []turnTelemetryItem{
 			{ItemID: "item-progress", MessageID: "message-progress", Type: event.ItemAgentMessage, Status: event.ItemStatusCompleted, MessageOrdinal: 0},
@@ -83,6 +84,9 @@ func TestHistoryMessagesUsePersistedFinalIdentity(t *testing.T) {
 	}
 	if got[6].Role != "turn_stats" || got[6].Outcome != event.TurnOutcomeSuccess || got[6].FinalMessageID != "message-final" {
 		t.Fatalf("turn stats = %+v", got[6])
+	}
+	if got[6].Cost != 0.0012 || got[6].Currency != "$" || !got[6].CostAvailable {
+		t.Fatalf("persisted turn cost = %+v", got[6])
 	}
 }
 

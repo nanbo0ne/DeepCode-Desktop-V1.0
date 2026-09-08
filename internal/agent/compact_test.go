@@ -17,17 +17,54 @@ import (
 type fakeProvider struct {
 	reply string
 	got   []provider.Message
+	req   provider.Request
+	usage *provider.Usage
 }
 
 func (f *fakeProvider) Name() string { return "fake" }
 
 func (f *fakeProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	f.got = req.Messages
-	ch := make(chan provider.Chunk, 2)
+	f.req = req
+	chunks := 2
+	if f.usage != nil {
+		chunks++
+	}
+	ch := make(chan provider.Chunk, chunks)
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: f.reply}
+	if f.usage != nil {
+		ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: f.usage}
+	}
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
+}
+
+func TestCompactionSummarizerEmitsAttributedUsageReceipt(t *testing.T) {
+	prov := &fakeProvider{reply: "summary", usage: &provider.Usage{PromptTokens: 80, CompletionTokens: 20, TotalTokens: 100}}
+	sinkEvents := make([]event.Event, 0, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Usage {
+			sinkEvents = append(sinkEvents, e)
+		}
+	})
+	a := New(prov, tool.NewRegistry(), &Session{}, Options{
+		Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+		ProviderEndpoint: "https://api.deepseek.com",
+	}, sink)
+	ctx, end := WithParentTurn(context.Background())
+	defer end()
+	parentTurnID, _ := ParentTurn(ctx)
+	if _, err := a.summarize(ctx, []provider.Message{{Role: provider.RoleUser, Content: "old context"}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(sinkEvents) != 1 {
+		t.Fatalf("usage receipts = %d, want one", len(sinkEvents))
+	}
+	got := sinkEvents[0]
+	if got.RequestID == "" || got.RequestID != prov.req.RequestID || got.ParentTurnID != parentTurnID || got.ProviderEndpoint != "https://api.deepseek.com" || got.Usage.TotalTokens != 100 {
+		t.Fatalf("compaction usage receipt = %+v, request=%+v", got, prov.req)
+	}
 }
 
 func TestTailStart(t *testing.T) {

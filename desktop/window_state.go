@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -53,8 +54,18 @@ func loadWindowState() (DesktopWindowState, bool) {
 }
 
 // SaveWindowState is the bound method the frontend calls to persist the current
-// window geometry before quit and periodically during use.
+// window geometry periodically during use. Once beforeClose has completed the
+// final native capture, late IPC calls are ignored so they cannot overwrite it.
 func (a *App) SaveWindowState(state DesktopWindowState) error {
+	a.windowStateMu.Lock()
+	defer a.windowStateMu.Unlock()
+	if a.windowStateClosing.Load() {
+		return nil
+	}
+	return a.saveWindowStateLocked(state)
+}
+
+func (a *App) saveWindowStateLocked(state DesktopWindowState) error {
 	path := windowStatePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -66,21 +77,35 @@ func (a *App) SaveWindowState(state DesktopWindowState) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// saveWindowStateSync saves the current window geometry from the Go side (called
-// during shutdown so the last-known state is persisted even if the frontend's
-// beforeunload promise hasn't resolved).
-func (a *App) saveWindowStateSync() {
-	if a.ctx == nil {
-		return
+// saveWindowStateSync captures the native geometry while ctx still refers to a
+// live window. The lock spans the native reads and disk write, so an async
+// frontend save cannot land after this final capture. closeAfter prevents any
+// later frontend IPC from overwriting the final state.
+func (a *App) saveWindowStateSync(ctx context.Context, closeAfter bool) (DesktopWindowState, bool) {
+	a.windowStateMu.Lock()
+	defer a.windowStateMu.Unlock()
+	if !windowStateContextIsLive(ctx) || a.windowStateClosing.Load() {
+		return DesktopWindowState{}, false
 	}
-	w, h := runtime.WindowGetSize(a.ctx)
-	x, y := runtime.WindowGetPosition(a.ctx)
-	max := runtime.WindowIsMaximised(a.ctx)
-	_ = a.SaveWindowState(DesktopWindowState{
-		Width:     w,
-		Height:    h,
-		X:         x,
-		Y:         y,
-		Maximised: max,
-	})
+	w, h := runtime.WindowGetSize(ctx)
+	x, y := runtime.WindowGetPosition(ctx)
+	state := DesktopWindowState{Width: w, Height: h, X: x, Y: y, Maximised: runtime.WindowIsMaximised(ctx)}
+	_ = a.saveWindowStateLocked(state)
+	if closeAfter {
+		a.windowStateClosing.Store(true)
+	}
+	return state, true
+}
+
+func (a *App) closeWindowStateSaves() {
+	a.windowStateMu.Lock()
+	a.windowStateClosing.Store(true)
+	a.windowStateMu.Unlock()
+}
+
+// Wails runtime functions terminate the process when the lifecycle context is
+// missing its frontend value. Check that contract before touching any native
+// window API; this also keeps non-Wails unit callers fail-closed.
+func windowStateContextIsLive(ctx context.Context) bool {
+	return ctx != nil && ctx.Value("frontend") != nil
 }

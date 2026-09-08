@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -279,7 +280,7 @@ func TestPauseResumeWaitsForPreviousHTTPWorker(t *testing.T) {
 	if err := m.Pause(task.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Resume(task.ID); err != nil {
+	if err := m.resume(task.ID); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -319,6 +320,22 @@ func TestPauseResumeWaitsForPreviousHTTPWorker(t *testing.T) {
 	for _, event := range events {
 		if event.State == TaskQueued {
 			t.Fatalf("stale worker published the current queued state: %+v", event)
+		}
+	}
+}
+
+func TestDisabledManagerRejectsInstallDownloadAndResume(t *testing.T) {
+	m := NewManager(t.TempDir(), nil)
+	if LocalAIEnabled {
+		t.Fatal("test assumes the temporary local AI gate is enabled")
+	}
+	for name, call := range map[string]func() error{
+		"model download":  func() error { _, err := m.StartModelDownload("qwen3.5-4b-q4-k-m"); return err },
+		"runtime install": func() error { _, err := m.StartRuntimeInstall("cpu-x64"); return err },
+		"resume":          func() error { return m.Resume("missing") },
+	} {
+		if err := call(); !errors.Is(err, ErrTemporarilyDisabled) {
+			t.Errorf("%s error = %v, want ErrTemporarilyDisabled", name, err)
 		}
 	}
 }

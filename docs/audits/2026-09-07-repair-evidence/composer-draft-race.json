@@ -1,0 +1,101 @@
+{
+  "screenshots": 0,
+  "results": [
+    {
+      "scenario": "edit-and-add-attachment-during-await",
+      "expected": "successful send does not clear text or attachments added while onSend is pending",
+      "passed": true,
+      "editableDuringSend": true,
+      "beforeResolve": {
+        "text": "new draft entered while sending",
+        "attachments": [
+          "original.txt",
+          "added-during-send.txt"
+        ],
+        "editable": true,
+        "calls": [
+          {
+            "method": "SubmitDisplayToTab",
+            "args": [
+              "tab_joyquant_db",
+              "original draft @[original.txt](.orca/attachments/mock-original.txt)",
+              "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"original.txt\" path=\".orca/attachments/mock-original.txt\" />\n</attachments>\noriginal draft\n@.orca/attachments/mock-original.txt"
+            ]
+          }
+        ],
+        "done": false,
+        "crashOverlay": false
+      },
+      "afterResolve": {
+        "text": "new draft entered while sending",
+        "attachments": [
+          "original.txt",
+          "added-during-send.txt"
+        ],
+        "editable": true,
+        "calls": [
+          {
+            "method": "SubmitDisplayToTab",
+            "args": [
+              "tab_joyquant_db",
+              "original draft @[original.txt](.orca/attachments/mock-original.txt)",
+              "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"original.txt\" path=\".orca/attachments/mock-original.txt\" />\n</attachments>\noriginal draft\n@.orca/attachments/mock-original.txt"
+            ]
+          }
+        ],
+        "done": true,
+        "crashOverlay": false
+      },
+      "errors": []
+    },
+    {
+      "scenario": "tab-switch-during-await",
+      "expected": "successful send from the old tab does not clear the new tab draft",
+      "passed": true,
+      "targetText": "01 JoyQuant DB项目维护 7 轮 · 2小时前",
+      "activeBefore": "00 制定项目开发规范\n输出中\n18 轮 · 8分钟前",
+      "activeAfter": "01 JoyQuant DB项目维护\n7 轮 · 2小时前",
+      "tabSwitched": true,
+      "beforeResolve": {
+        "text": "draft before tab switch",
+        "attachments": [
+          "tab-draft.txt"
+        ],
+        "editable": true,
+        "calls": [
+          {
+            "method": "SubmitDisplayToTab",
+            "args": [
+              "tab_joyquant_db",
+              "draft before tab switch @[tab-draft.txt](.orca/attachments/mock-tab-draft.txt)",
+              "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"tab-draft.txt\" path=\".orca/attachments/mock-tab-draft.txt\" />\n</attachments>\ndraft before tab switch\n@.orca/attachments/mock-tab-draft.txt"
+            ]
+          }
+        ],
+        "done": false,
+        "crashOverlay": false
+      },
+      "afterResolve": {
+        "text": "draft before tab switch",
+        "attachments": [
+          "tab-draft.txt"
+        ],
+        "editable": true,
+        "calls": [
+          {
+            "method": "SubmitDisplayToTab",
+            "args": [
+              "tab_joyquant_db",
+              "draft before tab switch @[tab-draft.txt](.orca/attachments/mock-tab-draft.txt)",
+              "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"tab-draft.txt\" path=\".orca/attachments/mock-tab-draft.txt\" />\n</attachments>\ndraft before tab switch\n@.orca/attachments/mock-tab-draft.txt"
+            ]
+          }
+        ],
+        "done": true,
+        "crashOverlay": false
+      },
+      "errors": []
+    }
+  ],
+  "passed": true
+}

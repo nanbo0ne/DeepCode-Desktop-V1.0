@@ -1,22 +1,22 @@
 [English](README.en.md) | **简体中文**
 
-# O.R.C.A. 3.0.3
+# O.R.C.A. 3.0.4
 
-**O.R.C.A.**（**Open Reasoning & Computing Agent**）是面向真实工作的开源 AI 工作区：把多模型对话、助手、编程、研究、文件与图片、工程工具、记忆、自动化和可选本地 AI 放在同一个可暂停、可检查、可恢复的应用里。
+**O.R.C.A.**（**Open Reasoning & Computing Agent**）是面向真实工作的开源 AI 工作区：把模型对话、助手、编程、研究、文件与图片、工程工具、记忆和自动化放在同一个可暂停、可检查、可恢复的应用里。
 
-> **3.0.3 所有平台暂时禁用电脑操控。** Windows、macOS、Linux 均不注册电脑操控工具，不执行屏幕截图或原生鼠标、键盘输入；代码和配置保留，待后续验收后恢复。普通附件和默认 Vision 识图仍支持。验证详情见 [3.0.3 验证记录](docs/audits/2026-09-08-v3.0.3-validation.md)。
+> **3.0.4 面向真实工作的 AI 工作区。** 本版带来更清晰的助手、编程、Orca Agent、Vision 附件、产物和多供应商工作流。托管本地 AI 与电脑操控在所有平台继续暂时禁用，相关实现、配置和模型文件保留；普通图片识别、自定义供应商和外部兼容本地服务不受影响。DPI 与其余测试范围见[验证报告](docs/audits/2026-09-08-v3.0.4-release-validation.md)。
 
 ## 下载
 
-下载文件、校验信息和可用平台包以 [Release 页资产](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3)为准。
+3.0.4 桌面版下载、校验信息和平台包见 [Release 页资产](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.4)。本版本不生成旧品牌兼容副本，安装升级兼容逻辑仍保留。
 
 | 平台 | 包 | 说明 |
 | --- | --- | --- |
-| Windows x64 | [安装器](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [便携版](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64.zip) | 云端功能与可选本地 AI；电脑操控暂时禁用 |
-| macOS 12+ Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-macos-universal.dmg) | Intel 与 Apple Silicon；本地 AI 受平台限制，电脑操控暂时禁用 |
-| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu；需要匹配的 WebKitGTK 运行库，电脑操控暂时禁用 |
+| Windows x64 | [安装器](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [便携版](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/O.R.C.A-for-Windows-windows-amd64.zip) | 云端功能；托管本地 AI 与电脑操控暂时禁用 |
+| macOS 12+ Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/O.R.C.A-macos-universal.dmg) | Intel 与 Apple Silicon；托管本地 AI 与电脑操控暂时禁用 |
+| Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu；需要匹配的 WebKitGTK 运行库，托管本地 AI 与电脑操控暂时禁用 |
 
-- [查看 3.0.3 发布页、校验文件与正式说明](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3)
+- [查看 3.0.4 发布页、校验文件与正式说明](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.4)
 - 下载时核对版本、平台与文件名。
 - 不要在文档提交 API key；正式包不内置任何供应商密钥。
 
@@ -24,7 +24,7 @@
 
 | 模式 | 适合 | 默认工作边界 |
 | --- | --- | --- |
-| **Orca** | 跨会话协调、机器人渠道、长期入口 | 处理会话派发、等待和自动化；不是普通文本子代理的替代品 |
+| **ORCA Agent** | 跨会话协调、机器人渠道、长期入口 | 处理会话派发、等待和自动化；不是普通文本子代理的替代品 |
 | **助手** | 问答、调研、写作、资料整理、办公文件和日常任务 | 使用联网/本地工具、助手记忆、计划、自动化和产物工具 |
 | **编程** | 仓库开发、调试、重构、测试、审查 | 使用 Shell、文件、Git、LSP、CodeGraph、检查点和工程验证 |
 
@@ -34,12 +34,23 @@
 
 ### Provider、模型与角色
 
-- 内置 Provider 预设覆盖 OpenAI、Anthropic、OpenRouter、DeepSeek、阿里云百炼、智谱、Kimi、MiniMax、火山方舟、百度千帆、腾讯混元、StepFun、Xiaomi MiMo、SiliconFlow 等；也支持自定义 OpenAI-compatible 和 Anthropic-compatible 服务。可用预设由构建版本和配置决定。
+- 首次启动只需输入并验证 DeepSeek Key，也可以跳过。新安装默认使用 Flash；未单独设置的普通子代理继承主模型。新增供应商入口保留 DeepSeek 和自定义 OpenAI-compatible、Anthropic-compatible 接入；已有供应商、独立密钥和明确选择的角色不删除、不强制替换。
 - Provider ID、Base URL、凭据槽和完整的 `provider/model` 引用相互隔离；同名模型不会自动跨端点串换。
 - 可以分别设置主对话、planner、subagent 和 Orca/自动化角色；Computer Use 控制角色配置保留，但本版本不运行。角色不是“模型能力保证”：上下文窗口、价格、工具调用和视觉能力仍按实际模型与检测结果判断。
-- **3.0.3 视觉默认值：** 对“未配置”的视觉/控制角色，默认候选为官方 `deepseek/deepseek-v4-flash-vision-exp`。普通附件识图仍使用视觉路由；保留的控制角色默认值不会启用电脑操控。文本 subagent 的默认值不变，已明确配置的角色保留。使用时需要自己的凭据和可用端点，包内不提供 key。
+- **视觉角色：** 优先使用明确设置的视觉模型，其次是已确认支持图片的当前模型，再采用官方 `deepseek/deepseek-v4-flash-vision-exp` 默认候选。Flash、Pro 保持文本模型标记。发送图片前仍检查目标供应商与权限，不静默跨供应商上传；显式关闭视觉会保持关闭。普通子代理不会因此全部切换成 Vision。
 - 文本 subagent 不会因为视觉默认值被静默改成视觉模型。显式角色配置优先；没有可用凭据或能力检测失败时，应用应显示原因并要求重新配置，而不是伪造成功。
 - 价格、余额和上下文信息没有可靠来源时会隐藏或标为未知，不显示误导性的零值。供应商计费和数据保留规则由供应商决定。
+
+DeepSeek 价格已于 2026-09-08 按[官方价格页](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)核对，以下均为每百万 token 的人民币价格（CNY/百万 token）：
+
+| 模型与时段 | 缓存命中输入 | 未命中输入 | 输出 |
+| --- | ---: | ---: | ---: |
+| Flash / Vision 闲时 | ¥0.05 | ¥1.5 | ¥4.5 |
+| Flash / Vision 峰时 | ¥0.10 | ¥3 | ¥9 |
+| Pro 闲时 | ¥0.15 | ¥4.5 | ¥13.5 |
+| Pro 峰时 | ¥0.30 | ¥9 | ¥27 |
+
+峰时固定为 UTC+8 周一至周五 09:00–12:00、14:00–18:00，其余时段含周末为闲时。每次请求开始时冻结计价依据，历史金额不重算；3.0.3 已存金额继续保留 USD，不追溯转换为人民币。混合 USD/CNY 的会话不显示为一个权威总额，各回合保留自己的币种。
 
 ### 工作区、会话与上下文
 
@@ -53,6 +64,7 @@
 
 - 可粘贴、拖放或引用 PNG、JPEG、WebP、GIF 和常见文档、表格、演示及文本文件；项目内文件可引用而不必复制，项目外附件会进入当前工作区的附件目录。
 - 图片默认只作为当前回合输入，不写入会话 JSONL、标题、记忆或压缩文本；发送前仍会交给当前启用的视觉 Provider。尺寸、数量、格式和模型能力会限制可用性。
+- 主 Agent 在当前工作区生成的图片，也可委派视觉子代理读取。文件读取及图片发送权限通过后，应用校验路径、格式和限额并保存不可变快照；仅在工作区内并不等于自动获准上传。其他会话文件、目录逃逸和链接替换会被拒绝。
 - 例如，附上自己选择的图片并提问“提取这张图里的表格，整理成 CSV”，或附上文档要求摘要。禁用电脑操控不影响这类普通附件处理；应用不会为此自行截取屏幕。
 - `artifact_create`、`artifact_edit`、`artifact_preview` 和 `artifact_validate` 面向 DOCX、XLSX、PPTX、PDF。产物带结构化 sidecar，便于后续编辑和完整性检查。
 - 真实预览依赖本机渲染器；缺依赖时明确报错，不用占位图冒充视觉验收。结构检查通过不等于版面、字体、公式、分页或所有页面都正确。复杂第三方 Office 文件可能拒绝修改，原文件不会被覆盖。
@@ -73,15 +85,13 @@
 
 ### 本地 AI
 
-- Windows 可选安装由 O.R.C.A 管理的固定版本 `llama.cpp` 运行时和本地模型；不修改或接管 LM Studio。
-- 管理器会查看 GPU、显存、内存和磁盘，可能选择 CUDA、Vulkan 或 CPU 回退；推荐不等于保证，实际量化模型、上下文和驱动仍会改变结果。
-- 模型下载支持队列、暂停、恢复/断点、镜像、速度/剩余时间和 SHA-256 校验。下载完成不等于模型能稳定运行。
-- 本地模型可分配给主角色、planner、subagent 或 Orca；已有 Computer Use 角色引用保留但不运行。同一时间的驻留资源有限，删除仍被角色引用的模型会被拒绝。运行时只监听本机回环地址，并使用临时授权令牌。
-- macOS/Linux 的本地 AI 管理在本版本中不可用或未完成验证；可继续使用云端 Provider。
+3.0.4 在所有平台暂时禁用 O.R.C.A. 管理的 `llama.cpp` 和模型下载，隐藏页面、向导路线及启动开关。后端同时拒绝安装、下载、恢复下载和自动启动，不是仅隐藏按钮。停止、取消和清理接口保留，已有模型与配置不自动删除。
+
+这不禁止手动配置外部 OpenAI-compatible 本地服务；应用不会接管 LM Studio。托管运行时的硬件检测、下载与加载实现保留，待后续独立验收后恢复。
 
 ### Computer Use：本版本暂时禁用
 
-3.0.3 在 **Windows、macOS 和 Linux 所有平台**暂时禁用电脑操控：不注册电脑操控工具，不截取屏幕，不执行原生鼠标、键盘或窗口控制。Orca、自动化、机器人和子任务都不能启动这项功能。
+3.0.4 继续在 **Windows、macOS 和 Linux 所有平台**暂时禁用电脑操控：不注册电脑操控工具，不截取屏幕，不执行原生鼠标、键盘或窗口控制。ORCA Agent、自动化、机器人和子任务都不能启动这项功能。
 
 代码和配置仍然保留，待后续版本完成验收后恢复。已有授权、Full access 或修改控制模型配置均不能在本版本中启用它。默认 Vision、用户主动提供的图片及普通文件附件仍可使用；可以让助手分析附件或整理文件，但不能让它代操作桌面。
 
@@ -90,12 +100,15 @@
 ### 权限与隐私
 
 - Ask、自动审批和 Full access 是不同策略；宿主 deny 规则、工作区写入边界、网络代理和工具库开关优先于模型请求。
-- 自动审批可以用独立模型做风险分类，但分类请求不应携带完整历史、工具输出、图片或秘密。分类失败应回退为人工处理并记录可审计的摘要。
+- 自动审批可以用独立模型做风险分类，不携带完整历史、工具输出、图片或秘密。分类异常沿用当前审批策略的回退行为并记录告警，不绕过宿主 deny 或显式 ask 规则。
 - API key 保存在本地凭据文件/环境变量中，不写入聊天消息、标题、记忆、发布包或本仓库。连接 Provider 前确认其数据训练、保留、地区和计费规则。
 - 会话、配置、凭据、附件、缓存、日志、记忆、本地模型和下载任务分开存放，便于备份和清理。共享、机器人和 MCP 服务可能把数据发送到额外的第三方端点。
 
 ### Modern 与 Classic
 
+- 运行中的工具组和阶段性回复按实际发生顺序显示，收到的文本片段及时呈现。`简略 / 详细` 名称保留：简略默认隐藏供应商 reasoning，详细显示它；两者都显示进度和工具，不改变模型思考强度。
+- 完成后过程折叠成轻量边框标题，显示状态、耗时、本轮 token，以及可确认的 DeepSeek 官方费用。最终答案位于框外。统计按请求去重，包含关联子代理与风险复核；未知、未结算或缺少用量的费用隐藏，reasoning 不重复计入输出 token。
+- 回合定位短线贴近聊天区左缘。Todo 是 Composer 上方的独立小浮层，两侧透明且不拦截正文操作。固定主对话显示名改为 ORCA Agent，历史与会话 ID 不变。
 - **Modern** 是默认的轻量界面：紧凑菜单、时间线、单行 Composer、模型/effort 控件和响应式布局。
 - **Classic** 保留 V2.1.3 风格的蓝白布局、原生窗口装饰和控件安排，同时使用 V3 的会话、Provider、工具和权限服务。
 - 样式选择会持久化；Windows Modern 使用自有标题栏，Classic 使用原生窗口框架，通常需要重启才完全切换。窗口按系统 DPI 工作，不等于应用能修复所有 WebView/驱动问题。
@@ -105,7 +118,7 @@
 | 能力 | Windows | macOS | Linux |
 | --- | :---: | :---: | :---: |
 | 云端 Provider、会话、助手/编程/Orca、文件、MCP、Skill、记忆 | 可用 | 可用 | 可用 |
-| Windows `llama.cpp` 管理 | 目标平台 | 不可用/待验证 | 不可用/待验证 |
+| 托管 `llama.cpp` / 本地模型下载 | 暂时禁用 | 暂时禁用 | 暂时禁用 |
 | Computer Use | 暂时禁用 | 暂时禁用 | 暂时禁用 |
 | Modern / Classic | 两种窗口壳 | 平台原生窗口 | 平台原生窗口 |
 
@@ -120,10 +133,11 @@ Windows 需要 WebView2；macOS 使用系统 WebKit；Linux 需要 GTK/WebKitGTK
 3. Linux 安装 DEB，并先准备对应 WebKitGTK/GTK 依赖。发行版没有匹配库时，优先使用系统包管理器或源码构建。
 4. 使用 Release 页中的签名、SHA-256 和 manifest 校验文件核对包。
 
-### 3.0.3 更新方式
+### 应用内更新
 
 - 稳定通道首先检查 [`https://orca.aichat.diy/updates/stable/latest.json`](https://orca.aichat.diy/updates/stable/latest.json)，失败时回退 GitHub 的签名 manifest 与对应签名 payload。manifest、payload、版本和 SHA-256 必须一致；签名失败不得安装。
 - Windows 已安装版本只提供“明确下载 → 用户确认退出 → 运行安装器”的流程；不会在后台自动下载或自动安装。关闭前保存会话和草稿，失败时保留原安装。
+- 3.0.4 下载界面显示来源、实测速度与预计剩余时间；持续低速时提示切源。先取消，再选择另一来源并重试，可继续有效断点。备用文件必须匹配签名清单中的版本、大小与摘要，切源不会放宽校验。速度取决于当前网络和服务器，不保证 GitHub 更快。
 - macOS/Linux 显示可用版本和校验信息，打开对应下载页/包；不把跨平台自更新当成已完成能力。macOS 的主检查地址如上，GitHub 是回退来源。
 - 旧版本用户需要从 Release 页手动下载并运行安装器/包，完成一次 3.0.3 bootstrap；不要修改配置版本或手工替换凭据文件来“强制升级”。
 
@@ -161,12 +175,12 @@ wails build
 | 图片被拒绝 | 格式/大小/数量、视觉模式、当前角色和模型能力；文本 subagent 不会自动获得视觉能力 |
 | 产物能生成但预览失败 | 这是渲染器缺失或版面未验收，不要把结构校验当视觉通过；检查 Poppler/目标 Office 阅读器 |
 | 工具被阻止 | Ask/Auto/Full access、deny 规则、工作区路径、sandbox 和工具库开关；不要用关闭安全边界解决未知错误 |
-| 本地模型加载失败 | GPU 驱动、显存/内存/磁盘、模型完整性、运行时状态和回环端口；重新下载前先保留失败日志 |
-| 找不到 Computer Use 或请求被拒绝 | 3.0.3 所有平台暂时禁用电脑操控，授权或模型设置无法开启；普通 Vision 识图和文件附件仍可用 |
+| 找不到本地 AI | 3.0.4 暂时禁用托管运行时及模型下载，旧配置不能重新开启；文件保留，外部自定义服务仍可使用 |
+| 找不到 Computer Use 或请求被拒绝 | 本版本继续暂时禁用电脑操控，授权或模型设置无法开启；普通 Vision 识图和文件附件仍可用 |
 | 白屏或窗口异常 | WebView2/WebKitGTK/GTK 版本、GPU 驱动、Modern/Classic 选择；先重启并收集日志，再判断是否为原生问题 |
 | 更新器无响应 | 先访问主 manifest，再检查 GitHub 回退、签名/版本字段和系统代理；Windows 手动下载并退出安装，不要期待后台安装 |
 
-3.0.3 的验证范围与结果见 [验证记录](docs/audits/2026-09-08-v3.0.3-validation.md)。桌面开发、打包和平台细节见 [desktop/README.md](desktop/README.md)；办公产物边界见 [docs/ARTIFACT_RUNTIME.md](docs/ARTIFACT_RUNTIME.md)。
+3.0.4 的验证范围与结果见 [验证报告](docs/audits/2026-09-08-v3.0.4-release-validation.md)，下载速度证据见 [测速记录](docs/audits/2026-09-08-download-diagnosis.md)。桌面开发、打包和平台细节见 [desktop/README.md](desktop/README.md)；办公产物边界见 [docs/ARTIFACT_RUNTIME.md](docs/ARTIFACT_RUNTIME.md)。
 
 ## 许可
 

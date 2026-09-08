@@ -329,7 +329,7 @@ func providerViewFromEntry(p config.ProviderEntry, builtIn, added bool) Provider
 
 func officialProviderViews(added map[string]bool) []ProviderView {
 	var out []ProviderView
-	for _, preset := range config.ProviderPresetCatalog() {
+	for _, preset := range config.SelectableProviderPresetCatalog() {
 		v := providerViewFromEntry(preset.Entry, true, added[preset.ID] || added[preset.Entry.Name])
 		v.PresetID, v.Label, v.Description, v.Category, v.AccountURL = preset.ID, preset.Label, preset.Description, preset.Category, preset.AccountURL
 		out = append(out, v)

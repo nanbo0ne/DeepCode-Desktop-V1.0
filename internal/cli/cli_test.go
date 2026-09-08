@@ -111,6 +111,22 @@ func isolateCLIConfigHome(t *testing.T) string {
 	return home
 }
 
+func explicitMimoProvider(name, model string) config.ProviderEntry {
+	return config.ProviderEntry{
+		Name: name, Kind: "openai", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1",
+		Model: model, APIKeyEnv: "MIMO_TOKEN_PLAN_API_KEY", ContextWindow: 1_000_000, NoProxy: true,
+	}
+}
+
+func cliTestProvidersWithExplicitMimo() []config.ProviderEntry {
+	cfg := config.Default()
+	cfg.Providers = append(cfg.Providers,
+		explicitMimoProvider("mimo-pro", "mimo-v2.5-pro"),
+		explicitMimoProvider("mimo-flash", "mimo-v2.5"),
+	)
+	return cfg.Providers
+}
+
 func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	defer func(prev func() (terminalRGB, bool)) {
 		queryTerminalBackgroundForTheme = prev
@@ -350,16 +366,16 @@ func TestSetupOverwritePromptShowsYNDefault(t *testing.T) {
 // TestConfigureKeys verifies that a shared api_key_env (each vendor's SKUs use
 // the same env var) is asked only once, and entered keys become env lines.
 func TestConfigureKeys(t *testing.T) {
-	// Force a clean baseline: any DEEPSEEK_API_KEY / MIMO_API_KEY in the
+	// Force a clean baseline: any DEEPSEEK_API_KEY / MIMO_TOKEN_PLAN_API_KEY in the
 	// process env (e.g. inherited from the test runner) would be picked up
 	// by the new "reuse existing" path and the prompt would be skipped,
 	// making the assertion below noisy.
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "")
 
-	selected := config.Default().Providers // deepseek-flash, deepseek-pro, mimo-pro, mimo-flash
+	selected := cliTestProvidersWithExplicitMimo() // deepseek-flash, deepseek-pro, mimo-pro, mimo-flash
 
-	// Two distinct keys to enter: DEEPSEEK_API_KEY, then MIMO_API_KEY.
+	// Two distinct keys to enter: DEEPSEEK_API_KEY, then MIMO_TOKEN_PLAN_API_KEY.
 	input := "ds-key\nmi-key\n"
 	env := configureKeys(selected, strings.NewReader(input), io.Discard)
 
@@ -385,7 +401,7 @@ func TestConfigureKeysReusesExistingEnv(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "preset-ds-key")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "") // ask for this one
 
-	selected := config.Default().Providers
+	selected := cliTestProvidersWithExplicitMimo()
 	var output bytes.Buffer
 	env := configureKeys(selected, strings.NewReader("\nmi-key-from-input\n"), &output)
 
@@ -407,7 +423,7 @@ func TestConfigureKeysCanResetExistingEnv(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "stale-ds-key")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "") // ask for this one normally
 
-	selected := config.Default().Providers
+	selected := cliTestProvidersWithExplicitMimo()
 	var output bytes.Buffer
 	env := configureKeys(selected, strings.NewReader("y\nfresh-ds-key\nmi-key\n"), &output)
 
@@ -431,7 +447,7 @@ func TestConfigureKeysAllSetDefaultsToReusingInput(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "ds")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "mi")
 
-	selected := config.Default().Providers
+	selected := cliTestProvidersWithExplicitMimo()
 	env := configureKeys(selected, strings.NewReader("\n\n"), io.Discard)
 	if len(env) != 2 {
 		t.Errorf("env = %v, want 2 (both reused)", env)
@@ -475,11 +491,10 @@ func TestAppendEnvUpsertHandlesExportPrefix(t *testing.T) {
 	}
 }
 
-// TestGroupByFamily verifies the wizard groups the default preset into
-// "deepseek" (flash + pro) and "mimo" (pro + flash), preserving the order
-// each family first appears in.
+// TestGroupByFamily verifies the wizard groups an explicitly configured MiMo
+// fixture with the DeepSeek defaults, preserving first-seen family order.
 func TestGroupByFamily(t *testing.T) {
-	order, members, info := groupByFamily(config.Default().Providers)
+	order, members, info := groupByFamily(cliTestProvidersWithExplicitMimo())
 
 	if got := order; !reflect.DeepEqual(got, []string{"deepseek", "mimo"}) {
 		t.Fatalf("family order = %v, want [deepseek mimo]", got)
@@ -815,21 +830,27 @@ func TestFilterStaleCustomEntries(t *testing.T) {
 	})
 }
 
-func TestWithBuiltinFamiliesAddsMissingMiMo(t *testing.T) {
-	// The user's case: a deepseek-orca.toml that defines only deepseek providers.
+func TestWithBuiltinFamiliesDefaultsToDeepSeekOnlyAndRetainsCustomMiMo(t *testing.T) {
+	// A config that defines only DeepSeek keeps the real DeepSeek-only defaults.
 	cfg := []config.ProviderEntry{
 		{Name: "deepseek-flash", Kind: "openai", BaseURL: "https://api.deepseek.com"},
 		{Name: "deepseek-pro", Kind: "openai", BaseURL: "https://api.deepseek.com"},
 	}
 	order, _, info := groupByFamily(withBuiltinFamilies(cfg))
-	seen := map[string]bool{}
-	for _, k := range order {
-		seen[info[k].name] = true
+	if !reflect.DeepEqual(order, []string{"deepseek"}) || info["deepseek"].name != "DeepSeek" {
+		t.Fatalf("wizard families = %v, want DeepSeek only", order)
 	}
-	if !seen["DeepSeek"] || !seen["MiMo (Xiaomi)"] {
-		t.Fatalf("wizard families = %v, want both DeepSeek and MiMo", order)
+
+	// An explicitly configured MiMo family remains available and is not injected
+	// or replaced by the built-in family pass.
+	cfg = append(cfg, explicitMimoProvider("mimo-custom", "mimo-v2.5-pro"))
+	order, members, info := groupByFamily(withBuiltinFamilies(cfg))
+	if !reflect.DeepEqual(order, []string{"deepseek", "mimo"}) || info["mimo"].name != "MiMo (Xiaomi)" {
+		t.Fatalf("wizard families = %v, want DeepSeek and explicit MiMo", order)
 	}
-	// A user's customized deepseek must not be duplicated.
+	if n := len(members["mimo"]); n != 1 {
+		t.Fatalf("mimo members = %d, want the explicit custom provider only", n)
+	}
 	if n := len(groupByFamilyKeys(withBuiltinFamilies(cfg), "deepseek")); n != 2 {
 		t.Fatalf("deepseek members = %d, want the user's 2 (no injected duplicate)", n)
 	}
@@ -893,6 +914,7 @@ func TestProvidersWithMissingKeysIncludesPlannerModel(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "set")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "")
 	cfg := config.Default()
+	cfg.Providers = append(cfg.Providers, explicitMimoProvider("mimo-pro", "mimo-v2.5-pro"))
 	cfg.Agent.PlannerModel = "mimo-pro"
 
 	got := providersWithMissingKeys(cfg)

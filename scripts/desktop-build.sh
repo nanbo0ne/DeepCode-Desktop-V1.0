@@ -293,6 +293,7 @@ darwin)
 	generated_app=$(find build/bin -maxdepth 1 -type d -name "*.app" -print -quit)
 	[ -n "$generated_app" ] || { echo "no macOS app bundle found in build/bin" >&2; exit 1; }
 	cp -R "$generated_app" "$app"
+	cp "$ROOT/THIRD-PARTY-NOTICES.txt" "$app/Contents/Resources/THIRD-PARTY-NOTICES.txt"
 	# Reject invalid bundle metadata before signing or archiving it.
 	plutil -lint "$app/Contents/Info.plist"
 
@@ -383,6 +384,7 @@ windows)
 	[ -f "$payload/codegraph/bin/codegraph.cmd" ] || { echo "portable payload is missing CodeGraph launcher" >&2; exit 1; }
 	cp "$payload/node.exe" "$staging/node.exe"
 	cp "$payload/LICENSE.node.txt" "$staging/LICENSE.node.txt"
+	cp "$ROOT/THIRD-PARTY-NOTICES.txt" "$staging/THIRD-PARTY-NOTICES.txt"
 	cp -R "$payload/codegraph" "$staging/codegraph"
 	staging_win=$(cygpath -w "$staging")
 	zip_win=$(cygpath -w "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip")
@@ -390,13 +392,9 @@ windows)
 	verify_windows_installer_archive "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip"
 	assert_within_dir "$staging" "$staging_parent"
 	rm -rf -- "$staging"
-	# V2 updater compatibility aliases. They intentionally retain the previous
-	# asset names for one major release while all current UI uses O.R.C.A.
-	cp "$packaged_installer" "$ROOT/dist/DeepSeek-Orca-windows-${arch}-installer.exe"
-	cp "$ROOT/dist/${ARTIFACT_BASE}-windows-${arch}.zip" "$ROOT/dist/DeepSeek-Orca-windows-${arch}.zip"
 	;;
 linux)
-	tar -czf "$ROOT/dist/${ARTIFACT_BASE}-linux-${arch}.tar.gz" -C build/bin "$BINNAME"
+	tar -czf "$ROOT/dist/${ARTIFACT_BASE}-linux-${arch}.tar.gz" -C build/bin "$BINNAME" -C "$ROOT" THIRD-PARTY-NOTICES.txt
 	# Also build the manifest/release .deb for Debian/Ubuntu users (goreleaser/nfpm;
 	# see desktop/build/linux/nfpm.yaml). The tar.gz remains an auxiliary bare-binary
 	# archive. nfpm reads

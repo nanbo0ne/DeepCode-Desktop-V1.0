@@ -1,6 +1,58 @@
-[English section](#orca-desktop-303-english) | **简体中文**
+[English section](#english-candidate-notes) | **简体中文**
 
-# O.R.C.A. Desktop 3.0.3
+# O.R.C.A. Desktop 3.0.4
+
+## 3.0.4
+
+3.0.4 面向真实工作的桌面 AI 工作区，覆盖助手、编程、Orca Agent、Vision 附件、产物和多供应商工作流。3.0.3 的文件、签名、标签与历史金额不变。DPI 与其余测试范围见[验证报告](../docs/audits/2026-09-08-v3.0.4-release-validation.md)。桌面下载与校验文件见 [desktop-v3.0.4 Release 资产](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.4)。
+
+- 首次配置仅提供 DeepSeek Key 验证和跳过；默认文本模型 Flash，普通子代理继承主模型。明确设置的视觉角色优先，其次为已确认支持视觉的当前模型，最后才采用默认 DeepSeek Vision。自定义及已有供应商保留。
+- 托管本地 AI 在所有平台暂时禁用：页面、向导和启动开关隐藏，后端拒绝安装、下载、恢复与启动。停止和清理能力、代码及模型文件保留；外部自定义兼容服务不受影响。电脑操控继续禁用。
+- 真实文本增量、阶段回复与工具按序展示；简略/详细仅控制供应商 reasoning 的隐藏/显示，默认隐藏。完成摘要显示耗时、本轮 token 与可确认的 DeepSeek 官方费用；最终答案独立显示。
+- 工作区生成图片经过读取和发送权限、真实路径及内容检查后，冻结为父任务所属附件，再交给视觉子代理。不能以工作区路径为理由跳过上传授权。
+- 回合竖标位于左侧，Todo 为透明外层的小浮层，固定主对话入口显示 ORCA Agent。
+- 下载器显示来源、速度和 ETA；取消后可选择相同签名包的其他来源并续传。下一版不生成旧品牌重复包，但保留安装升级兼容。
+
+Windows 构建使用版本常量 `v3.0.4`：`wails build -platform windows/amd64 -ldflags "-X main.version=v3.0.4 -X main.channel=stable" -nsis -webview2 embed`。详细测试及未覆盖项见[验证报告](../docs/audits/2026-09-08-v3.0.4-release-validation.md)。
+
+DeepSeek 官方人民币价格（2026-09-08，CNY/百万 token；[官方价格页](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)）：
+
+| 模型与时段 | 缓存命中输入 | 未命中输入 | 输出 |
+| --- | ---: | ---: | ---: |
+| Flash / Vision 闲时 | ¥0.05 | ¥1.5 | ¥4.5 |
+| Flash / Vision 峰时 | ¥0.10 | ¥3 | ¥9 |
+| Pro 闲时 | ¥0.15 | ¥4.5 | ¥13.5 |
+| Pro 峰时 | ¥0.30 | ¥9 | ¥27 |
+
+峰时固定为 UTC+8 周一至周五 09:00–12:00、14:00–18:00，其余时间为闲时。每次请求开始时冻结计价依据；3.0.3 已存金额保留 USD，不回算人民币，USD 历史回合与 CNY 新回合不直接相加。
+
+<a id="english-candidate-notes"></a>
+
+## 3.0.4
+
+O.R.C.A Desktop 3.0.4 is a workspace for real work across Assistant, Coding, Orca Agent, Vision attachments, artifacts, and multiple providers. The 3.0.3 files, signatures, tags, and historical amounts remain unchanged. See the [validation report](../docs/audits/2026-09-08-v3.0.4-release-validation.md) for DPI and remaining test scope. Desktop downloads and verification files are listed in the [desktop-v3.0.4 Release assets](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.4).
+
+- First run offers DeepSeek key validation or skip; Flash is the text default and ordinary subagents inherit the main model. Explicit vision roles win, then the confirmed vision-capable current model, then default DeepSeek Vision. Custom and existing providers remain.
+- Managed local AI is temporarily disabled on every platform at both UI and backend entry points. Stop/cleanup, implementation, configuration, and models remain. External compatible local providers are unaffected. Computer Use stays disabled.
+- Real text deltas, stage replies, and tools remain ordered. Compact/Detailed only hide/show provider reasoning, hidden by default. Completed summaries show elapsed time, turn tokens, and known official DeepSeek cost, with the final answer separate.
+- Generated workspace images require read/send permission and validated immutable parent-owned snapshots before visual delegation. Workspace location is not upload permission.
+- The turn rail is on the left, Todo has a small transparent outer layer, and the fixed sidebar entry is ORCA Agent.
+- Downloads show source, speed, and ETA. Cancel, select another source, and retry resumes the same signed payload. Future builds omit legacy duplicate filenames while preserving installer upgrade compatibility.
+
+Build Windows with the Wails command above. See the [validation report](../docs/audits/2026-09-08-v3.0.4-release-validation.md) for tests and coverage gaps.
+
+DeepSeek official RMB pricing (2026-09-08, CNY per million tokens; [official pricing page](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)):
+
+| Model and period | Cache-hit input | Cache-miss input | Output |
+| --- | ---: | ---: | ---: |
+| Flash / Vision off-peak | ¥0.05 | ¥1.5 | ¥4.5 |
+| Flash / Vision peak | ¥0.10 | ¥3 | ¥9 |
+| Pro off-peak | ¥0.15 | ¥4.5 | ¥13.5 |
+| Pro peak | ¥0.30 | ¥9 | ¥27 |
+
+Peak time is fixed at UTC+8 Monday-Friday 09:00-12:00 and 14:00-18:00; all other times are off-peak. Each request freezes pricing at start. Amounts already stored for 3.0.3 remain USD and are not converted back to RMB or relabeled. A session containing USD and CNY turns is not shown as one authoritative total; each turn keeps its own currency.
+
+## 3.0.3 Stable Baseline / 稳定版参考
 
 这是 O.R.C.A. Go 内核的 Wails 桌面壳。React + TypeScript 前端通过 Wails typed bindings 直接调用 `desktop/app.go`，Go 侧把 `control.Controller`、Provider、工具、MCP、Skill、会话、产物、本地 AI 和权限事件绑定到 WebView；没有额外的 HTTP hop。
 

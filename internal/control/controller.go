@@ -659,6 +659,8 @@ func (c *Controller) runGoalLoopWithRichDisplay(ctx context.Context, input agent
 	if c.refreshOnLease {
 		c.refreshSessionFromDisk()
 	}
+	ctx = agent.WithParentSession(ctx, c.parentSessionID())
+	ctx = c.withTaskImages(ctx, true)
 	if err := c.runTurnWithRichDisplay(ctx, input, raw, display); err != nil {
 		if ctx.Err() != nil {
 			c.stopGoal(GoalStatusStopped)
@@ -717,6 +719,7 @@ func (c *Controller) runTurnWithRichDisplay(ctx context.Context, rich agent.Rich
 	c.maybeAutoPlan(ctx, raw)
 	ctx = agent.WithParentSession(ctx, c.parentSessionID())
 	input = c.Compose(input)
+	ctx = c.withTaskImages(ctx, true)
 	startMessages := c.messageCount()
 	defer c.snapshotActivityIfChanged(startMessages)
 	defer c.recordDisplayForNewUser(startMessages, display)
@@ -1303,6 +1306,7 @@ func (c *Controller) Run(ctx context.Context, input string) error {
 	defer endTurn()
 	c.maybeSessionStart(ctx)
 	ctx = agent.WithParentSession(ctx, c.parentSessionID())
+	ctx = c.withTaskImages(ctx, false)
 	startMessages := c.messageCount()
 	defer c.snapshotActivityIfChanged(startMessages)
 	if c.hooks.Enabled() {
@@ -2939,7 +2943,17 @@ func (c *Controller) Review(ctx context.Context, tool, subject string, args json
 	}
 	reviewCtx, cancel := context.WithTimeout(ctx, riskReviewTimeout)
 	defer cancel()
-	assessment, err := classifier.Assess(reviewCtx, permission.RedactedRiskInput(tool, subject, args, readOnly))
+	input := permission.RedactedRiskInput(tool, subject, args, readOnly)
+	var assessment permission.RiskAssessment
+	var err error
+	if attributed, ok := classifier.(interface {
+		AssessWithParentTurn(context.Context, permission.RiskInput, string) (permission.RiskAssessment, error)
+	}); ok {
+		parentTurnID, _ := agent.ParentTurn(ctx)
+		assessment, err = attributed.AssessWithParentTurn(reviewCtx, input, parentTurnID)
+	} else {
+		assessment, err = classifier.Assess(reviewCtx, input)
+	}
 	if err != nil {
 		c.recordRiskReview(permission.RiskAssessment{}, model, started, "fallback_allow", err)
 		return false, err

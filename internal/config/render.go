@@ -100,6 +100,11 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		}
 		fmt.Fprintf(&b, "process_display_mode = %q   # desktop: compact|detailed process presentation\n", c.DesktopProcessDisplayMode())
 		fmt.Fprintf(&b, "expand_thinking = %v   # legacy compatibility; detailed mode sets this true\n", c.DesktopProcessDisplayMode() == ProcessDisplayDetailed)
+		if c.Desktop.ShowReasoning != nil {
+			fmt.Fprintf(&b, "show_reasoning = %v   # desktop: explicit reasoning visibility; omitted keeps the compact default\n", *c.Desktop.ShowReasoning)
+		} else {
+			b.WriteString("# show_reasoning = true   # desktop: explicit reasoning visibility; omitted keeps the compact default\n")
+		}
 		fmt.Fprintf(&b, "activity_indicator_enabled = %v   # desktop: optional animated process activity mark\n", c.Desktop.ActivityIndicator)
 		fmt.Fprintf(&b, "vision_mode = %q   # desktop: off|auto|on image routing\n", c.DesktopVisionMode())
 		fmt.Fprintf(&b, "vision_enabled = %v   # legacy compatibility; true maps to on\n", c.DesktopVisionMode() == VisionModeOn)

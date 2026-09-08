@@ -70,6 +70,10 @@ type ToolSchema struct {
 
 // Request is a single completion request.
 type Request struct {
+	// RequestID is the client-generated identity for this provider request. It
+	// is carried for provider adapters and usage receipts; providers need not
+	// expose it remotely.
+	RequestID   string
 	Messages    []Message
 	Tools       []ToolSchema
 	Temperature float64

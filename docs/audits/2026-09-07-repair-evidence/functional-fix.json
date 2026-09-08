@@ -1,0 +1,313 @@
+[
+  {
+    "scenario": "settings-load-retry",
+    "expected": "failed Settings read shows a retry and a second read restores the page",
+    "passed": true,
+    "retryVisible": true,
+    "failedText": "设置未能加载。重试\n设置未能加载。",
+    "recoveredText": "通用\n\n语言、关闭行为和计划默认设置。\n\n通用\n语言\n自动（跟随系统）\n中文\nEnglish\n关闭窗口时\n选择点击窗口关闭按钮后的行为。\n在后台运行\n结束程序\n自动检查更新\n启动后和每 24 小时检查一次；不会自动下载或安装。\n开启\n关闭\n立即检查\n当前版本\nv1.0.0 (browser dev)\n过程展示\n只调整思考与工具过程的呈现，不改变最终回答内容。\n精简\n详细\n动态运行标志\n在当前回合末尾显示主题蓝的旋转加载标志，默认关闭。\n开启\n关闭\n自动计划模式\n关闭\n开启",
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "install-runtime-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "安装 llama.cpp失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "download-model-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "下载失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "stop-runtime-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "停止运行器失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "停止运行器",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "delete-model-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "删除失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "删除",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "pause-download-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "暂停下载失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "暂停下载",
+        "disabled": false
+      },
+      {
+        "label": "取消下载",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "resume-download-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "继续下载失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "继续下载",
+        "disabled": false
+      },
+      {
+        "label": "取消下载",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "cancel-download-reject",
+    "expected": "mutation rejection stays in the page, shows an error, and re-enables controls",
+    "passed": true,
+    "crash": 0,
+    "alerts": [
+      "取消下载失败。重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      },
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "暂停下载",
+        "disabled": false
+      },
+      {
+        "label": "取消下载",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "mutation-success-refresh-retry",
+    "expected": "successful mutation followed by catalog failure retries only GetLocalAICatalog",
+    "passed": true,
+    "beforeRetry": {
+      "GetLocalAICatalog": 3,
+      "DeleteLocalModel": 1
+    },
+    "afterRetry": {
+      "GetLocalAICatalog": 4,
+      "DeleteLocalModel": 1
+    },
+    "alerts": [],
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "paused-download",
+    "expected": "explicit controls match the task state",
+    "passed": true,
+    "actual": {
+      "labels": [
+        "安装 llama.cpp",
+        "继续下载",
+        "取消下载",
+        "下载"
+      ],
+      "hasResume": true,
+      "hasPause": false,
+      "hasCancel": true,
+      "hasRetry": false,
+      "hasRedownload": false,
+      "body": "本地 AI\n\n管理本地运行器、模型和下载。\n\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：audit-model\n安装 llama.cpp\n运行器独立安装，只监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n10%\nfixture\n0 MB / 0 MB\n剩余 10s\n下载"
+    },
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "failed-download",
+    "expected": "explicit controls match the task state",
+    "passed": true,
+    "actual": {
+      "labels": [
+        "安装 llama.cpp",
+        "重试下载",
+        "下载"
+      ],
+      "hasResume": false,
+      "hasPause": false,
+      "hasCancel": false,
+      "hasRetry": true,
+      "hasRedownload": false,
+      "body": "本地 AI\n\n管理本地运行器、模型和下载。\n\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：audit-model\n安装 llama.cpp\n运行器独立安装，只监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n下载失败\nfixture\n0 MB / 0 MB\nAUDIT_HTTP_FAILURE\n重试下载\n下载"
+    },
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "cancelled-download",
+    "expected": "explicit controls match the task state",
+    "passed": true,
+    "actual": {
+      "labels": [
+        "安装 llama.cpp",
+        "重新下载",
+        "下载"
+      ],
+      "hasResume": false,
+      "hasPause": false,
+      "hasCancel": false,
+      "hasRetry": false,
+      "hasRedownload": true,
+      "body": "本地 AI\n\n管理本地运行器、模型和下载。\n\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：audit-model\n安装 llama.cpp\n运行器独立安装，只监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n10%\nfixture\n0 MB / 0 MB\n剩余 10s\n重新下载\n下载"
+    },
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "verifying-download",
+    "expected": "explicit controls match the task state",
+    "passed": true,
+    "actual": {
+      "labels": [
+        "安装 llama.cpp",
+        "取消下载",
+        "下载"
+      ],
+      "hasResume": false,
+      "hasPause": false,
+      "hasCancel": true,
+      "hasRetry": false,
+      "hasRedownload": false,
+      "body": "本地 AI\n\n管理本地运行器、模型和下载。\n\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：audit-model\n安装 llama.cpp\n运行器独立安装，只监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n10%\nfixture\n0 MB / 0 MB\n剩余 10s\n下载"
+    },
+    "crash": 0,
+    "errors": []
+  },
+  {
+    "scenario": "settings-focus",
+    "expected": "Shift+Tab and Tab wrap inside the dialog and close returns focus to the opener",
+    "passed": true,
+    "firstLast": {
+      "count": 28
+    },
+    "shiftTabWrapped": true,
+    "tabReturnedToFirst": true,
+    "returnedToOpener": true,
+    "errors": []
+  }
+]

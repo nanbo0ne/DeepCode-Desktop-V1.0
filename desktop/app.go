@@ -111,6 +111,8 @@ type App struct {
 	updateState                  updateProgress
 	updateCancel                 context.CancelFunc
 	updateApplying               atomic.Bool
+	windowStateClosing           atomic.Bool
+	windowStateMu                sync.Mutex
 	workAdmission                sync.RWMutex
 	admittedWork                 atomic.Int64
 	configWriteMu                sync.Mutex
@@ -347,6 +349,7 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) beforeClose(ctx context.Context) bool {
 	if a.forceQuit.Swap(false) || consumeSystemQuitRequested() {
 		a.markActiveAssistantMemoryPending(false)
+		a.saveWindowStateSync(ctx, true)
 		return false
 	}
 	cfg, _, err := a.loadDesktopUserConfigForEdit()
@@ -355,12 +358,15 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	}
 	a.markActiveAssistantMemoryPending(false)
 	if cfg.DesktopCloseBehavior() == "background" {
-		a.backgroundMaximised.Store(runtime.WindowIsMaximised(ctx))
-		a.saveWindowStateSync()
+		state, ok := a.saveWindowStateSync(ctx, false)
+		if ok {
+			a.backgroundMaximised.Store(state.Maximised)
+		}
 		a.snapshotAllTabs()
 		hideForBackground(ctx)
 		return true
 	}
+	a.saveWindowStateSync(ctx, true)
 	return false
 }
 
@@ -709,8 +715,12 @@ func (a *App) snapshotAllTabs() {
 	}
 }
 
-// shutdown snapshots all tabs, saves the final window geometry, and closes tabs.
+// shutdown closes application resources after beforeClose has handled the final
+// window-state capture.
 func (a *App) shutdown(context.Context) {
+	// OnShutdown runs after Wails has begun tearing down the native window. Close
+	// late frontend saves without querying that invalid window again.
+	a.closeWindowStateSaves()
 	_ = a.CancelUpdateDownload()
 	a.stopDesktopBotGateway()
 	if a.computerUse != nil {
@@ -720,9 +730,6 @@ func (a *App) shutdown(context.Context) {
 		_ = a.localServer.Stop()
 	}
 	a.stopTray()
-	// Save window geometry synchronously from Go so it's persisted even if the
-	// frontend's beforeunload promise hasn't resolved yet.
-	a.saveWindowStateSync()
 
 	a.mu.RLock()
 	tabs := make([]*WorkspaceTab, 0, len(a.tabs))
@@ -2025,6 +2032,9 @@ type HistoryMessage struct {
 	Outcome           event.TurnOutcome  `json:"outcome,omitempty"`
 	ElapsedMs         int64              `json:"elapsedMs,omitempty"`
 	Tokens            int                `json:"tokens,omitempty"`
+	Cost              float64            `json:"cost,omitempty"`
+	Currency          string             `json:"currency,omitempty"`
+	CostAvailable     bool               `json:"costAvailable"`
 	FinalMessageID    string             `json:"finalMessageId,omitempty"`
 	SwitchID          string             `json:"switchId,omitempty"`
 	SwitchFromMode    string             `json:"switchFromMode,omitempty"`
@@ -2124,7 +2134,7 @@ func historyMessagesWithTurnsAndSwitches(msgs []provider.Message, resolveUserCon
 		if turn.Outcome == "" {
 			return
 		}
-		out = append(out, HistoryMessage{Role: "turn_stats", TurnID: turn.TurnID, Outcome: turn.Outcome, ElapsedMs: turn.ElapsedMs, Tokens: turn.Tokens, FinalMessageID: turn.FinalMessageID})
+		out = append(out, HistoryMessage{Role: "turn_stats", TurnID: turn.TurnID, Outcome: turn.Outcome, ElapsedMs: turn.ElapsedMs, Tokens: turn.Tokens, Cost: turn.Cost, Currency: turn.Currency, CostAvailable: turn.CostAvailable, FinalMessageID: turn.FinalMessageID})
 	}
 	for messageIndex, m := range msgs {
 		content := m.Content

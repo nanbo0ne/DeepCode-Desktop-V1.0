@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent"
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent/testutil"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
@@ -71,7 +75,7 @@ func TestRuntimeSwitchTelemetryRoundTripsCurrentVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := loadTelemetry(path)
-	if got.Version != 6 || len(got.RuntimeSwitches) != 1 || got.RuntimeSwitches[0].ID != "switch-1" {
+	if got.Version != 7 || len(got.RuntimeSwitches) != 1 || got.RuntimeSwitches[0].ID != "switch-1" {
 		t.Fatalf("round-tripped telemetry = %+v", got)
 	}
 }
@@ -85,7 +89,7 @@ func TestRiskReviewTelemetryRoundTripsWithoutArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := loadTelemetry(path)
-	if got.Version != 6 || len(got.RiskReviews) != 1 || got.RiskReviews[0].Result != "manual_review" {
+	if got.Version != 7 || len(got.RiskReviews) != 1 || got.RiskReviews[0].Result != "manual_review" {
 		t.Fatalf("risk review telemetry = %+v", got)
 	}
 	b, err := os.ReadFile(path)
@@ -136,6 +140,389 @@ func TestWorkspaceTabAggregatesSessionUsageTelemetry(t *testing.T) {
 	}
 	if panel := app.ContextPanel("tab"); panel.TotalTokens != 140 {
 		t.Fatalf("context panel total tokens = %d, want 140", panel.TotalTokens)
+	}
+}
+
+func TestWorkspaceTabAggregatesAuthoritativePerTurnUsageOnce(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-parent"}, 1000, 4)
+
+	flashOffPeak := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	usage := &provider.Usage{
+		PromptTokens:     1_000_000,
+		CompletionTokens: 1_000_000,
+		TotalTokens:      2_000_000,
+		ReasoningTokens:  400_000,
+		CacheHitTokens:   500_000,
+		CacheMissTokens:  500_000,
+	}
+	tab.recordUsage(event.Event{Kind: event.Usage, TurnID: "turn-parent", RequestID: "primary-1", ProviderEndpoint: "https://api.deepseek.com", Usage: usage, Pricing: flashOffPeak})
+	// A repeated provider receipt must not double count, even if a retry path
+	// supplies a different pricing pointer.
+	tab.recordUsage(event.Event{Kind: event.Usage, TurnID: "turn-parent", RequestID: "primary-1", ProviderEndpoint: "https://api.deepseek.com", Usage: usage, Pricing: &provider.Pricing{CacheHit: 99, Input: 99, Output: 99, Currency: "$"}})
+	// Child and risk requests are attributed to the same parent turn by the
+	// explicit parent identity; reasoning remains a subset of completion.
+	tab.recordUsage(event.Event{Kind: event.Usage, ParentTurnID: "turn-parent", RequestID: "child-1", ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{TotalTokens: 10, PromptTokens: 6, CompletionTokens: 4, ReasoningTokens: 3}, Pricing: flashOffPeak})
+	tab.recordUsage(event.Event{Kind: event.Usage, ParentTurnID: "turn-parent", RequestID: "risk-1", ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{TotalTokens: 5, PromptTokens: 4, CompletionTokens: 1}, Pricing: flashOffPeak})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-parent", Outcome: event.TurnOutcomeSuccess}, 2000, 4)
+
+	turns := tab.telemetrySnapshot().Turns
+	if len(turns) != 1 {
+		t.Fatalf("turns = %+v", turns)
+	}
+	turn := turns[0]
+	if turn.Tokens != 2_000_015 {
+		t.Fatalf("turn tokens = %d, want 2000015", turn.Tokens)
+	}
+	if math.Abs(turn.Cost-0.7735055) > 1e-12 || turn.Currency != "$" || !turn.CostAvailable {
+		t.Fatalf("turn cost = %v %q available=%v, want 0.7735055 $ available", turn.Cost, turn.Currency, turn.CostAvailable)
+	}
+	if len(tab.telemetrySnapshot().UsageEvents) != 3 {
+		t.Fatalf("usage event count = %d, want 3 after request dedup", len(tab.telemetrySnapshot().UsageEvents))
+	}
+}
+
+func TestWorkspaceTabExposesCurrentCNYDeepSeekCost(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-cny"}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-cny", RequestID: "req-cny",
+		ProviderEndpoint: "https://api.deepseek.com",
+		Usage: &provider.Usage{
+			PromptTokens: 1_000_000, CompletionTokens: 1_000_000,
+			TotalTokens: 2_000_000, CacheMissTokens: 1_000_000,
+		},
+		Pricing: &provider.Pricing{CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "¥"},
+	})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-cny", Outcome: event.TurnOutcomeSuccess}, 2000, 1)
+
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.Cost != 6 || turn.Currency != "¥" || !turn.CostAvailable {
+		t.Fatalf("current CNY turn = %+v, want 6 ¥ available", turn)
+	}
+}
+
+func TestWorkspaceTabHidesPartialTurnCostWithoutFakingZero(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-partial"}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-partial", RequestID: "known",
+		Usage:            &provider.Usage{PromptTokens: 1_000_000, CacheMissTokens: 1_000_000, TotalTokens: 1_000_000},
+		ProviderEndpoint: "https://api.deepseek.com",
+		Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-partial", RequestID: "unknown",
+		Usage: &provider.Usage{TotalTokens: 50},
+	})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-partial", Outcome: event.TurnOutcomeSuccess}, 1100, 1)
+
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.Tokens != 1_000_050 {
+		t.Fatalf("partial turn tokens = %d, want 1000050", turn.Tokens)
+	}
+	if math.Abs(turn.Cost-0.22) > 1e-12 || turn.CostAvailable || turn.Currency != "$" {
+		t.Fatalf("partial turn cost = %v %q available=%v, want known partial cost hidden", turn.Cost, turn.Currency, turn.CostAvailable)
+	}
+	if tab.telemetrySnapshot().Usage.CostAvailable {
+		t.Fatal("session header cost must be unavailable when any request is partial")
+	}
+}
+
+func TestWorkspaceTabHidesCostWhenRequestIDIsMissing(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-no-request-id"}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-no-request-id",
+		Usage:            &provider.Usage{PromptTokens: 1_000_000, CacheMissTokens: 1_000_000, TotalTokens: 1_000_000},
+		ProviderEndpoint: "https://api.deepseek.com",
+		Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-no-request-id", Outcome: event.TurnOutcomeSuccess}, 1100, 1)
+
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.Tokens != 1_000_000 || turn.Cost != 0 || turn.CostAvailable {
+		t.Fatalf("missing request ID turn stats = %+v, want tokens retained and cost hidden", turn)
+	}
+}
+
+func TestWorkspaceTabHidesOfficialCostWhenUsageBreakdownIsIncomplete(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-incomplete"}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-incomplete", RequestID: "req-incomplete",
+		Usage:            &provider.Usage{PromptTokens: 100, TotalTokens: 150, CacheMissTokens: 100},
+		ProviderEndpoint: "https://api.deepseek.com",
+		Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-incomplete", Outcome: event.TurnOutcomeSuccess}, 1100, 1)
+
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.Tokens != 150 || turn.Cost != 0 || turn.CostAvailable {
+		t.Fatalf("incomplete official usage = %+v, want tokens retained and cost unavailable", turn)
+	}
+}
+
+func TestWorkspaceTabHidesCostWhenFinishedTurnHasUnreportedFailure(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-failed-request"}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: "turn-failed-request", RequestID: "req-before-failure",
+		Usage:            &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, CacheMissTokens: 100},
+		ProviderEndpoint: "https://api.deepseek.com",
+		Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: "turn-failed-request", Outcome: event.TurnOutcomeFailed, Err: errors.New("provider failed before usage")}, 1100, 1)
+
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.Tokens != 120 || turn.Cost == 0 || turn.CostAvailable {
+		t.Fatalf("failed turn cost = %+v, want known partial cost hidden", turn)
+	}
+}
+
+func TestWorkspaceTabHidesPendingBackgroundChildCostUntilSettled(t *testing.T) {
+	tab := &WorkspaceTab{}
+	turnID := "turn-pending-child"
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: turnID}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: turnID, RequestID: "root",
+		ProviderEndpoint: "https://api.deepseek.com/", Usage: &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, CacheMissTokens: 100}, Pricing: pricing,
+	})
+	tab.recordChildState(event.Event{Kind: event.ChildStarted, TurnID: turnID, ParentTurnID: turnID, ChildID: "child-1"})
+	if tab.telemetrySnapshot().Usage.CostAvailable {
+		t.Fatal("session header exposed cost while background child was pending")
+	}
+
+	turnDone := tab.annotateTurnDone(event.Event{Kind: event.TurnDone, TurnID: turnID, Outcome: event.TurnOutcomeSuccess})
+	if turnDone.TurnCostAvailable {
+		t.Fatal("turn_done exposed cost while background child was pending")
+	}
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, ParentTurnID: turnID, RequestID: "child-1-request",
+		ProviderEndpoint: "https://api.deepseek.com/", Usage: &provider.Usage{PromptTokens: 50, CompletionTokens: 10, TotalTokens: 60, CacheMissTokens: 50}, Pricing: pricing,
+	})
+	if tab.telemetrySnapshot().Usage.CostAvailable {
+		t.Fatal("official child receipt exposed cost before child settled")
+	}
+
+	tab.recordChildState(event.Event{Kind: event.ChildDone, TurnID: turnID, ParentTurnID: turnID, ChildID: "child-1", ChildUsageReported: true})
+	got := tab.telemetrySnapshot().Turns[0]
+	if !got.CostAvailable || got.RequestCount != 2 || got.Tokens != 180 {
+		t.Fatalf("settled child aggregate = %+v, want authoritative two-request total", got)
+	}
+	if !tab.telemetrySnapshot().Usage.CostAvailable {
+		t.Fatal("session header did not restore cost after reported child settled")
+	}
+}
+
+func TestWorkspaceTabKeepsCostUnavailableForSettledChildWithoutUsage(t *testing.T) {
+	tab := &WorkspaceTab{}
+	turnID := "turn-child-without-usage"
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: turnID}, 1000, 1)
+	tab.recordUsage(event.Event{
+		Kind: event.Usage, TurnID: turnID, RequestID: "root",
+		ProviderEndpoint: "https://api.deepseek.com/", Usage: &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120}, Pricing: pricing,
+	})
+	tab.recordChildState(event.Event{Kind: event.ChildStarted, TurnID: turnID, ChildID: "child-unknown"})
+	tab.recordChildState(event.Event{Kind: event.ChildDone, TurnID: turnID, ChildID: "child-unknown"})
+	turn := tab.telemetrySnapshot().Turns[0]
+	if turn.CostAvailable || tab.telemetrySnapshot().Usage.CostAvailable {
+		t.Fatalf("unreported settled child exposed cost: turn=%+v usage=%+v", turn, tab.telemetrySnapshot().Usage)
+	}
+}
+
+func TestWorkspaceTabPersistsTurnCostFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl.telemetry.json")
+	snapshot := tabTelemetrySnapshot{Version: 7, Turns: []turnTelemetryRecord{{
+		TurnID: "turn-1", Tokens: 12, Cost: 0.000012, Currency: "$", CostAvailable: true,
+	}}}
+	if err := saveTelemetry(path, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	got := loadTelemetry(path)
+	if len(got.Turns) != 1 || got.Turns[0].Tokens != 12 || got.Turns[0].Cost != 0.000012 || got.Turns[0].Currency != "$" || !got.Turns[0].CostAvailable {
+		t.Fatalf("persisted turn stats = %+v", got.Turns)
+	}
+}
+
+func TestWorkspaceTabPreservesStoredUSDAmountAndLabel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl.telemetry.json")
+	snapshot := tabTelemetrySnapshot{
+		Version: 7,
+		Usage: sessionUsageStats{
+			SessionCost: 0.22, SessionCostUsd: 0.22,
+			SessionCurrency: "$", CostAvailable: true,
+		},
+		UsageEvents: []usageTelemetryEvent{{
+			SessionCost: 0.22, SessionCostUsd: 0.22,
+			SessionCurrency: "$", CostAvailable: true,
+		}},
+	}
+	if err := saveTelemetry(path, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	got := loadTelemetry(path)
+	if got.Usage.SessionCost != 0.22 || got.Usage.SessionCurrency != "$" || !got.Usage.CostAvailable {
+		t.Fatalf("stored USD session was relabeled or recalculated: %+v", got.Usage)
+	}
+	if len(got.UsageEvents) != 1 || got.UsageEvents[0].SessionCost != 0.22 || got.UsageEvents[0].SessionCurrency != "$" {
+		t.Fatalf("stored USD receipt changed: %+v", got.UsageEvents)
+	}
+}
+
+func TestWorkspaceTabDeduplicatesPersistedRequestReceiptAfterRestart(t *testing.T) {
+	tab := &WorkspaceTab{}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: "turn-restart"}, 1000, 1)
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	usage := &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120}
+	tab.recordUsage(event.Event{Kind: event.Usage, TurnID: "turn-restart", RequestID: "req-replayed", ProviderEndpoint: "https://api.deepseek.com", Usage: usage, Pricing: pricing})
+	snapshot := tab.telemetrySnapshot()
+
+	restored := &WorkspaceTab{
+		usageTelemetry:         snapshot.Usage,
+		usageTelemetryEvents:   snapshot.UsageEvents,
+		turnTelemetry:          snapshot.Turns,
+		currentTelemetryTurnID: "turn-restart",
+	}
+	restored.recordUsage(event.Event{Kind: event.Usage, TurnID: "turn-restart", RequestID: "req-replayed", ProviderEndpoint: "https://api.deepseek.com", Usage: usage, Pricing: pricing})
+	turn := restored.telemetrySnapshot().Turns[0]
+	if turn.RequestCount != 1 || turn.Tokens != 120 || len(restored.telemetrySnapshot().UsageEvents) != 1 {
+		t.Fatalf("replayed request changed restored telemetry: turn=%+v events=%+v", turn, restored.telemetrySnapshot().UsageEvents)
+	}
+}
+
+func TestLateChildUsageRefreshesPersistedFinishedTurn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	ctrl := control.New(control.Options{SessionPath: path})
+	tab := &WorkspaceTab{Ctrl: ctrl}
+	app := &App{tabs: map[string]*WorkspaceTab{"tab": tab}}
+	sink := &tabEventSink{app: app, tabID: "tab"}
+	turnID := "turn-late-child"
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	tab.recordLifecycle(event.Event{Kind: event.TurnStarted, TurnID: turnID}, 1000, 1)
+	tab.recordUsage(event.Event{Kind: event.Usage, TurnID: turnID, RequestID: "root", ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, CacheMissTokens: 100}, Pricing: pricing})
+	tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: turnID, Outcome: event.TurnOutcomeSuccess}, 1100, 1)
+	sink.recordTurnDone()
+	before := loadTelemetry(path + ".telemetry.json")
+	if len(before.Turns) != 1 || before.Turns[0].Tokens != 120 || !before.Turns[0].CostAvailable || before.Turns[0].Outcome != event.TurnOutcomeSuccess {
+		t.Fatalf("persisted completed turn before child = %+v", before.Turns)
+	}
+
+	// Background child work can arrive after the host TurnDone. It must refresh
+	// the durable record, while retaining the completed outcome and known totals.
+	sink.recordUsageTelemetry(event.Event{
+		Kind: event.Usage, ParentTurnID: turnID, RequestID: "child-late",
+		ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{PromptTokens: 50, CompletionTokens: 10, TotalTokens: 60, CacheMissTokens: 50}, Pricing: pricing,
+	})
+	after := loadTelemetry(path + ".telemetry.json")
+	if len(after.Turns) != 1 || after.Turns[0].Outcome != event.TurnOutcomeSuccess || after.Turns[0].State != event.TurnStateFinished {
+		t.Fatalf("late child changed finished outcome = %+v", after.Turns)
+	}
+	if after.Turns[0].Tokens != 180 || after.Turns[0].RequestCount != 2 || !after.Turns[0].CostAvailable {
+		t.Fatalf("late child did not refresh persisted totals = %+v", after.Turns)
+	}
+
+	sink.recordUsageTelemetry(event.Event{
+		Kind: event.Usage, ParentTurnID: turnID, RequestID: "child-unknown",
+		Usage: &provider.Usage{TotalTokens: 40},
+	})
+	unknown := loadTelemetry(path + ".telemetry.json")
+	if len(unknown.Turns) != 1 || unknown.Turns[0].Outcome != event.TurnOutcomeSuccess || unknown.Turns[0].State != event.TurnStateFinished || unknown.Turns[0].Tokens != 220 || unknown.Turns[0].CostAvailable {
+		t.Fatalf("unknown late child should hide cost without reopening turn = %+v", unknown.Turns)
+	}
+}
+
+func TestWorkspaceTabRootUsageDeduplicatesAndNormalizesTotals(t *testing.T) {
+	tab := &WorkspaceTab{}
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	tab.recordUsage(event.Event{RequestID: "root-1", ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{PromptTokens: 9, CompletionTokens: 3}, Pricing: pricing})
+	tab.recordUsage(event.Event{RequestID: "root-1", ProviderEndpoint: "https://api.deepseek.com", Usage: &provider.Usage{TotalTokens: 999}, Pricing: pricing})
+	got := tab.telemetrySnapshot().Usage
+	if got.RequestCount != 1 || got.TotalTokens != 12 || got.PromptTokens != 9 || got.CompletionTokens != 3 {
+		t.Fatalf("root usage = %+v, want one deduplicated normalized receipt", got)
+	}
+}
+
+type telemetryFixtureTool struct{}
+
+func (telemetryFixtureTool) Name() string            { return "fixture_read" }
+func (telemetryFixtureTool) Description() string     { return "fixture read" }
+func (telemetryFixtureTool) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+func (telemetryFixtureTool) Execute(context.Context, json.RawMessage) (string, error) {
+	return "fixture result", nil
+}
+func (telemetryFixtureTool) ReadOnly() bool { return true }
+
+func TestRealAgentMultiRequestTelemetryOfficialEndpointAndRelay(t *testing.T) {
+	run := func(endpoint string) (*WorkspaceTab, []event.Event, []provider.Request) {
+		fixture := testutil.NewMock("deepseek-v4", testutil.Turn{
+			ToolCalls: []provider.ToolCall{{ID: "fixture-call", Name: "fixture_read", Arguments: `{}`}},
+			Usage:     &provider.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, ReasoningTokens: 10, CacheMissTokens: 100},
+		}, testutil.Turn{
+			Text:  "finished",
+			Usage: &provider.Usage{PromptTokens: 150, CompletionTokens: 30, TotalTokens: 180, ReasoningTokens: 20, CacheHitTokens: 50, CacheMissTokens: 100},
+		})
+		reg := tool.NewRegistry()
+		reg.Add(telemetryFixtureTool{})
+		var events []event.Event
+		sink := event.Lifecycle(event.FuncSink(func(e event.Event) { events = append(events, e) }))
+		a := agent.New(fixture, reg, agent.NewSession("system"), agent.Options{
+			Pricing:          &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+			ProviderEndpoint: endpoint,
+		}, sink)
+		if err := a.Run(context.Background(), "inspect"); err != nil {
+			t.Fatalf("fixture agent run: %v", err)
+		}
+		var turnID string
+		for _, e := range events {
+			if e.Kind == event.TurnStarted {
+				turnID = e.TurnID
+				break
+			}
+		}
+		if turnID == "" {
+			t.Fatal("fixture emitted no turn start")
+		}
+		tab := &WorkspaceTab{}
+		for _, e := range events {
+			tab.recordLifecycle(e, 1000, 1)
+			if e.Kind == event.Usage {
+				tab.recordUsage(e)
+			}
+		}
+		tab.recordLifecycle(event.Event{Kind: event.TurnDone, TurnID: turnID, Outcome: event.TurnOutcomeSuccess}, 2000, 1)
+		return tab, events, fixture.Requests()
+	}
+
+	official, officialEvents, officialRequests := run("https://api.deepseek.com")
+	turn := official.telemetrySnapshot().Turns[0]
+	if len(officialRequests) != 2 || len(official.telemetrySnapshot().UsageEvents) != 2 {
+		t.Fatalf("official requests/events = %d/%d, want two provider requests and receipts", len(officialRequests), len(official.telemetrySnapshot().UsageEvents))
+	}
+	if officialRequests[0].RequestID == "" || officialRequests[0].RequestID == officialRequests[1].RequestID {
+		t.Fatalf("provider request IDs = %q, %q, want distinct non-empty IDs", officialRequests[0].RequestID, officialRequests[1].RequestID)
+	}
+	if turn.Tokens != 300 || turn.Cost <= 0 || !turn.CostAvailable || turn.Currency != "$" {
+		t.Fatalf("official turn = %+v, want authoritative cost", turn)
+	}
+	var firstUsage event.Event
+	for _, e := range officialEvents {
+		if e.Kind == event.Usage {
+			firstUsage = e
+			break
+		}
+	}
+	official.recordUsage(firstUsage)
+	if got := official.telemetrySnapshot().Turns[0]; got.RequestCount != 2 || got.Tokens != 300 {
+		t.Fatalf("duplicate receipt changed official turn = %+v", got)
+	}
+
+	relay, _, _ := run("https://relay.example/v1")
+	relayTurn := relay.telemetrySnapshot().Turns[0]
+	if relayTurn.Tokens != 300 || relayTurn.Cost != 0 || relayTurn.CostAvailable {
+		t.Fatalf("relay turn = %+v, want tokens retained and cost unavailable", relayTurn)
 	}
 }
 

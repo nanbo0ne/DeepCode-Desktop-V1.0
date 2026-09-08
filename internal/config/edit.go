@@ -241,6 +241,7 @@ func (c *Config) SetUICloseBehavior(mode string) error {
 // expanded by default. It is desktop-only and must not affect CLI output or
 // provider-visible request data.
 func (c *Config) SetExpandThinking(on bool) error {
+	c.Desktop.ShowReasoning = &on
 	c.Desktop.ExpandThinking = on
 	if on {
 		c.Desktop.ProcessDisplayMode = ProcessDisplayDetailed
@@ -253,10 +254,12 @@ func (c *Config) SetExpandThinking(on bool) error {
 func (c *Config) SetProcessDisplayMode(mode string) error {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case ProcessDisplayCompact, ProcessDisplayDetailed:
+		c.Desktop.ShowReasoning = boolPtr(strings.EqualFold(strings.TrimSpace(mode), ProcessDisplayDetailed))
 		c.Desktop.ProcessDisplayMode = strings.ToLower(strings.TrimSpace(mode))
 		c.Desktop.ExpandThinking = c.Desktop.ProcessDisplayMode == ProcessDisplayDetailed
 		return nil
 	case ProcessDisplayStandard:
+		c.Desktop.ShowReasoning = boolPtr(false)
 		c.Desktop.ProcessDisplayMode = ProcessDisplayCompact
 		c.Desktop.ExpandThinking = c.Desktop.ProcessDisplayMode == ProcessDisplayDetailed
 		return nil

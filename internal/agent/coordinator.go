@@ -52,13 +52,14 @@ func PlannerPromptWithContext(context string) string {
 // executor (a full tool-using Agent) carries it out. The sessions never mix, so
 // neither model's prefix is disturbed by the other's turns.
 type Coordinator struct {
-	planner        provider.Provider
-	plannerSess    *Session
-	plannerPricing *provider.Pricing
-	plannerAgent   *Agent
-	executor       *Agent
-	temperature    float64
-	sink           event.Sink
+	planner         provider.Provider
+	plannerSess     *Session
+	plannerPricing  *provider.Pricing
+	plannerEndpoint string
+	plannerAgent    *Agent
+	executor        *Agent
+	temperature     float64
+	sink            event.Sink
 	// shouldPlan gates the planner pass per turn; nil plans every turn. Lets a
 	// trivial, non-work turn (a question, a greeting) skip straight to the
 	// executor instead of paying a planner round on it.
@@ -83,14 +84,15 @@ func NewCoordinator(planner provider.Provider, plannerSession *Session, plannerP
 		executor.executorHandoffGuard = true
 	}
 	return &Coordinator{
-		planner:        planner,
-		plannerSess:    plannerSession,
-		plannerPricing: plannerPricing,
-		plannerAgent:   plannerAgent,
-		executor:       executor,
-		temperature:    temperature,
-		sink:           sink,
-		shouldPlan:     shouldPlan,
+		planner:         planner,
+		plannerSess:     plannerSession,
+		plannerPricing:  plannerPricing,
+		plannerEndpoint: strings.TrimSpace(plannerOptions.ProviderEndpoint),
+		plannerAgent:    plannerAgent,
+		executor:        executor,
+		temperature:     temperature,
+		sink:            sink,
+		shouldPlan:      shouldPlan,
 	}
 }
 
@@ -100,7 +102,10 @@ func (c *Coordinator) Run(ctx context.Context, input string) error {
 }
 
 func (c *Coordinator) RunRich(ctx context.Context, input RichInput) error {
-	c.sink.Emit(event.Event{Kind: event.TurnStarted})
+	ctx, endTurn := WithParentTurn(ctx)
+	defer endTurn()
+	turnID, _ := ParentTurn(ctx)
+	c.sink.Emit(event.Event{Kind: event.TurnStarted, TurnID: turnID})
 	if c.shouldPlan != nil && !c.shouldPlan(input.Text) {
 		c.sink.Emit(event.Event{Kind: event.Phase, Text: c.executor.prov.Name() + " · executing"})
 		return c.executor.RunRich(ctx, input)
@@ -124,7 +129,9 @@ func (c *Coordinator) plan(ctx context.Context, input string) (string, error) {
 	c.plannerSess.Add(provider.Message{Role: provider.RoleUser, Content: input})
 
 	requestPricing := c.plannerPricing.SnapshotAt(time.Now())
+	requestID := event.NewRequestID()
 	ch, err := c.planner.Stream(ctx, provider.Request{
+		RequestID:   requestID,
 		Messages:    c.plannerSess.Messages,
 		Temperature: c.temperature,
 	})
@@ -147,7 +154,7 @@ func (c *Coordinator) plan(ctx context.Context, input string) (string, error) {
 	}
 	// Closes the planner's raw text block (no markdown redraw) and prints its
 	// usage line, mirroring the old Fprintln + printUsage tail.
-	c.sink.Emit(event.Event{Kind: event.Usage, Usage: usage, Pricing: requestPricing})
+	c.sink.Emit(event.Event{Kind: event.Usage, RequestID: requestID, ProviderEndpoint: c.plannerEndpoint, Usage: usage, Pricing: requestPricing})
 
 	plan := text.String()
 	c.plannerSess.Add(provider.Message{Role: provider.RoleAssistant, Content: plan})

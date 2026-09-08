@@ -72,6 +72,9 @@ jobs:
       - name: Test core
         run: go test ./... -count=1 -p=1
 
+      - name: Test changed concurrency boundaries
+        run: go test -race ./internal/agent ./internal/control ./internal/billing ./internal/localai -count=1 -p=1
+
       - name: Generate frontend bindings
         run: |
           sudo apt-get update
@@ -277,9 +280,11 @@ jobs:
           [ -f "$payload/node.exe" ] || { echo "signed Windows portable payload is missing node.exe" >&2; exit 1; }
           [ -f "$payload/LICENSE.node.txt" ] || { echo "signed Windows portable payload is missing Node LICENSE" >&2; exit 1; }
           [ -f "$payload/codegraph/bin/codegraph.cmd" ] || { echo "signed Windows portable payload is missing CodeGraph launcher" >&2; exit 1; }
+          [ -f "THIRD-PARTY-NOTICES.txt" ] || { echo "signed Windows portable payload is missing THIRD-PARTY-NOTICES.txt" >&2; exit 1; }
           cp "$payload/node.exe" "$staging/node.exe"
           cp "$payload/LICENSE.node.txt" "$staging/LICENSE.node.txt"
           cp -R "$payload/codegraph" "$staging/codegraph"
+          cp "THIRD-PARTY-NOTICES.txt" "$staging/THIRD-PARTY-NOTICES.txt"
           staging_win="$(cygpath -w "$staging")"
           zip_win="$(cygpath -w "$PWD/dist/O.R.C.A-for-Windows-windows-amd64.zip")"
           powershell.exe -NoProfile -NonInteractive -Command "\$ErrorActionPreference = 'Stop'; Compress-Archive -Force -Path '${staging_win}\\*' -DestinationPath '$zip_win'"
@@ -318,10 +323,6 @@ jobs:
           $signedInstaller = Get-ChildItem -Path '${{ runner.temp }}/signed-windows-installer' -Recurse -Filter '*.exe' | Select-Object -First 1
           if (-not $signedInstaller) { throw 'signed Windows installer was not returned by SignPath' }
           Copy-Item -Force $signedInstaller.FullName 'dist/O.R.C.A-for-Windows-windows-amd64-installer.exe'
-          # V2 updater compatibility aliases; remove in a later major release.
-          Copy-Item -Force 'dist/O.R.C.A-for-Windows-windows-amd64-installer.exe' 'dist/DeepSeek-Orca-windows-amd64-installer.exe'
-          Copy-Item -Force 'dist/O.R.C.A-for-Windows-windows-amd64.zip' 'dist/DeepSeek-Orca-windows-amd64.zip'
-
           $artifacts = @(
             'desktop/build/bin/Orca.exe',
             'dist/O.R.C.A-for-Windows-windows-amd64-installer.exe'

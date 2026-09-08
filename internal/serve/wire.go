@@ -135,6 +135,8 @@ var kindNames = map[event.Kind]string{
 	event.ItemStarted:       "item_started",
 	event.ItemDelta:         "item_delta",
 	event.ItemCompleted:     "item_completed",
+	event.ChildStarted:      "child_started",
+	event.ChildDone:         "child_done",
 }
 
 // toWireAsk converts an event.Ask into its JSON wire form.

@@ -299,6 +299,7 @@ Section
     !insertmacro wails.files
     File /oname=node.exe "..\installer-go\payload\node.exe"
     File /oname=LICENSE.node.txt "..\installer-go\payload\LICENSE.node.txt"
+    File /oname=THIRD-PARTY-NOTICES.txt "..\..\..\..\THIRD-PARTY-NOTICES.txt"
     SetOutPath "$INSTDIR\codegraph"
     File /r "..\installer-go\payload\codegraph\*.*"
     SetOutPath "$INSTDIR"
@@ -369,6 +370,7 @@ Section "uninstall"
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
     Delete "$INSTDIR\node.exe"
     Delete "$INSTDIR\LICENSE.node.txt"
+    Delete "$INSTDIR\THIRD-PARTY-NOTICES.txt"
     RMDir /r "$INSTDIR\codegraph"
     !insertmacro orca.deleteUninstaller
 

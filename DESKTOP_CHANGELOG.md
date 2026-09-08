@@ -1,5 +1,26 @@
 # O.R.C.A Desktop Changelog
 
+## V3.0.4
+
+- Fixed incremental text rendering before message commit and removed a second Markdown delay. Stage replies and tool groups remain visible in chronological order.
+- Kept Compact/Detailed labels; they now independently hide/show provider reasoning, hidden by default. Completed turns fold into a bordered summary with elapsed time, deduplicated tokens, and known official DeepSeek cost. Final answers remain separate.
+- Moved turn navigation to the left chat edge, removed the full-width Todo obstruction, and renamed only the fixed sidebar entry to ORCA Agent. Classic remains available.
+- Added permission-checked snapshots for generated workspace images delegated to vision subagents, including path, link, ownership, type, and byte-limit checks.
+- Simplified first run and new presets to DeepSeek plus custom access; preserved existing providers and explicit model roles. Temporarily disabled managed local AI without deleting code, configuration, or models. Computer Use remains disabled.
+- Added download source, throughput, ETA, low-speed hints, and user-driven source switching with signed same-payload resume. Removed old-brand duplicates from future build assets only; published 3.0.3 remains unchanged.
+- DeepSeek official pricing is documented in CNY per million tokens as of 2026-09-08. Peak time is fixed at UTC+8 Monday-Friday 09:00-12:00 and 14:00-18:00; requests freeze the pricing basis at start.
+
+| Model and period | Cache-hit input | Cache-miss input | Output |
+| --- | ---: | ---: | ---: |
+| Flash / Vision off-peak | ¥0.05 | ¥1.5 | ¥4.5 |
+| Flash / Vision peak | ¥0.10 | ¥3 | ¥9 |
+| Pro off-peak | ¥0.15 | ¥4.5 | ¥13.5 |
+| Pro peak | ¥0.30 | ¥9 | ¥27 |
+
+See the [official DeepSeek pricing page](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/). Existing 3.0.3 amounts remain stored as USD and are not back-converted or relabeled. A session containing USD and CNY turns is not shown as one authoritative total; each turn keeps its own currency.
+
+- DPI and remaining validation scope are recorded in [the validation report](docs/audits/2026-09-08-v3.0.4-release-validation.md).
+
 ## V3.0.3
 
 Computer Use is temporarily disabled on all platforms in 3.0.3. Ordinary Vision attachments, conversations, and engineering tools remain supported. Downloads and verification files are listed on the [Release page](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3). See the [validation report](docs/audits/2026-09-08-v3.0.3-validation.md) for test scope and results.

@@ -116,3 +116,20 @@
   .orca-update-banner__spin { animation: none; }
   .orca-update-banner__progress span { transition: none; }
 }
+.orca-update-banner__transfer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.orca-update-banner__transfer select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}

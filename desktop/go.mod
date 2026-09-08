@@ -19,6 +19,7 @@ require (
 	github.com/kbinani/screenshot v0.0.0-20230812210009-b87d31814237
 	github.com/minio/selfupdate v0.6.0
 	github.com/wailsapp/wails/v2 v2.12.0
+	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/mod v0.37.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/text v0.38.0

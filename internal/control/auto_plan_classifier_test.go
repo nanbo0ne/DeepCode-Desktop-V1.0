@@ -5,13 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
 )
 
 type classifierProvider struct {
-	text string
-	err  error
-	req  provider.Request
+	text  string
+	err   error
+	req   provider.Request
+	usage *provider.Usage
 }
 
 func (p *classifierProvider) Name() string { return "classifier" }
@@ -21,11 +23,34 @@ func (p *classifierProvider) Stream(ctx context.Context, req provider.Request) (
 	if p.err != nil {
 		return nil, p.err
 	}
-	ch := make(chan provider.Chunk, 2)
+	chunks := 2
+	if p.usage != nil {
+		chunks++
+	}
+	ch := make(chan provider.Chunk, chunks)
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: p.text}
+	if p.usage != nil {
+		ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: p.usage}
+	}
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
+}
+
+func TestProviderAutoPlanClassifierEmitsAttributedUsageReceipt(t *testing.T) {
+	p := &classifierProvider{
+		text:  `{"needs_plan":true,"reason":"multi-file"}`,
+		usage: &provider.Usage{PromptTokens: 12, CompletionTokens: 4, TotalTokens: 16},
+	}
+	var got event.Event
+	sink := event.FuncSink(func(e event.Event) { got = e })
+	c := NewProviderAutoPlanClassifier(p).WithTelemetry(sink, &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}, "https://api.deepseek.com")
+	if _, _, err := c.NeedsPlanWithParentTurn(context.Background(), "implement feature", 1, "turn-parent"); err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != event.Usage || got.RequestID == "" || got.ParentTurnID != "turn-parent" || got.ProviderEndpoint != "https://api.deepseek.com" || got.Usage == nil || got.Usage.TotalTokens != 16 {
+		t.Fatalf("auto-plan usage receipt = %+v", got)
+	}
 }
 
 func TestProviderAutoPlanClassifierParsesJSON(t *testing.T) {

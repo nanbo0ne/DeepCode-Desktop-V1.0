@@ -15,15 +15,16 @@ type ProviderPreset struct {
 	Entry       ProviderEntry
 }
 
-// ProviderPresetCatalog is the single backend-owned catalog rendered by the
-// desktop onboarding and settings UI.
+// ProviderPresetCatalog preserves all known official identities for existing
+// settings views, canonicalization, and pricing. DeepSeek is first so callers
+// that use the catalog as a default naturally prefer it.
 func ProviderPresetCatalog() []ProviderPreset {
 	return []ProviderPreset{
+		deepSeekPreset(),
 		preset("openai", "OpenAI", "OpenAI 官方 API", "global", "https://platform.openai.com/api-keys", "https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-5.4"),
 		anthropicPreset(),
 		preset("openrouter", "OpenRouter", "可信多模型聚合平台", "global", "https://openrouter.ai/settings/keys", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openai/gpt-5.4"),
 
-		deepSeekPreset(),
 		preset("dashscope", "阿里云百炼", "DashScope OpenAI 兼容接口", "china", "https://bailian.console.aliyun.com/", "https://dashscope.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY", "qwen3-max", "qwen3-coder-plus"),
 		preset("zhipu", "智谱 BigModel", "智谱开放平台按量 API", "china", "https://open.bigmodel.cn/usercenter/apikeys", "https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY", "glm-5", "glm-4.7"),
 		preset("moonshot", "Kimi / Moonshot", "Moonshot 国内官方 API", "china", "https://platform.moonshot.cn/console/api-keys", "https://api.moonshot.cn/v1", "MOONSHOT_API_KEY", "kimi-k2.5"),
@@ -43,6 +44,13 @@ func ProviderPresetCatalog() []ProviderPreset {
 		preset("volcengine-coding", "火山 Coding Plan", "火山方舟 Coding Plan 专用端点", "plan", "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey", "https://ark.cn-beijing.volces.com/api/coding/v3", "ARK_CODING_API_KEY", "ark-code-latest"),
 		preset("step-plan", "Step Plan", "阶跃星辰套餐专用端点", "plan", "https://platform.stepfun.com/", "https://api.stepfun.com/step_plan/v1", "STEP_PLAN_API_KEY", "step-3.5-flash"),
 	}
+}
+
+// SelectableProviderPresetCatalog is the catalog for adding a new official
+// provider. A custom OpenAI-compatible provider is intentionally represented
+// by the settings editor's custom flow rather than a curated preset.
+func SelectableProviderPresetCatalog() []ProviderPreset {
+	return []ProviderPreset{deepSeekPreset()}
 }
 
 func preset(id, label, description, category, accountURL, baseURL, keyEnv string, models ...string) ProviderPreset {

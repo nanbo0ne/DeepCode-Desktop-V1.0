@@ -67,7 +67,18 @@ export type Item = ItemLifecycle & (
       completedAt?: number;
       error?: string;
     }
-  | { kind: "turn_stats"; id: string; elapsedMs?: number; tokens?: number; success: boolean; outcome?: TurnOutcome; finalMessageId?: string }
+  | {
+      kind: "turn_stats";
+      id: string;
+      elapsedMs?: number;
+      tokens?: number;
+      success: boolean;
+      outcome?: TurnOutcome;
+      cost?: number;
+      currency?: string;
+      costAvailable?: boolean;
+      finalMessageId?: string;
+    }
   | {
       kind: "compaction";
       id: string;
@@ -306,6 +317,9 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
         success: m.outcome === "success",
         outcome: m.outcome,
         turnId: m.turnId,
+        cost: m.cost,
+        currency: m.currency,
+        costAvailable: m.costAvailable,
         finalMessageId: m.finalMessageId,
       });
       seq++;
@@ -388,7 +402,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
 function ensureAssistant(s: State, e?: WireEvent): { items: Item[]; id: string; seq: number } {
   const eventID = e?.messageId || e?.itemId;
   if (eventID) {
-    const existing = s.items.find((it) => it.kind === "assistant" && (it.messageId === eventID || it.itemId === e.itemId));
+    const existing = s.items.find((it) => it.kind === "assistant" && (it.messageId === eventID || (e.itemId && it.itemId === e.itemId)));
     if (existing) return { items: s.items, id: existing.id, seq: s.seq };
     const item: Item = {
       kind: "assistant",
@@ -441,20 +455,58 @@ function hasCurrentTurnActivity(items: Item[]): boolean {
   return false;
 }
 
-function appendTurnStats(s: State, items: Item[], outcome: TurnOutcome, finalMessageId?: string, now = Date.now()): { items: Item[]; seq: number } {
+function appendTurnStats(
+  s: State,
+  items: Item[],
+  outcome: TurnOutcome,
+  finalMessageId?: string,
+  done?: WireEvent,
+  now = Date.now(),
+): { items: Item[]; seq: number } {
   if (!s.turnStartAt || (!s.currentTurnId && !hasCurrentTurnActivity(items))) return { items, seq: s.seq };
   const elapsedMs = Math.max(0, now - s.turnStartAt);
+  const tokens = typeof done?.turnTokens === "number"
+    ? done.turnTokens
+    : s.turnUsageTokens > 0 ? s.turnUsageTokens : undefined;
+  const costAvailable = done?.turnCostAvailable === true;
   const stats: Item = {
     kind: "turn_stats",
     id: `ts${s.seq}`,
     elapsedMs,
-    tokens: s.turnUsageTokens > 0 ? s.turnUsageTokens : undefined,
+    tokens: tokens !== undefined && tokens > 0 ? tokens : undefined,
     success: outcome === "success",
     outcome,
     turnId: s.currentTurnId,
+    cost: costAvailable ? done?.turnCost : undefined,
+    currency: costAvailable ? done?.turnCurrency : undefined,
+    costAvailable,
     finalMessageId,
   };
   return { items: [...items, stats], seq: s.seq + 1 };
+}
+
+function refreshMatchingTurnStats(s: State, done: WireEvent): State | undefined {
+  if (!done.turnId) return undefined;
+  const index = s.items.findIndex((item) => item.kind === "turn_stats" && item.turnId === done.turnId);
+  if (index < 0) return undefined;
+  const previous = s.items[index];
+  if (previous.kind !== "turn_stats") return undefined;
+  const outcome = done.outcome ?? previous.outcome ?? (previous.success ? "success" : "failed");
+  const costAvailable = done.turnCostAvailable === true && typeof done.turnCost === "number" && Boolean(done.turnCurrency?.trim());
+  const next: Item = {
+    ...previous,
+    success: outcome === "success",
+    outcome,
+    tokens: typeof done.turnTokens === "number" ? (done.turnTokens > 0 ? done.turnTokens : undefined) : previous.tokens,
+    cost: costAvailable ? done.turnCost : undefined,
+    currency: costAvailable ? done.turnCurrency : undefined,
+    costAvailable,
+    finalMessageId: done.finalMessageId || previous.finalMessageId,
+  };
+  if (JSON.stringify(previous) === JSON.stringify(next)) return s;
+  const items = [...s.items];
+  items[index] = next;
+  return { ...s, items };
 }
 
 function applyEvent(s: State, e: WireEvent): State {
@@ -634,6 +686,12 @@ function applyEvent(s: State, e: WireEvent): State {
     case "approval_request": return { ...s, approval: e.approval };
     case "ask_request": return { ...s, ask: e.ask };
     case "turn_done": {
+      if (e.turnId && e.turnId !== s.currentTurnId) {
+        // A delayed completion may arrive after a new turn starts. Its
+        // authoritative aggregate still belongs to the old turn, including
+        // usage from child producers, so refresh only that turn's stats.
+        return refreshMatchingTurnStats(s, e) ?? s;
+      }
       if (s.pendingUser !== undefined) s = flushPendingUser(s);
       const finalized = s.items.map((it) => {
         if (it.kind === "assistant" && s.live && it.id === s.live.id) return { ...it, text: s.live.text, reasoning: s.live.reasoning, streaming: false };
@@ -647,7 +705,7 @@ function applyEvent(s: State, e: WireEvent): State {
       if (outcome === "success" && e.turnId && !finalMessageId && !hasCommittedFinal) outcome = "interrupted";
       const showError = Boolean(e.err) && outcome !== "cancelled";
       const withError: Item[] = showError ? [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err!, turnId: e.turnId || s.currentTurnId }] : finalized;
-      const stats = appendTurnStats(s, withError, outcome, finalMessageId);
+      const stats = appendTurnStats(s, withError, outcome, finalMessageId, e);
       return { ...s, items: stats.items, live: undefined, running: false, cancelRequested: false, turnActive: false, currentAssistant: undefined, currentTurnId: undefined, committedFinalMessageId: undefined, approval: undefined, ask: undefined, seq: stats.seq, turnStartAt: 0, turnProcessStartAt: 0, turnTokens: 0, turnUsageTokens: 0 };
     }
     default: return s;

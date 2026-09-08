@@ -37,7 +37,7 @@ function renderProcessItem(
   switch (item.kind) {
     case "assistant":
       return [
-        item.reasoning && (item.streaming
+        defaultExpandThinking && (item.streaming || item.reasoning) && (item.streaming
           ? <LiveReasoningMessage key={`${item.id}-reasoning`} item={item} />
           : <AssistantMessage key={`${item.id}-reasoning`} item={{ ...item, text: "" }} defaultExpanded={defaultExpandThinking} />),
         item.text.trim() !== "" && <div className="process-progress-row" key={`${item.id}-progress`}>{item.text}</div>,
@@ -208,7 +208,7 @@ function TimelineProcessGroup({
       </button>
       {open && (
         <div className="timeline-process-group__details process-activity-rail">
-          {visible.map((item) => renderProcessItem(item, subcalls, liveToolID, true))}
+          {visible.map((item) => renderProcessItem(item, subcalls, liveToolID, mode === "detailed"))}
         </div>
       )}
       {activity?.phase && <ProcessActivityMark visual={activity} />}
@@ -292,11 +292,12 @@ function ProcessActivityMark({ visual }: { visual: ProcessActivityVisual }) {
   );
 }
 
-const LiveAssistantText = memo(function LiveAssistantText({ item }: { item: AssistantItem }) {
+const LiveAssistantText = memo(function LiveAssistantText({ item, showReasoning }: { item: AssistantItem; showReasoning: boolean }) {
   const live = useContext(LiveStreamContext);
-  const shown = live && live.id === item.id ? { ...item, text: live.text, reasoning: "", streaming: true } : { ...item, reasoning: "" };
-  if (!shown.text) return null;
-  return <AssistantMessage item={shown} />;
+  const current = live && live.id === item.id ? { ...item, text: live.text, reasoning: live.reasoning, streaming: true } : item;
+  const shown = { ...current, reasoning: showReasoning ? current.reasoning : "" };
+  if (!shown.text && !shown.reasoning) return null;
+  return <AssistantMessage item={shown} defaultExpanded />;
 });
 
 function repinIfWasPinned(
@@ -367,19 +368,64 @@ function turnStatsLabel(t: ReturnType<typeof useT>, item: TurnStatsItem): string
   return t("process.timeline.elapsed", { elapsed: formatTurnElapsed(item.elapsedMs) });
 }
 
-function TurnStatsRow({ item }: { item: TurnStatsItem }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const tokenLabel = typeof item.tokens === "number" && item.tokens > 0
+function turnStatsTokenLabel(t: ReturnType<typeof useT>, item: TurnStatsItem): string {
+  return typeof item.tokens === "number" && item.tokens > 0
     ? t("process.timeline.tokens", { n: item.tokens.toLocaleString() })
     : t("process.timeline.tokensPending");
+}
+
+function turnStatsCostLabel(t: ReturnType<typeof useT>, item: TurnStatsItem): string | undefined {
+  if (item.costAvailable !== true || typeof item.cost !== "number" || !item.currency?.trim()) return undefined;
+  const amount = item.cost < 1 ? item.cost.toFixed(4) : item.cost.toFixed(2);
+  return t("process.timeline.deepSeekCost", { amount: `${item.currency}${amount}` });
+}
+
+const turnStatsHeaderStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 32,
+  boxSizing: "border-box",
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  justifyContent: "flex-start",
+  flexWrap: "wrap",
+  padding: "6px 8px",
+  border: "1px solid var(--border-soft)",
+  borderRadius: 6,
+  background: "var(--surface-subtle, #fafbfb)",
+};
+
+function TurnStatsHeader({
+  item,
+  open,
+  onToggle,
+}: {
+  item: TurnStatsItem;
+  open?: boolean;
+  onToggle?: () => void;
+}) {
+  const t = useT();
+  const costLabel = turnStatsCostLabel(t, item);
+  const content = (
+    <>
+      <span>{turnStatsLabel(t, item)}</span>
+      <span>{turnStatsTokenLabel(t, item)}</span>
+      {costLabel && <span>{costLabel}</span>}
+    </>
+  );
+  if (!onToggle) return <div style={turnStatsHeaderStyle}>{content}</div>;
   return (
-    <div className={`turn-stats-row${open ? " turn-stats-row--open" : ""}`}>
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <span>{turnStatsLabel(t, item)}</span>
-        <ChevronRight size={12} aria-hidden="true" />
-      </button>
-      {open && <div className="turn-stats-row__tokens">{tokenLabel}</div>}
+    <button type="button" onClick={onToggle} aria-expanded={Boolean(open)} style={turnStatsHeaderStyle}>
+      {content}
+      <ChevronRight size={12} aria-hidden="true" />
+    </button>
+  );
+}
+
+function TurnStatsRow({ item }: { item: TurnStatsItem }) {
+  return (
+    <div className="turn-stats-row">
+      <TurnStatsHeader item={item} />
     </div>
   );
 }
@@ -390,30 +436,24 @@ function CompletedTurn({
   final,
   subcalls,
   liveToolID,
+  showReasoning,
 }: {
   stats: TurnStatsItem;
   hidden: Item[];
   final: AssistantItem;
   subcalls: ReadonlyMap<string, ToolItem[]>;
   liveToolID: string;
+  showReasoning: boolean;
 }) {
-  const t = useT();
   const [open, setOpen] = useState(false);
-  const tokenLabel = typeof stats.tokens === "number" && stats.tokens > 0
-    ? t("process.timeline.tokens", { n: stats.tokens.toLocaleString() })
-    : t("process.timeline.tokensPending");
   return (
     <>
       <div className={`turn-stats-row turn-process-panel${open ? " turn-stats-row--open" : ""}`}>
-        <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-          <span>{turnStatsLabel(t, stats)}</span>
-          <ChevronRight size={12} aria-hidden="true" />
-        </button>
+        <TurnStatsHeader item={stats} open={open} onToggle={() => setOpen((value) => !value)} />
         {open && (
           <div className="completed-turn__details">
-            <div className="turn-stats-row__tokens">{tokenLabel}</div>
             <div className="completed-turn__timeline process-activity-rail">
-              {hidden.map((item) => renderProcessItem(item, subcalls, liveToolID, true))}
+              {hidden.map((item) => renderProcessItem(item, subcalls, liveToolID, showReasoning))}
             </div>
           </div>
         )}
@@ -564,7 +604,6 @@ function TimelineItems({
 }) {
   const segments = useMemo(() => buildTimelineSegments(items, running), [items, running]);
   const [processOpenOverrides, setProcessOpenOverrides] = useState<Map<string, boolean>>(() => new Map());
-  useEffect(() => setProcessOpenOverrides(new Map()), [processDisplayMode]);
   const activityPhase = activityIndicatorPhase(items, activityIndicatorEnabled, running, paused);
   const activity = useActivityPhaseTransition(activityPhase);
   const currentTurnStart = segments.reduce((last, segment, index) => segment.kind === "user" ? index : last, -1);
@@ -636,6 +675,7 @@ function TimelineItems({
               final={segment.final}
               subcalls={subcalls}
               liveToolID={liveToolID}
+              showReasoning={processDisplayMode === "detailed"}
             />
           </div>,
         );
@@ -644,14 +684,12 @@ function TimelineItems({
         if (!segment.item.streaming && segment.item.text.trim() !== "") actionText = segment.item.text;
         nodes.push(
           <div className="timeline-entry timeline-entry--assistant" data-transcript-anchor={`${segment.item.id}-text`} key={`${segment.item.id}-text`}>
-            {segment.item.streaming
-              ? <LiveAssistantText item={segment.item} />
-              : <AssistantMessage item={segment.item} defaultExpanded={processDisplayMode === "detailed"} />}
+            <LiveAssistantText item={segment.item} showReasoning={processDisplayMode === "detailed"} />
           </div>,
         );
         break;
       case "process":
-        const segmentOpen = processOpenOverrides.get(segment.id) ?? processDisplayMode === "detailed";
+        const segmentOpen = processOpenOverrides.get(segment.id) ?? true;
         nodes.push(
           <div className="timeline-entry timeline-entry--process" data-transcript-anchor={segment.id} key={segment.id}>
             <TimelineProcessGroup
@@ -985,6 +1023,9 @@ export function Transcript({
   // LiveStreamContext) so streaming updates are captured immediately.
   return (
     <div className="transcript-shell">
+      {!empty && showQuestionNav && (
+        <QuestionJumpBar questions={questions} activeTurn={activeJumpTurn} onJump={handleJumpToQuestion} />
+      )}
       <div
         className={`transcript${empty ? " transcript--empty" : ""}${hydrating ? " transcript--hydrating" : ""}`}
         ref={scrollRef}
@@ -999,10 +1040,6 @@ export function Transcript({
       >
         <div className="transcript-content" ref={contentRef}>
           {empty && <Welcome onPrompt={onPrompt} />}
-
-          {!empty && showQuestionNav && (
-            <QuestionJumpBar questions={questions} activeTurn={activeJumpTurn} onJump={handleJumpToQuestion} />
-          )}
 
           <LiveStreamContext.Provider value={live}>
             {turnGroups.length > HOT_TURNS && (

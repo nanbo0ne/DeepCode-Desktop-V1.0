@@ -3,15 +3,15 @@ import Base from '../layouts/Base.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/nanbo0ne/O.R.C.A-for-Windows';
-const R2 = 'https://orca.aichat.diy/releases/desktop-v3.0.3';
+const R2 = 'https://orca.aichat.diy/releases/desktop-v3.0.4';
 
-const goVer = '3.0.3';
+const goVer = '3.0.4';
 ---
 <Base
   title="Docs — O.R.C.A"
   titleEn="Docs — O.R.C.A"
   titleZh="文档 — O.R.C.A"
-  description="O.R.C.A setup, providers, Vision attachments, workspaces, tools, and permissions. Computer Use is temporarily disabled on all platforms in 3.0.3; code and configuration are retained.">
+  description="O.R.C.A setup, providers, Vision attachments, workspaces, tools, and permissions in 3.0.4. Managed local AI and Computer Use remain temporarily disabled on all platforms; code and configuration are retained.">
 
   <header class="nav scrolled">
     <div class="nav-inner">
@@ -54,6 +54,21 @@ const goVer = '3.0.3';
 
     <article class="docs-main">
       <h1><span class="l-en">Documentation</span><span class="l-zh">文档</span></h1>
+      <h2><span class="l-en">3.0.4</span><span class="l-zh">3.0.4</span></h2>
+      <p><span class="l-en">3.0.4 focuses first run on DeepSeek, with Flash for text and Vision for unconfigured visual work. Explicit roles and custom providers remain. Managed local AI is temporarily disabled without deleting files; external compatible local services remain usable. Computer Use stays disabled. See the <a href={`${repo}/blob/main/docs/audits/2026-09-08-v3.0.4-release-validation.md`}>validation report</a> for DPI and remaining test scope.</span><span class="l-zh">3.0.4 首次配置聚焦 DeepSeek，文本默认 Flash，未设置的视觉任务默认 Vision；明确配置的角色与自定义供应商保留。托管本地 AI 暂时禁用但不删除文件，外部兼容本地服务仍可使用。电脑操控继续禁用。DPI 与其余测试范围见<a href={`${repo}/blob/main/docs/audits/2026-09-08-v3.0.4-release-validation.md`}>验证报告</a>。</span></p>
+      <p><span class="l-en">Stage replies stream between tool groups. Compact/Detailed controls provider reasoning only; final answers stay outside completed summaries, which show elapsed time, tokens, and known official DeepSeek cost. Turn navigation is on the left, Todo floats above the Composer without a full-width backdrop, and the fixed sidebar entry is ORCA Agent.</span><span class="l-zh">阶段性回复在工具组之间流式显示。简略/详细仅控制供应商 reasoning；最终答案保持独立，完成摘要显示耗时、token 及可确认的 DeepSeek 官方费用。回合定位移至左侧，Todo 浮于输入框上方且无全宽底色，固定侧栏入口为 ORCA Agent。</span></p>
+      <p><span class="l-en">Generated images require read/send permissions and a validated snapshot before visual delegation. Downloads show source, speed, and ETA; cancel before switching to another source for the same signed file. Speed depends on the actual route. Future builds omit old-brand duplicates; existing releases are retained. Full product documentation: <a href={`${repo}/blob/main/README.en.md`}>English README</a>.</span><span class="l-zh">生成图片经读取/发送权限与快照校验后才能委派识图。下载显示来源、速度与 ETA；先取消，再切换同一签名文件的来源。实际速度取决于网络。下一版不再生成旧品牌副本，历史发布保留。完整产品介绍见<a href={`${repo}/blob/main/README.md`}>中文 README</a>。</span></p>
+      <p><span class="l-en">DeepSeek official pricing checked on 2026-09-08: CNY per million tokens. Peak time is fixed at UTC+8 Monday-Friday 09:00-12:00 and 14:00-18:00; other times are off-peak. Each request freezes pricing at start. Amounts already stored for 3.0.3 remain USD and are not back-converted or relabeled. A session containing USD and CNY turns is not shown as one authoritative total; each turn keeps its own currency. Source: <a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing/">official pricing page</a>.</span><span class="l-zh">DeepSeek 官方价格于 2026-09-08 核对，单位为 CNY/百万 token。峰时固定为 UTC+8 周一至周五 09:00-12:00、14:00-18:00，其余为闲时；每次请求开始时冻结计价依据。3.0.3 已存金额保留 USD，不回算人民币、不改标签。包含 USD 与 CNY 回合的会话不显示为一个权威总额，各回合保留自己的币种。来源：<a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing/">官方价格页</a>。</span></p>
+      <table>
+        <thead><tr><th><span class="l-en">Model and period</span><span class="l-zh">模型与时段</span></th><th><span class="l-en">Cache-hit input</span><span class="l-zh">缓存命中输入</span></th><th><span class="l-en">Cache-miss input</span><span class="l-zh">未命中输入</span></th><th><span class="l-en">Output</span><span class="l-zh">输出</span></th></tr></thead>
+        <tbody>
+          <tr><td>Flash / Vision <span class="l-en">off-peak</span><span class="l-zh">闲时</span></td><td>¥0.05</td><td>¥1.5</td><td>¥4.5</td></tr>
+          <tr><td>Flash / Vision <span class="l-en">peak</span><span class="l-zh">峰时</span></td><td>¥0.10</td><td>¥3</td><td>¥9</td></tr>
+          <tr><td>Pro <span class="l-en">off-peak</span><span class="l-zh">闲时</span></td><td>¥0.15</td><td>¥4.5</td><td>¥13.5</td></tr>
+          <tr><td>Pro <span class="l-en">peak</span><span class="l-zh">峰时</span></td><td>¥0.30</td><td>¥9</td><td>¥27</td></tr>
+        </tbody>
+      </table>
+      <h2><span class="l-en">Published 3.0.3 baseline</span><span class="l-zh">已发布的 3.0.3 参考</span></h2>
       <p class="lede"><span class="l-en">Everything you need to install O.R.C.A, start your first session, and understand why long sessions stay cheap. For the full engineering contract, see the <a href={`${repo}/blob/main-v2/docs/SPEC.md`}>Spec</a> and <a href={`${repo}/blob/main-v2/docs/GUIDE.md`}>Guide</a> on GitHub.</span><span class="l-zh">从安装到第一次会话,以及理解为什么长会话依然便宜——你需要的都在这里。完整工程契约见 GitHub 上的 <a href={`${repo}/blob/main-v2/docs/SPEC.md`}>Spec</a> 与 <a href={`${repo}/blob/main-v2/docs/GUIDE.md`}>Guide</a>。</span></p>
 
       <p><span class="l-en"><strong>Computer Use is temporarily disabled on all platforms in 3.0.3.</strong> Windows, macOS, and Linux register no computer-control tools, capture no screens, and send no native mouse or keyboard input. Code and configuration remain for restoration after later validation. Existing consent, Full access, bots, and automation cannot enable it. Ordinary attachments and default Vision image analysis remain supported.</span><span class="l-zh"><strong>3.0.3 所有平台暂时禁用电脑操控。</strong>Windows、macOS、Linux 均不注册电脑工具、不截图、不执行原生鼠标键盘输入。代码和配置保留，待后续验收后恢复；已有授权、Full access、机器人和自动化均不能开启。普通附件与默认 Vision 识图仍支持。</span></p>

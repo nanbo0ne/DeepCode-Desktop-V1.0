@@ -80,3 +80,5 @@ export function normalizeLocalAICatalog(value: unknown): LocalAICatalogView {
     modelsDirectory: text(source.modelsDirectory),
   };
 }
+// Release gate for the managed runtime only. Custom providers stay available.
+export const LOCAL_AI_ENABLED = false;

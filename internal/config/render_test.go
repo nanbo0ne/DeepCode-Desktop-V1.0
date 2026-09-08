@@ -12,6 +12,7 @@ import (
 // an equivalent config — i.e. the wizard never writes a file it can't read.
 func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig := Default()
+	configureTestMimo(t, orig)
 	orig.DefaultModel = "mimo-pro"
 	orig.Language = "zh"
 	orig.UI.Theme = "light"
@@ -69,12 +70,21 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 		{Name: "example", Command: "deepseek-orca-plugin-example"},
 		{Name: "stripe", Type: "http", URL: "https://mcp.stripe.com", Headers: map[string]string{"Authorization": "Bearer x"}, AutoStart: boolPtr(false), Tier: "background"},
 	}
-	mm, _ := orig.Provider("mimo-pro")
+	mm, ok := orig.Provider("mimo-pro")
+	if !ok {
+		t.Fatal("explicit test MiMo provider missing")
+	}
 	mm.BaseURL = "http://localhost:8000/v1"
 	mm.ReasoningProtocol = "openai"
 	mm.ModelContextWindows = map[string]int{"mimo-v2.5": 262144, "mimo-v2.5-pro": 1048576}
-	ds, _ := orig.Provider("deepseek-flash")
+	ds, ok := orig.Provider("deepseek-flash")
+	if !ok {
+		t.Fatal("default DeepSeek provider missing")
+	}
 	ds.Effort = "max"
+	if err := orig.SetExpandThinking(true); err != nil {
+		t.Fatal(err)
+	}
 
 	rendered := RenderTOML(orig)
 	if strings.Contains(rendered, "ui_scale") {
@@ -118,6 +128,9 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	}
 	if got.Desktop.CheckUpdates == nil || *got.Desktop.CheckUpdates {
 		t.Errorf("desktop.check_updates = %+v, want false", got.Desktop.CheckUpdates)
+	}
+	if got.Desktop.ShowReasoning == nil || !*got.Desktop.ShowReasoning || got.DesktopProcessDisplayMode() != ProcessDisplayDetailed {
+		t.Errorf("desktop.show_reasoning = %+v, process_display_mode = %q", got.Desktop.ShowReasoning, got.DesktopProcessDisplayMode())
 	}
 	if !got.Notifications.Enabled || !got.Notifications.TurnDone || !got.Notifications.ApprovalRequest || !got.Notifications.AskRequest {
 		t.Errorf("notifications not preserved: %+v", got.Notifications)

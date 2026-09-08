@@ -1,0 +1,510 @@
+
+> orca-desktop-frontend@0.0.0 pretest:all
+> tsx src/__tests__/onboarding-route.test.ts && tsx src/__tests__/ui-style.test.ts && tsx src/__tests__/ui-style-contract.test.ts && tsx src/__tests__/settings-panel-contract.test.ts && tsx src/__tests__/composer-send-failure.test.ts
+
+
+onboarding route
+  PASS  first launch opens the DeepSeek key route
+  PASS  state load failures surface inside onboarding
+  PASS  onboarding exposes modal dialog semantics
+  PASS  route changes clear stale errors
+  PASS  keyboard focus remains inside onboarding
+  PASS  startup splash and onboarding never mount together
+
+UI style
+  PASS  missing preference defaults to modern
+  PASS  modern preference is retained
+  PASS  classic preference is retained
+  PASS  modern layout overlay is present
+  PASS  classic baseline remains available
+  PASS  classic style restores the baseline marker state
+  PASS  explicit classic and modern chrome contracts
+  PASS  audited shell occupancy and narrow controls
+
+settings panel contracts
+  PASS  downloading pauses or cancels
+  PASS  paused downloads can resume or cancel
+  PASS  queued downloads only offer cancel
+  PASS  verifying downloads never offer resume
+  PASS  failed downloads offer retry
+  PASS  cancelled downloads offer a fresh download
+  PASS  forward focus wraps to the first control
+  PASS  reverse focus wraps to the last control
+  PASS  focus entering from outside lands at the correct edge
+  PASS  empty focus lists are handled
+  PASS  settings load errors have dedicated state
+  PASS  settings load errors expose retry
+  PASS  settings failures are not converted to permanent null loading
+  PASS  settings exposes dialog semantics
+  PASS  settings isolates and restores focus
+  PASS  settings keeps portal menus in the focus scope
+  PASS  local AI rejects stay inside the page
+  PASS  local AI download does not use an unhandled promise chain
+  PASS  successful mutations retry only catalog reloads
+  PASS  local AI keeps refresh state and distinguishes GPU detection failure
+  PASS  onboarding copy comes from i18n
+  PASS  new settings tabs exist in both locales
+  PASS  download recovery actions exist in both locales
+
+23 passed, 0 failed, 23 total
+  PASS  unchanged draft can be cleared after success
+  PASS  text entered while sending is preserved
+  PASS  attachments added while sending are preserved
+  PASS  switching tabs prevents the old send from clearing the new draft
+
+Composer send failure
+  PASS  rejecting backend reports an unsuccessful send
+  PASS  rejecting backend does not clear the draft
+  PASS  text and attachments remain available for retry
+  PASS  failure is delivered to the inline error reporter
+  PASS  Composer renders send failures as inline status feedback
+  PASS  successful sends clear only their unchanged draft snapshot
+  PASS  sending disables the send control without making the textarea readonly
+  PASS  App awaits the Submit callback before Composer can clear the draft
+  PASS  controller send propagates the rejecting backend promise
+  PASS  missing active tabs reject instead of reporting a successful send
+
+14 passed, 0 failed
+
+> orca-desktop-frontend@0.0.0 test:all
+> tsc --noEmit -p tsconfig.test.json && tsx src/__tests__/ui-scale.test.ts && tsx src/__tests__/attachment-batch.test.ts && tsx src/__tests__/todo-panel-state.test.ts && tsx src/__tests__/anchored-popover-position.test.ts && tsx src/__tests__/update-check.test.ts && tsx src/__tests__/responsive-layout.test.ts && tsx src/__tests__/composer-running-action.test.ts && tsx src/__tests__/math-golden.test.ts && tsx src/__tests__/text-size.test.ts && tsx src/__tests__/provider-model-refresh.test.ts && tsx src/__tests__/local-ai-contract.test.ts && tsx src/__tests__/context-panel-usage.test.ts && tsx src/__tests__/goal-draft-mode.test.ts && tsx src/__tests__/workspace-layout.test.ts && tsx src/__tests__/tool-approval-mode.test.ts && tsx src/__tests__/send-failed.test.ts && tsx src/__tests__/message-selection-copy.test.ts && tsx src/__tests__/attachment-display.test.ts && tsx src/__tests__/command-palette-css.test.ts && tsx src/__tests__/transcript-timeline.test.ts
+
+
+ui scale
+  PASS  automatic mode follows Windows without extra zoom
+  PASS  legacy manual scale is ignored
+  PASS  system DPI mode is the only supported preference
+  PASS  legacy manual scale is no longer valid
+
+attachment batch identity
+  PASS  repeated source is deduplicated
+  PASS  same bytes with a different name remain distinct
+  PASS  source remains addressable after processing
+
+3 passed, 0 failed, 3 total
+
+todo panel state
+  PASS  new lists start collapsed
+  PASS  hover opens the panel
+  PASS  leaving closes an unpinned panel
+  PASS  keyboard focus opens the panel
+  PASS  Escape or outside close collapses the panel
+  PASS  click pins the panel open
+  PASS  updates to the same list preserve pinning
+  PASS  a new list resets to collapsed
+
+8 passed, 0 failed, 8 total
+2 passed, 0 failed, 2 total
+
+update check cache
+  PASS  fresh cache is reused
+  PASS  24-hour cache expires
+  PASS  cache from another running version is ignored
+  PASS  failed checks are not cached
+
+4 passed, 0 failed, 4 total
+
+responsive layout safeguards
+  PASS  composer has no fixed right-side reservation
+  PASS  composer actions stay in grid flow
+  PASS  chrome uses explicit presentation branches
+  PASS  modern chrome does not stack the legacy TopicBar as a third header row
+  PASS  chrome priorities have narrow breakpoints
+  PASS  modern text menus keep all secondary commands available
+  PASS  modern workspace actions keep stable icon slots
+  PASS  topic actions expose a narrow overflow menu
+  PASS  narrow status bar cannot wrap or overflow
+  PASS  Todo stays centered and constrained by the conversation footer
+  PASS  manual update check stays beside the automatic update toggle
+  PASS  prompt modes come from product capabilities without descriptions or a help button
+  PASS  a confirmed running mode switch applies as soon as the turn becomes idle
+  PASS  failed mode switches retain queued prompts until a successful retry
+  PASS  bot and memory settings follow the product capability boundary
+  PASS  Orca hides both the ordinary mode selector and redundant approval selector
+  PASS  Orca is a fixed top-level entry rather than a creatable workspace
+  PASS  Orca stays fixed instead of inheriting project rename and drag actions
+  PASS  final Composer breakpoints use one descending 720/580/460/380/320 sequence
+  PASS  narrow Composer retains model access and collapses mode trigger to one icon
+  PASS  Modern footer uses a content-sized right-aligned action track
+  PASS  Modern transcript keeps a full-width scroll viewport around the reading column
+  PASS  Modern run status uses intrinsic width so controls remain grouped at the right edge
+  PASS  running send replaces stop without changing the primary action geometry
+  PASS  plain text paste remains editable text and wins over rich clipboard image hints
+  PASS  custom context-menu paste delegates images and files to Composer
+  PASS  themed disabled send button stays muted
+  PASS  failed attachments cannot leave the ordinary send button falsely enabled
+  PASS  Composer grows with content up to a stable line limit before scrolling
+  PASS  process settings expose only compact and detailed modes
+  PASS  compact process details can close cleanly and preserve stable segment overrides
+  PASS  single activity ring regenerates for each direction and remains reduced-motion safe
+  PASS  mode switching keeps the selector still and shows a right-aligned stage bar
+  PASS  pause, resume, and stop share a consistent plain-icon language
+  PASS  runtime mode switches render as standalone persistent timeline rows
+  PASS  footer shelves remain transparent outside their individual cards
+  PASS  Todo keeps a stable in-flow trigger and opens details in an anchored portal
+  PASS  panel ownership stays on the shelf or turn while process and tool rows remain flat
+  PASS  completed-turn summary uses the original transparent inline treatment
+  PASS  only tool output surfaces retain contained backgrounds inside the activity rail
+  PASS  restored history skips bulk entrance animation during its first paint
+  PASS  conversation selection paints before history work and auxiliary status hydrates later
+
+42 passed, 0 failed, 42 total
+
+composer running action
+  PASS  empty composer keeps the stop action
+  PASS  whitespace does not replace stop with send
+  PASS  text enables queued send
+  PASS  attachments enable queued send
+  PASS  workspace references enable queued send
+  PASS  session references enable queued send
+  PASS  pending paste shows send but remains unsendable
+
+7 passed, 0 failed, 7 total
+
+stripMathDelimiters
+  PASS  \(...\)
+  PASS  \[...\]
+  PASS  $$...$$
+  PASS  $...$
+  PASS  no delimiters
+  PASS  inline with pipe
+
+latexNormalizeForKatex
+  PASS  plain unchanged
+  PASS  escapes # in \text
+  PASS  escapes $ in \text
+  PASS  escapes & % _ ^ ~ in \text
+  PASS  no double-escape
+  PASS  non-text commands
+  PASS  | to \vert without doubled space
+  PASS  |x| keeps command boundary
+  PASS  already escaped $
+  PASS  \textrm also handled
+  PASS  \textbf no special chars
+  PASS  nested braces in command
+  PASS  \| is left alone (readCommand handles \|, not | branch)
+  PASS  \\| line break + pipe: both | → \vert
+  PASS  \tag without aligned passes through
+  PASS  aligned without \tag unchanged
+  PASS  aligned with \tag → align
+  PASS  aligned with multiple \tag → align
+  PASS  boxed aligned with \tag → boxed align
+  PASS  gathered with \tag → gather
+
+isLikelyInlineMath — math
+  PASS  $x$ (single var)
+  PASS  $E=mc^2$
+  PASS  $x_i^2$
+  PASS  $\alpha$
+  PASS  $a \le b$
+  PASS  $\frac{a}{b}$
+  PASS  $f(x)$
+  PASS  $x+1$
+
+isLikelyInlineMath — currency/link (NOT math)
+  PASS  $5
+  PASS  $10
+  PASS  $10.50
+  PASS  $100%
+  PASS  URL
+  PASS  prose text
+  PASS  prose $x y z$ (spaces)
+  PASS  $PATH$ env token
+  PASS  $TODO$ word token
+  PASS  $OK$ word token
+  PASS  $v1$ version token
+  PASS  $foo$ plain word
+
+isLikelyInlineMath — single-letter regression
+  PASS  lowercase $x$ → math
+  PASS  uppercase $I$ → NOT math (Roman numeral / acronym)
+  PASS  uppercase $A$ → NOT math
+  PASS  uppercase $V$ → NOT math
+
+KaTeX renderToString — end to end
+  PASS  chiral decomposition renders
+  PASS  \|x\| renders as double bars
+
+normalizeMath — LLM delimiter conversion
+  PASS  \(…\) → $…$
+  PASS  \[…\] → $$…$$
+  PASS  \\[ line-break spacing protected
+  PASS  \slashed{p} → \not{p}
+  PASS  \slashed{\partial} → \not{\partial}
+  PASS  \slashed in prose
+  PASS  \slashed\epsilon(0) → \not{\epsilon(0)} (unbraced fn)
+  PASS  \slashed a → \not a (unbraced letter)
+
+normalizeMath — non-math dollar filtering
+  PASS  $5$ not math
+  PASS  $PATH$ not math
+  PASS  $x^2+y^2$ is math
+  PASS  $\alpha+\beta$ is math
+  PASS  $10.50$ not math
+  PASS  $I$ not math
+  PASS  multiple prose $ stays literal
+
+normalizeMath — Markdown code regions stay literal
+  PASS  inline code with env token
+  PASS  multiple inline code spans
+  PASS  fenced code with env token
+  PASS  fenced code protected while prose math renders
+
+normalizeMath — text-mode escapes (regression)
+  PASS  $\text{cost is $5}$ inner $ escaped
+  PASS  $\text{baryon #}$ # escaped
+  PASS  $\text{a & b}$ & escaped
+  PASS  $\sqrt{x}$ non-text command preserved
+
+normalizeMath — TEXT_MODE_PAIR trailing content
+  PASS  $\text{cost is $5} + x^2$ inner $ escaped with trailing
+  PASS  $\text{a} | b$ pipe after text command
+  PASS  $\text{abc}$ simple text-mode (no trailing)
+
+normalizeMath — pipe handling
+  PASS  $|x+1|$ absolute value
+  PASS  $\|x\|$ norm preserved (no \vert mangling)
+
+normalizeMath → KaTeX end-to-end
+  PASS  text mode with literal $: $\text{cost is $5}$
+  PASS  text mode with #: $\text{baryon #}$
+  PASS  text mode with &: $\text{a & b}$
+  PASS  norm: $\|x\|$
+  PASS  abs value: $|x+1|$
+  PASS  simple equation: $x=1$
+  PASS  fraction: $\frac{a}{b}$
+  PASS  greek letters: $\alpha + \beta$
+  PASS  sqrt with surrounding spaces: $ \sqrt{x} $
+  PASS  display equation: $$E=mc^2$$
+  PASS  LLM-native inline delimiter: \(\alpha\)
+  PASS  LLM-native display delimiter: \[\sum_{i=1}^n i\]
+  PASS  display with absolute values: $$ |a| = |b| $$
+  PASS  boxed aligned (no \tag): $$\boxed{\begin{aligned}
+r_A E_\pi(k;0) &= B(k^2) \\
+F_R(k;0) + 2r_A F_\pi(k;0) &= A(k^2)
+\end{aligned}}$$
+  PASS  boxed aligned with \tag → align (no error): $$\boxed{\begin{aligned}
+r_A E_\pi(k;0) &= B(k^2) \tag{10}\\
+F_R(k;0) + 2r_A F_\pi(k;0) &= A(k^2) \tag{11}
+\end{aligned}}$$
+  PASS  LLM-native boxed aligned: \[\boxed{\begin{aligned}
+x &= 1 \\
+y &= 2
+\end{aligned}}\]
+
+normalizeMath — non-math inputs pass through
+  PASS  currency stays literal: costs $5$ today
+  PASS  LaTeX line-break spacing: line break \\[4pt] here
+  PASS  plain text: hello world
+
+99 passed, 0 failed, 99 total
+
+text size shortcuts
+  PASS  increase from small
+  PASS  increase from default
+  PASS  increase from large
+  PASS  increase clamps at largest
+  PASS  decrease from xlarge
+  PASS  decrease from large
+  PASS  decrease from default
+  PASS  decrease clamps at smallest
+
+8 passed, 0 failed, 8 total
+
+provider model refresh
+  PASS  appends discovered models without removing curated ones
+  PASS  background refresh preserves manually curated model list
+  PASS  background refresh does not re-add deleted models
+  PASS  manual access refresh preserves selected MiMo model instead of importing provider catalog
+  PASS  manual access refresh can show provider catalog as unsaved candidates
+  PASS  manual access refresh filters non-chat candidates before saving
+  PASS  matches backend non-chat model heuristic
+  PASS  background refresh can populate an empty model list
+  PASS  preserves current default when it remains available
+  PASS  falls back to first saved model when default is unavailable
+
+10 passed, 0 failed, 10 total
+
+local AI bridge contract
+  PASS  normalizes a missing catalog
+  PASS  normalizes missing hardware and GPUs
+  PASS  provides a conservative runtime state
+  PASS  turns null catalog collections into arrays
+  PASS  turns a null GPU collection into an array
+  PASS  preserves valid hardware values
+  PASS  defaults GPU detection failures to false
+  PASS  preserves GPU detection failures
+  PASS  preserves every enumerated adapter
+  PASS  does not assume the dedicated GPU is GPU0
+
+10 passed, 0 failed, 10 total
+
+context panel usage
+  PASS  falls back to latest usage breakdown when panel only has totals
+  PASS  keeps an authoritative zero snapshot after controller rebuild
+  PASS  does not treat cumulative session totals as current context usage
+  PASS  uses persisted session breakdown after restart
+  PASS  keeps the real context snapshot when it is available
+  PASS  keeps persisted cumulative prompt tokens for metrics
+  PASS  keeps current prompt tokens for the context-window bar after compaction
+  PASS  uses recalculated compacted context usage after compaction
+
+8 passed, 0 failed, 8 total
+
+goal draft mode
+  PASS  draft goal mode wins over stale local normal mode
+  PASS  tab list keeps draft goal mode visible before a goal is started
+  PASS  empty controller meta does not collapse a draft goal mode
+  PASS  empty draft goal syncs to the controller as normal mode
+  PASS  plan mode wins over stale goal text when syncing the controller
+  PASS  started goal syncs to the controller as goal mode
+  PASS  draft flag is retained while goal text is empty
+  PASS  draft flag clears after a real goal exists
+  PASS  non-draft empty goal falls back to legacy plan mode
+
+9 passed, 0 failed, 9 total
+
+workspace dock layout
+  PASS  1280px viewport leaves room for an expanded-sidebar dock
+  PASS  expanded-sidebar preview clamps to available width instead of overflowing
+  PASS  collapsed sidebar restores workspace room
+  PASS  wide-enough collapsed layout keeps the preferred preview width
+  PASS  very narrow viewports may leave less than the nominal dock minimum
+  PASS  very narrow dock still stays inside the viewport
+  PASS  ARIA minimum follows constrained rendered width
+  PASS  closed panel preserves the saved preferred width
+  PASS  maximized panel preserves the saved preferred width
+
+9 passed, 0 failed, 9 total
+
+tool approval mode
+  PASS  ask restores to ask
+  PASS  auto restores to auto
+  PASS  yolo cannot be a restore base
+  PASS  Ctrl+Y turns ask into yolo
+  PASS  Ctrl+Y remembers ask
+  PASS  Ctrl+Y turns auto into yolo
+  PASS  Ctrl+Y remembers auto
+  PASS  Ctrl+Y restores auto from yolo
+  PASS  Ctrl+Y falls back to ask when no restore base exists
+
+9 passed, 0 failed, 9 total
+
+send failure feedback
+  PASS  submit appends the user bubble immediately
+  PASS  bubble carries the submitted text
+  PASS  submit marks the turn running
+  PASS  submit tracks the optimistic bubble
+  PASS  first backend event confirms without duplicating
+  PASS  confirmation clears the pending marker
+  PASS  send_failed marks the bubble failed
+  PASS  send_failed appends a notice
+  PASS  the notice is a warning
+  PASS  send_failed stops the running indicator
+  PASS  send_failed clears the pending marker
+  PASS  send_failed after backend confirmation is a no-op
+  PASS  unsend clears the pending marker
+  PASS  unsend discards the in-flight turn
+  PASS  steer_sent appends a visible guidance item
+  PASS  guidance item keeps the submitted text
+  PASS  guidance is not counted as a new user turn
+  PASS  backend steer confirmation does not duplicate guidance
+  PASS  usage does not overwrite the backend context-window snapshot
+  PASS  usage does not temporarily duplicate persisted session tokens
+  PASS  context session total stays on persisted telemetry
+  PASS  usage does not temporarily duplicate persisted session cost
+  PASS  priced usage marks cost as reliable
+  PASS  unknown model context remains unknown instead of becoming zero capacity
+  PASS  unpriced model snapshot clears the previous model cost
+  PASS  unpriced model snapshot clears the previous model currency
+  PASS  unpriced model snapshot hides cost
+  PASS  unpriced model snapshot removes stale request cost
+  PASS  unpriced model snapshot removes stale request currency
+  PASS  a reliable zero cost is retained as a real value
+  PASS  a reliable zero cost retains its currency
+  PASS  a reliable zero cost remains visible
+  PASS  context refresh runs immediately when never refreshed
+  PASS  context refresh throttles recent backend snapshots
+  PASS  context refresh preserves the four-second interval
+  PASS  context refresh runs after the refresh interval
+
+36 passed, 0 failed
+
+message selection copy
+  PASS  copies selected message text through the fallback handler
+  PASS  does not override native copy inside editable fields
+  PASS  ignores whitespace-only selections
+  PASS  leaves non-message selections to the browser
+  PASS  ignores collapsed selections
+  PASS  does not claim copy events without writable clipboard data
+
+6 passed, 0 failed
+
+attachment display
+  PASS  removes named display refs from message text
+  PASS  preserves original display names for attachment cards
+  PASS  sorts images before files while keeping groups stable
+  PASS  compact previews use named display refs
+  PASS  extracts Windows path basenames
+  PASS  extracts POSIX path basenames
+  PASS  renders attachments before the text bubble
+  PASS  renders separate image and file rows outside msg body
+
+8 passed, 0 failed, 8 total
+
+command palette css
+  PASS  palette result rows stay in flex layout
+  PASS  palette result rows keep icon and text side-by-side
+  PASS  palette text body can shrink before ellipsis
+  PASS  .palette__title clips overflow inside the row
+  PASS  .palette__title uses ellipsis for long text
+  PASS  .palette__title stays on one measured line
+  PASS  .palette__hint clips overflow inside the row
+  PASS  .palette__hint uses ellipsis for long text
+  PASS  .palette__hint stays on one measured line
+  PASS  no palette item rule can stack icon above long session text
+
+10 passed, 0 failed
+  PASS  a live turn keeps intermediate text and tools in one process panel
+  PASS  reasoning, progress text, notices, and tools share one turn process panel
+  PASS  successful completed turn collapses intermediate activity
+  PASS  explicit successful completion collapses a recovered tool failure
+  PASS  failed turn keeps its diagnostic timeline visible
+  PASS  final legacy turn without completion evidence remains expanded
+  PASS  a later user turn does not guess completion for legacy history
+  PASS  legacy failure evidence prevents automatic collapse
+  PASS  unowned background notices stay outside the completed turn
+  PASS  mode switches remain standalone and never enter a completed process panel
+  PASS  persisted mode switch history restores its explicit item type
+  PASS  live switch phases update one stable timeline item
+  PASS  live switch completion updates the existing item
+  PASS  older runtime generations cannot overwrite the latest switch
+  PASS  answer_committed owns the exact final message
+  PASS  explicit success records a successful turn outcome
+  PASS  cancelled turns do not render context-canceled as an error
+  PASS  cancelled turns retain their explicit outcome
+  PASS  current process segment remains live before TurnDone
+  PASS  failed process segment stays expanded after TurnDone
+  PASS  model activity rotates clockwise
+  PASS  running tool activity rotates counterclockwise
+  PASS  disabled activity mark stays hidden
+  PASS  paused activity mark stays hidden
+  PASS  completed activity mark stays hidden
+  PASS  latest hidden warm turn needs one page
+  PASS  older warm turn requests enough pages before jumping
+  PASS  cold history starts fully hidden
+  PASS  one page reveals the newest warm turns
+  PASS  enough pages reveal the oldest warm turn
+  PASS  background notice does not reactivate running state
+  PASS  background notice does not reactivate the turn
+  PASS  process group no longer nests an outer ProcessCard
+  PASS  completed timeline has a flat activity rail
+  PASS  completed process details do not create a nested process panel
+  PASS  successful completed turns start collapsed
+  PASS  question rail does not scroll the transcript via scrollIntoView
+  PASS  warm pagination renders from the hidden-turn boundary
+  PASS  question marker mouse events do not bubble into the rail
+  PASS  activity phase changes wait for the old single ring to fade out
+  PASS  activity mark renders exactly one phase-keyed spinner element
+  PASS  activity ring never flips animation direction in place
+  PASS  clockwise and counterclockwise rings use separate generated gradients

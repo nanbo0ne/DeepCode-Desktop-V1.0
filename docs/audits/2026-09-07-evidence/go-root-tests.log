@@ -1,0 +1,71 @@
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/benchmarks/context-maintenance-e2e	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/deepseek-orca	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/deepseek-orca-plugin-example	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/e2ebench	[no test files]
+?   	github.com/nanbo0ne/O.R.C.A-for-Windows/cmd/orca	[no test files]
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/acp	0.906s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent	7.612s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/agent/testutil	0.682s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/artifact	0.750s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/billing	0.566s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/boot	26.020s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot	0.758s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/feishu	0.634s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/qq	0.551s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/bot/weixin	0.792s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/checkpoint	0.537s
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+error: chdir C:\Users\16260\AppData\Local\Temp\TestChdirTo1165123692\001\does-not-exist: The system cannot find the file specified.
+  Live fetch unavailable for Test, using preset model list
+Wrote ~\AppData\Local\Temp\TestWriteDefaultConfigDisablesCodegraph948124561\001\deepseek-orca.toml
+Next: configure a provider key with `orca setup`, then run `orca run "your task"`.
+--- FAIL: TestApplyMCPModeRecordsCodegraphConnectFailure (3.47s)
+    mcp_test.go:483: Host.Failures() = [], want codegraph failure
+    testing.go:1464: TempDir RemoveAll cleanup: unlinkat C:\Users\16260\AppData\Local\Temp\TestApplyMCPModeRecordsCodegraphConnectFailure2385663496\001\.codegraph\codegraph.db: The process cannot access the file because it is being used by another process.
+FAIL
+FAIL	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/cli	9.357s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/codegraph	1.100s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/command	0.688s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/config	1.019s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/control	2.458s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/diff	0.688s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/doctor	0.937s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/documentextract	0.447s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event	1.077s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/evidence	1.179s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileref	0.720s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileutil	0.474s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/fileutil/encoding	0.465s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/frontmatter	0.542s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/hook	0.695s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/i18n	0.526s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/inspect	0.685s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/installsource	1.407s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/instruction	0.613s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/jobs	8.607s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/localai	0.659s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/lsp	0.747s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/mcpdiag	0.549s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/memory	1.041s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/modelmeta	0.750s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/netclient	0.665s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/nilutil	0.563s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/notify	0.660s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/outputstyle	0.557s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/permission	0.455s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/plugin	11.749s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/proc	3.224s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/product	0.583s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/promptprofile	0.687s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider	0.782s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider/anthropic	0.316s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider/openai	2.011s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/sandbox	0.824s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/serve	0.883s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/skill	1.232s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/sysproxy	0.538s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool	0.443s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool/builtin	16.621s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool/hosttools	1.122s
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/internal/visioncap	0.737s
+FAIL

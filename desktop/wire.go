@@ -12,26 +12,30 @@ import "github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 // may diverge later; if they don't, this is the obvious thing to lift into a
 // shared event.ToWire.)
 type wireEvent struct {
-	Kind           string          `json:"kind"`
-	TurnID         string          `json:"turnId,omitempty"`
-	ItemID         string          `json:"itemId,omitempty"`
-	MessageID      string          `json:"messageId,omitempty"`
-	FinalItemID    string          `json:"finalItemId,omitempty"`
-	FinalMessageID string          `json:"finalMessageId,omitempty"`
-	ItemType       string          `json:"itemType,omitempty"`
-	ItemStatus     string          `json:"itemStatus,omitempty"`
-	Outcome        string          `json:"outcome,omitempty"`
-	Text           string          `json:"text,omitempty"`
-	Reasoning      string          `json:"reasoning,omitempty"`
-	Level          string          `json:"level,omitempty"`
-	Tool           *wireTool       `json:"tool,omitempty"`
-	Usage          *wireUsage      `json:"usage,omitempty"`
-	Approval       *wireApproval   `json:"approval,omitempty"`
-	Ask            *wireAsk        `json:"ask,omitempty"`
-	Compaction     *wireCompaction `json:"compaction,omitempty"`
-	Err            string          `json:"err,omitempty"`
-	RetryAttempt   int             `json:"retryAttempt,omitempty"`
-	RetryMax       int             `json:"retryMax,omitempty"`
+	Kind              string          `json:"kind"`
+	TurnID            string          `json:"turnId,omitempty"`
+	ItemID            string          `json:"itemId,omitempty"`
+	MessageID         string          `json:"messageId,omitempty"`
+	FinalItemID       string          `json:"finalItemId,omitempty"`
+	FinalMessageID    string          `json:"finalMessageId,omitempty"`
+	ItemType          string          `json:"itemType,omitempty"`
+	ItemStatus        string          `json:"itemStatus,omitempty"`
+	Outcome           string          `json:"outcome,omitempty"`
+	TurnTokens        int             `json:"turnTokens,omitempty"`
+	TurnCost          float64         `json:"turnCost,omitempty"`
+	TurnCurrency      string          `json:"turnCurrency,omitempty"`
+	TurnCostAvailable bool            `json:"turnCostAvailable"`
+	Text              string          `json:"text,omitempty"`
+	Reasoning         string          `json:"reasoning,omitempty"`
+	Level             string          `json:"level,omitempty"`
+	Tool              *wireTool       `json:"tool,omitempty"`
+	Usage             *wireUsage      `json:"usage,omitempty"`
+	Approval          *wireApproval   `json:"approval,omitempty"`
+	Ask               *wireAsk        `json:"ask,omitempty"`
+	Compaction        *wireCompaction `json:"compaction,omitempty"`
+	Err               string          `json:"err,omitempty"`
+	RetryAttempt      int             `json:"retryAttempt,omitempty"`
+	RetryMax          int             `json:"retryMax,omitempty"`
 }
 
 // wireCompaction is the JSON form of an event.Compaction. On a compaction_started
@@ -82,6 +86,7 @@ type wireProfile struct {
 }
 
 type wireUsage struct {
+	RequestID        string                `json:"requestId,omitempty"`
 	PromptTokens     int                   `json:"promptTokens"`
 	CompletionTokens int                   `json:"completionTokens"`
 	TotalTokens      int                   `json:"totalTokens"`
@@ -143,6 +148,8 @@ var kindNames = map[event.Kind]string{
 	event.ItemStarted:       "item_started",
 	event.ItemDelta:         "item_delta",
 	event.ItemCompleted:     "item_completed",
+	event.ChildStarted:      "child_started",
+	event.ChildDone:         "child_done",
 }
 
 // toWireAsk converts an event.Ask into its JSON wire form.
@@ -165,6 +172,8 @@ func toWire(e event.Event) wireEvent {
 		TurnID: e.TurnID, ItemID: e.ItemID, MessageID: e.MessageID,
 		FinalItemID: e.FinalItemID, FinalMessageID: e.FinalMessageID,
 		ItemType: string(e.ItemType), ItemStatus: string(e.ItemStatus), Outcome: string(e.Outcome),
+		TurnTokens: e.TurnTokens, TurnCost: e.TurnCost, TurnCurrency: e.TurnCurrency,
+		TurnCostAvailable: e.TurnCostAvailable,
 	}
 	switch e.Kind {
 	case event.Notice:
@@ -188,6 +197,7 @@ func toWire(e event.Event) wireEvent {
 	case event.Usage:
 		if u := e.Usage; u != nil {
 			w.Usage = &wireUsage{
+				RequestID:    e.RequestID,
 				PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens,
 				TotalTokens: u.TotalTokens, CacheHitTokens: u.CacheHitTokens,
 				CacheMissTokens: u.CacheMissTokens, ReasoningTokens: u.ReasoningTokens,
@@ -196,7 +206,7 @@ func toWire(e event.Event) wireEvent {
 			if e.CacheDiagnostics != nil {
 				w.Usage.CacheDiagnostics = toWireCacheDiagnostics(e.CacheDiagnostics)
 			}
-			if e.Pricing != nil {
+			if e.RequestID != "" && officialDeepSeekPricing(e.Pricing, e.ProviderEndpoint) && usageCostBreakdownAvailable(u) {
 				cost := e.Pricing.Cost(u)
 				w.Usage.Cost = cost
 				w.Usage.Currency = e.Pricing.Symbol()

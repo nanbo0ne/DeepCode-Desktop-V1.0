@@ -72,7 +72,7 @@ type RuntimeServer struct {
 
 func NewRuntimeServer(emit func(RuntimeStatus)) *RuntimeServer {
 	return &RuntimeServer{
-		status: RuntimeStatus{State: RuntimeStopped, Supported: runtime.GOOS == "windows", UpdatedAt: time.Now().UnixMilli()},
+		status: RuntimeStatus{State: RuntimeStopped, Supported: runtime.GOOS == "windows" && LocalAIEnabled, UpdatedAt: time.Now().UnixMilli()},
 		emit:   emit,
 		client: &http.Client{Timeout: 2 * time.Second},
 	}
@@ -97,6 +97,9 @@ func (s *RuntimeServer) Touch() {
 }
 
 func (s *RuntimeServer) Start(ctx context.Context, installation RuntimeInstallation, model ModelInstallation, spec ModelSpec, hardware HardwareProfile, reserveMiB int64, idle time.Duration) (RuntimeStatus, error) {
+	if err := RequireEnabled(); err != nil {
+		return s.Status(), err
+	}
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
 	if runtime.GOOS != "windows" {
@@ -230,7 +233,7 @@ func (s *RuntimeServer) stopProcess() error {
 	}
 	s.cmd = nil
 	s.stopCh = nil
-	s.status = RuntimeStatus{State: RuntimeStopped, Supported: runtime.GOOS == "windows", Installed: s.status.Installed, UpdatedAt: time.Now().UnixMilli()}
+	s.status = RuntimeStatus{State: RuntimeStopped, Supported: runtime.GOOS == "windows" && LocalAIEnabled, Installed: s.status.Installed, UpdatedAt: time.Now().UnixMilli()}
 	status := s.status
 	s.mu.Unlock()
 	var err error
@@ -297,7 +300,7 @@ func (s *RuntimeServer) lastLogText() string {
 
 func (s *RuntimeServer) setFailure(installed bool, message string, err error) (RuntimeStatus, error) {
 	s.mu.Lock()
-	s.status = RuntimeStatus{State: RuntimeFailed, Supported: runtime.GOOS == "windows", Installed: installed, Message: message, UpdatedAt: time.Now().UnixMilli()}
+	s.status = RuntimeStatus{State: RuntimeFailed, Supported: runtime.GOOS == "windows" && LocalAIEnabled, Installed: installed, Message: message, UpdatedAt: time.Now().UnixMilli()}
 	if err != nil {
 		s.status.LastError = err.Error()
 	}

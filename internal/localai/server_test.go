@@ -1,10 +1,23 @@
 package localai
 
 import (
+	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestDisabledRuntimeRejectsStart(t *testing.T) {
+	s := NewRuntimeServer(nil)
+	_, err := s.Start(context.Background(), RuntimeInstallation{ServerPath: `C:\llama-server.exe`}, ModelInstallation{ID: "model", ModelPath: `C:\model.gguf`}, ModelSpec{ID: "model", ContextSize: 8192}, HardwareProfile{}, 0, 0)
+	if !errors.Is(err, ErrTemporarilyDisabled) {
+		t.Fatalf("runtime start error = %v, want ErrTemporarilyDisabled", err)
+	}
+	if status := s.Status(); status.State != RuntimeStopped || status.Supported {
+		t.Fatalf("disabled runtime status = %+v", status)
+	}
+}
 
 func TestLoadProfilesUseSafeFallbackLadder(t *testing.T) {
 	profiles := loadProfiles(ModelSpec{ContextSize: 25_600, ContextFallback: []int{16_384, 8_192}}, 12, 2048)

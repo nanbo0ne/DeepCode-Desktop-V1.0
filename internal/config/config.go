@@ -17,6 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/billing"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/netclient"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/product"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
@@ -170,6 +171,7 @@ type DesktopConfig struct {
 	ProviderAccess        []string `toml:"provider_access"`                   // desktop-only list of provider entries shown in Settings > Model > Access
 	ExpandThinking        bool     `toml:"expand_thinking"`                   // true = show reasoning text expanded by default; false = collapsed
 	ProcessDisplayMode    string   `toml:"process_display_mode"`              // compact|detailed; standard is accepted as a legacy alias for compact
+	ShowReasoning         *bool    `toml:"show_reasoning,omitempty"`          // display only; legacy process layout preferences never hide progress
 	ActivityIndicator     bool     `toml:"activity_indicator_enabled"`        // show the optional animated process activity mark
 	VisionEnabled         bool     `toml:"vision_enabled"`                    // send attached image bytes to the selected model
 	VisionMode            string   `toml:"vision_mode"`                       // off|auto|on; vision_enabled is retained for legacy configs
@@ -251,22 +253,12 @@ func (c *Config) DesktopUIStyle() string {
 	return DesktopUIStyleModern
 }
 
-// DesktopProcessDisplayMode normalizes the two-state desktop process view.
-// Standard remains a read-only legacy alias and now migrates to compact.
+// The public two-state control now changes reasoning visibility only.
 func (c *Config) DesktopProcessDisplayMode() string {
-	switch strings.ToLower(strings.TrimSpace(c.Desktop.ProcessDisplayMode)) {
-	case ProcessDisplayCompact:
-		return ProcessDisplayCompact
-	case ProcessDisplayDetailed:
+	if c.Desktop.ShowReasoning != nil && *c.Desktop.ShowReasoning {
 		return ProcessDisplayDetailed
-	case ProcessDisplayStandard:
-		return ProcessDisplayCompact
-	default:
-		if c.Desktop.ExpandThinking {
-			return ProcessDisplayDetailed
-		}
-		return ProcessDisplayCompact
 	}
+	return ProcessDisplayCompact
 }
 
 // NotificationsConfig controls optional system notifications for CLI chat/run.
@@ -967,49 +959,10 @@ func applyResolvedModelPricing(e *ProviderEntry) {
 }
 
 func officialDeepSeekModelPricing(e *ProviderEntry, model string) *provider.Pricing {
-	model = strings.TrimSpace(model)
-	if model == "" {
+	if e == nil {
 		return nil
 	}
-	name := canonicalDesktopOfficialProviderName(e.Name)
-	officialName := name == "deepseek"
-	officialEndpoint := strings.Contains(strings.ToLower(e.BaseURL), "api.deepseek.com")
-	if !officialName && !officialEndpoint {
-		return nil
-	}
-	switch strings.ToLower(model) {
-	case "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
-		return deepSeekPeakPricing(
-			provider.PricingRates{CacheHit: 0.007, Input: 0.22, Output: 0.66},
-			provider.PricingRates{CacheHit: 0.014, Input: 0.44, Output: 1.32},
-		)
-	case "deepseek-v4-pro":
-		return deepSeekPeakPricing(
-			provider.PricingRates{CacheHit: 0.022, Input: 0.66, Output: 1.98},
-			provider.PricingRates{CacheHit: 0.044, Input: 1.32, Output: 3.96},
-		)
-	default:
-		return nil
-	}
-}
-
-func deepSeekPeakPricing(offPeak, peak provider.PricingRates) *provider.Pricing {
-	return &provider.Pricing{
-		CacheHit: offPeak.CacheHit,
-		Input:    offPeak.Input,
-		Output:   offPeak.Output,
-		Currency: "$",
-		Schedule: &provider.PricingSchedule{
-			UTCOffsetMinutes: 8 * 60,
-			PeakWeekdaysOnly: true,
-			PeakWindows: []provider.PricingWindow{
-				{StartMinute: 9 * 60, EndMinute: 12 * 60},
-				{StartMinute: 14 * 60, EndMinute: 18 * 60},
-			},
-			Peak:    peak,
-			OffPeak: offPeak,
-		},
-	}
+	return billing.OfficialDeepSeekPricing(e.Name, e.BaseURL, model)
 }
 
 // ToolsConfig selects which built-in tools are enabled. Empty means all of them.
@@ -1390,8 +1343,6 @@ func Default() *Config {
 		Providers: []ProviderEntry{
 			{Name: "deepseek-flash", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", APIKeyEnv: "DEEPSEEK_API_KEY", BalanceURL: "https://api.deepseek.com/user/balance", ContextWindow: 1_000_000, Price: officialDeepSeekModelPricing(&ProviderEntry{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com"}, "deepseek-v4-flash")},
 			{Name: "deepseek-pro", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro", APIKeyEnv: "DEEPSEEK_API_KEY", BalanceURL: "https://api.deepseek.com/user/balance", ContextWindow: 1_000_000, Price: officialDeepSeekModelPricing(&ProviderEntry{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com"}, "deepseek-v4-pro")},
-			{Name: "mimo-pro", Kind: "openai", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Model: "mimo-v2.5-pro", APIKeyEnv: "MIMO_TOKEN_PLAN_API_KEY", ContextWindow: 1_000_000, Price: &provider.Pricing{CacheHit: 0.025, Input: 3, Output: 6, Currency: "¥"}, NoProxy: true},
-			{Name: "mimo-flash", Kind: "openai", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Model: "mimo-v2.5", APIKeyEnv: "MIMO_TOKEN_PLAN_API_KEY", ContextWindow: 1_000_000, Price: &provider.Pricing{CacheHit: 0.02, Input: 1, Output: 2, Currency: "¥"}, NoProxy: true},
 		},
 	}
 }

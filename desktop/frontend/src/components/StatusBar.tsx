@@ -84,17 +84,19 @@ function rateValueClass(rate: string | null): string {
   return "statusbar__rate-value--critical";
 }
 
-function currencySymbol(currency?: string): string {
-  const value = (currency || "¥").trim();
+function currencySymbol(currency?: string): string | null {
+  const value = currency?.trim();
+  if (!value) return null;
   if (/^(cny|rmb|yuan|¥|￥)$/i.test(value)) return "¥";
   if (/^(usd|dollar|\$)$/i.test(value)) return "$";
   if (/^(eur|euro|€)$/i.test(value)) return "€";
   if (/^(gbp|pound|£)$/i.test(value)) return "£";
-  return "¥";
+  return value;
 }
 
-function formatMoney(amount?: number, currency?: string): string {
+function formatMoney(amount?: number, currency?: string): string | null {
   const symbol = currencySymbol(currency);
+  if (symbol === null) return null;
   if (typeof amount !== "number" || amount <= 0) return `${symbol}0.0000`;
   return `${symbol}${amount < 1 ? amount.toFixed(4) : amount.toFixed(2)}`;
 }
@@ -173,7 +175,7 @@ export function StatusBar({
           </span>
         </Tooltip>
       </div>
-      {uiStyle === "modern" && <details className="statusbar__details" ref={detailsRef} onKeyDown={(event) => {
+      {(uiStyle === "modern" || uiStyle === "classic") && <details className={`statusbar__details ${uiStyle === "classic" ? "statusbar__details--classic" : ""}`} ref={detailsRef} onKeyDown={(event) => {
         if (event.key === "Escape" && detailsRef.current) {
           detailsRef.current.open = false;
           detailsRef.current.querySelector("summary")?.focus();
@@ -229,7 +231,7 @@ export function StatusBar({
         </Tooltip>}
       </div>
       <div className="statusbar__group statusbar__group--account">
-        {costAvailable && <Tooltip label={t("status.spendTitle")}>
+        {costAvailable && costLabel !== null && <Tooltip label={t("status.spendTitle")}>
           <span className="stat statusbar__cost">
             <span className="stat__label">{t("status.costLabel")}</span>
             <b>{costLabel}</b>

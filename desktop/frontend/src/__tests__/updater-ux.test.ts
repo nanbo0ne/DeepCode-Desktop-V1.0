@@ -20,6 +20,9 @@ function check(value: boolean, label: string) {
 }
 
 console.log("\nupdater UX contract");
+check(bridge.includes('SetUpdateSource(source: string)') && banner.includes('await app.SetUpdateSource(source)'), "manual source selection reaches native download state");
+check(banner.includes('if (running || actionBusy) return;') && banner.includes('disabled={running || actionBusy}'), "source changes wait for cancellation and preserve the partial download");
+check(banner.includes('progress?.speedBps') && banner.includes('progress?.etaSeconds') && banner.includes('update.slowSource'), "download feedback includes speed ETA and a low-throughput hint");
 check(["DownloadUpdate", "CancelUpdateDownload", "GetUpdateStatus", "ApplyUpdate", "OpenDownloadedUpdate"].every((name) => bridge.includes(`${name}()`)), "bridge exposes the native updater actions");
 check(bridge.includes('"updater:progress"') && bridge.includes("onUpdaterProgress"), "bridge subscribes to updater progress");
 check(types.includes("canDownload: boolean") && types.includes("source?: string") && types.includes("UpdateProgressPhase"), "frontend types cover download capability and progress phases");

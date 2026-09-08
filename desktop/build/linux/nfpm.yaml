@@ -25,6 +25,10 @@ depends:
   - libgtk-3-0
   - libwebkit2gtk-4.1-0
 contents:
+  - src: ../THIRD-PARTY-NOTICES.txt
+    dst: /usr/share/doc/orca-agent/THIRD-PARTY-NOTICES.txt
+    file_info:
+      mode: 0644
   - src: ./build/bin/Orca
     dst: /usr/bin/orca
     file_info:

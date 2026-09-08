@@ -252,9 +252,14 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	// without attributing an active-model request to the configured model.
 	riskProv := execProv
 	riskModel := entry.Name + "/" + entry.Model
+	riskPricing := entry.Price
+	riskEndpoint := entry.BaseURL
 	if configured := strings.TrimSpace(cfg.Permissions.AutoReviewModel); configured != "" {
 		riskModel = configured
 		if reviewerEntry, ok := cfg.ResolveModel(configured); ok {
+			riskMetadata := modelmeta.Resolve(reviewerEntry, metadataStore)
+			riskPricing = riskMetadata.Pricing
+			riskEndpoint = reviewerEntry.BaseURL
 			reviewerProv, reviewerErr := NewProviderWithProxy(reviewerEntry, proxySpec)
 			if reviewerErr != nil {
 				slog.Warn("risk reviewer provider unavailable; automatic review will use fallback behavior", "model", configured, "err", reviewerErr)
@@ -267,7 +272,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			riskProv = nil
 		}
 	}
-	riskClassifier := control.NewProviderRiskClassifier(riskProv)
+	riskClassifier := control.NewProviderRiskClassifier(riskProv).WithTelemetry(sink, riskPricing, riskEndpoint)
 
 	sysPrompt, err := cfg.ResolveSystemPrompt()
 	if err != nil {
@@ -610,6 +615,15 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		}
 		return p, me.Price, me.ContextWindow, nil
 	}
+	resolveSubagentEndpoint := func(modelRef, _ string) string {
+		if strings.TrimSpace(modelRef) == "" {
+			return entry.BaseURL
+		}
+		if resolved, ok := cfg.ResolveModel(modelRef); ok {
+			return resolved.BaseURL
+		}
+		return ""
+	}
 	subagentIdentity := func(modelRef, effort string) (string, string) {
 		return subagentEffectiveIdentity(cfg, modelName, entry, modelRef, effort)
 	}
@@ -657,7 +671,10 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		taskModel, taskEffort, resolveSubagentProvider).
 		WithTranscripts(subagentStore, root, modelName, entry.Effort).
 		WithTranscriptIdentityResolver(subagentIdentity).
-		WithVisionDefault(cfg.ResolveVisionModelRef()).
+		WithProviderEndpoint(entry.BaseURL).
+		WithProviderEndpointResolver(resolveSubagentEndpoint).
+		WithVisionDefault(cfg.Agent.SubagentModels[config.VisionSubagentRole]).
+		WithVisionFallback(cfg.ResolveVisionModelRef()).
 		WithVision(visionMode, visionStatus, imageLoader))
 
 	// The `remember` tool lets the model persist durable facts to the project's
@@ -740,13 +757,14 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			}
 		}
 		answer, err := agent.RunSubAgentWithSession(sctx, prov, subReg, run.Session, task, agent.Options{
-			MaxSteps:      steps,
-			Temperature:   cfg.Agent.Temperature,
-			Pricing:       price,
-			Gate:          headlessGate,
-			ContextWindow: ctxWin,
-			ArchiveDir:    config.ArchiveDir(),
-			PauseWait:     opts.PauseWait,
+			MaxSteps:         steps,
+			Temperature:      cfg.Agent.Temperature,
+			Pricing:          price,
+			ProviderEndpoint: resolveSubagentEndpoint(modelRef, effortRef),
+			Gate:             headlessGate,
+			ContextWindow:    ctxWin,
+			ArchiveDir:       config.ArchiveDir(),
+			PauseWait:        opts.PauseWait,
 		}, agent.NestedSink(sctx, event.Discard))
 		if err != nil {
 			return "", errors.Join(err, subagentStore.SaveFailed(run))
@@ -826,6 +844,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		MaxSteps:                     maxSteps,
 		Temperature:                  cfg.Agent.Temperature,
 		Pricing:                      entry.Price,
+		ProviderEndpoint:             entry.BaseURL,
 		Gate:                         headlessGate,
 		Hooks:                        hookRunner,
 		Jobs:                         jm,
@@ -896,6 +915,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 				MaxStepsKey:       "agent.planner_max_steps",
 				Gate:              headlessGate,
 				ContextWindow:     pe.ContextWindow,
+				ProviderEndpoint:  pe.BaseURL,
 				SoftCompactRatio:  cfg.Agent.SoftCompactRatio,
 				CompactRatio:      cfg.Agent.CompactRatio,
 				CompactForceRatio: cfg.Agent.CompactForceRatio,
@@ -915,7 +935,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		if err != nil {
 			return nil, fmt.Errorf("auto_plan_classifier %q: %w", cm, err)
 		}
-		classifier = control.NewProviderAutoPlanClassifier(classifierProv)
+		classifierMetadata := modelmeta.Resolve(ce, metadataStore)
+		classifier = control.NewProviderAutoPlanClassifier(classifierProv).WithTelemetry(sink, classifierMetadata.Pricing, ce.BaseURL)
 	}
 
 	sessionDir := opts.SessionDir

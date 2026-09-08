@@ -23,6 +23,20 @@ import (
 type TaskKind string
 type TaskState string
 
+// LocalAIEnabled is intentionally false while the managed llama.cpp path is
+// temporarily disabled. Existing manifests and files remain readable so the
+// feature can be restored without re-downloading them.
+const LocalAIEnabled = false
+
+var ErrTemporarilyDisabled = errors.New("local AI is temporarily disabled")
+
+func RequireEnabled() error {
+	if !LocalAIEnabled {
+		return ErrTemporarilyDisabled
+	}
+	return nil
+}
+
 const (
 	TaskModel   TaskKind = "model"
 	TaskRuntime TaskKind = "runtime"
@@ -156,6 +170,9 @@ func (m *Manager) Tasks() []DownloadTask {
 }
 
 func (m *Manager) StartModelDownload(id string) (DownloadTask, error) {
+	if err := RequireEnabled(); err != nil {
+		return DownloadTask{}, err
+	}
 	spec, ok := ModelByID(id)
 	if !ok {
 		return DownloadTask{}, fmt.Errorf("unknown local model %q", id)
@@ -164,6 +181,9 @@ func (m *Manager) StartModelDownload(id string) (DownloadTask, error) {
 }
 
 func (m *Manager) StartRuntimeInstall(id string) (DownloadTask, error) {
+	if err := RequireEnabled(); err != nil {
+		return DownloadTask{}, err
+	}
 	spec, ok := RuntimeByID(id)
 	if !ok {
 		return DownloadTask{}, fmt.Errorf("unknown local runtime %q", id)
@@ -229,6 +249,15 @@ func (m *Manager) Pause(id string) error {
 }
 
 func (m *Manager) Resume(id string) error {
+	if err := RequireEnabled(); err != nil {
+		return err
+	}
+	return m.resume(id)
+}
+
+// resume contains the state-machine operation used by the manager tests and
+// by a future re-enable path. The public method remains hard-gated above.
+func (m *Manager) resume(id string) error {
 	m.mu.Lock()
 	task := m.tasks[id]
 	if task == nil {

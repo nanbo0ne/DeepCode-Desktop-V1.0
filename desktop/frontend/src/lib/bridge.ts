@@ -279,6 +279,7 @@ export interface AppBindings {
   Version(): Promise<string>;
   CheckUpdate(): Promise<UpdateInfo | null>;
   DownloadUpdate(): Promise<void>;
+  SetUpdateSource(source: string): Promise<void>;
   CancelUpdateDownload(): Promise<void>;
   GetUpdateStatus(): Promise<UpdateProgress>;
   ApplyUpdate(): Promise<void>;
@@ -2427,6 +2428,7 @@ function makeMockApp(): AppBindings {
       return null;
     },
     async DownloadUpdate() {},
+    async SetUpdateSource(_source: string) {},
     async CancelUpdateDownload() {},
     async GetUpdateStatus() {
       return { phase: "idle", received: 0, total: 0 } satisfies UpdateProgress;

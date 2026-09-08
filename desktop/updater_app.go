@@ -19,6 +19,7 @@ import (
 type pendingDesktopUpdate struct {
 	manifest update.Manifest
 	filename string
+	source   string
 }
 
 func (a *App) Version() string { return version }
@@ -46,7 +47,11 @@ func (a *App) CheckUpdate() (*UpdateInfo, error) {
 	a.updateMu.Lock()
 	if a.updateCancel == nil && a.updateState.Phase != "ready" && !a.updateApplying.Load() {
 		if info.Available {
-			a.updatePending = &pendingDesktopUpdate{manifest: *manifest}
+			source := manifest.Source
+			if source == "" && len(info.Sources) > 0 {
+				source = info.Sources[0]
+			}
+			a.updatePending = &pendingDesktopUpdate{manifest: *manifest, source: source}
 		} else {
 			a.updatePending = nil
 		}
@@ -78,6 +83,32 @@ func (a *App) GetUpdateStatus() updateProgress {
 	return state
 }
 
+// SetUpdateSource selects the next mirror for the pending signed manifest. The
+// selection is runtime-only: credentials, proxy settings, and user config are
+// never written as part of updater state.
+func (a *App) SetUpdateSource(source string) error {
+	source = strings.ToLower(strings.TrimSpace(source))
+	if source != updateSourceMac && source != updateSourceGitHub {
+		return errors.New("不支持的更新源")
+	}
+	a.updateMu.Lock()
+	defer a.updateMu.Unlock()
+	if a.updateCancel != nil || a.updateApplying.Load() {
+		return errors.New("更新操作正在进行")
+	}
+	if a.updatePending == nil {
+		return errors.New("请先检查可用更新")
+	}
+	asset, ok := selectedUpdateAsset(&a.updatePending.manifest)
+	if !ok || !containsUpdateSource(updateAssetSources(asset), source) {
+		return errors.New("当前更新没有此下载源")
+	}
+	a.updatePending.source = source
+	a.updateState.Source = source
+	a.updateState.SuggestAlternate = false
+	return nil
+}
+
 func (a *App) DownloadUpdate() error {
 	a.updateMu.Lock()
 	if a.updateCancel != nil || a.updateApplying.Load() {
@@ -98,9 +129,25 @@ func (a *App) DownloadUpdate() error {
 		a.updateMu.Unlock()
 		return errors.New("没有适用于当前平台的安装包")
 	}
+	source := pending.source
+	sources := updateAssetSources(asset)
+	if len(sources) == 0 {
+		a.updateMu.Unlock()
+		return errors.New("没有可用的下载源")
+	}
+	if !containsUpdateSource(sources, source) {
+		source = sources[0]
+	}
 	ctx, cancel := context.WithTimeout(a.reqCtx(), 2*time.Hour)
 	a.updateCancel = cancel
-	a.updateState = updateProgress{Phase: "downloading", Version: pending.manifest.Version, Total: asset.Size, CanSelfUpdate: canSelfUpdate()}
+	a.updateState = updateProgress{
+		Phase:         "downloading",
+		Version:       pending.manifest.Version,
+		Source:        source,
+		Sources:       sources,
+		Total:         asset.Size,
+		CanSelfUpdate: canSelfUpdate(),
+	}
 	a.updateMu.Unlock()
 	go func() {
 		defer cancel()
@@ -111,7 +158,9 @@ func (a *App) DownloadUpdate() error {
 			err = rootErr
 			if err == nil {
 				dir := filepath.Join(root, "O.R.C.A", "updates", strings.ToLower(asset.SHA256))
-				filename, err = downloadPackage(ctx, client, asset, dir, func(phase string, n, total int64) { a.emitProgress(phase, n, total, "") }, update.VerifyReader)
+				filename, err = downloadPackageWithSource(ctx, client, asset, dir, source, func(activeSource, phase string, stats packageTransferStats) {
+					a.emitProgressWithStats(activeSource, phase, stats, "")
+				}, update.VerifyReader)
 			}
 		}
 		a.updateMu.Lock()
@@ -274,14 +323,36 @@ func (a *App) reqCtx() context.Context {
 }
 
 func (a *App) emitProgress(phase string, received, total int64, errMsg string) {
+	a.updateMu.RLock()
+	source := a.updateState.Source
+	a.updateMu.RUnlock()
+	a.emitProgressWithStats(source, phase, packageTransferStats{Received: received, Total: total}, errMsg)
+}
+
+func (a *App) emitProgressWithStats(source, phase string, stats packageTransferStats, errMsg string) {
 	a.updateMu.Lock()
 	a.updateState.Phase = phase
-	a.updateState.Received = received
-	a.updateState.Total = total
+	if source != "" {
+		a.updateState.Source = source
+	}
+	a.updateState.Received = stats.Received
+	a.updateState.Total = stats.Total
+	a.updateState.SpeedBPS = stats.SpeedBPS
+	a.updateState.ETASeconds = stats.ETASeconds
+	a.updateState.SuggestAlternate = stats.SuggestAlternate
 	a.updateState.Err = errMsg
 	state := a.updateState
 	a.updateMu.Unlock()
 	a.publishUpdateProgress(state)
+}
+
+func containsUpdateSource(sources []string, want string) bool {
+	for _, source := range sources {
+		if source == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) publishUpdateProgress(state updateProgress) {

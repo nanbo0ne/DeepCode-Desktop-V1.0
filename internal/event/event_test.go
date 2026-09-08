@@ -126,6 +126,23 @@ func TestEventFields(t *testing.T) {
 	}
 }
 
+func TestUsageEventCarriesAttributionAndTurnRecordCost(t *testing.T) {
+	e := Event{
+		Kind:         Usage,
+		TurnID:       "turn-parent",
+		ParentTurnID: "turn-parent",
+		RequestID:    "request-child-1",
+		Usage:        &provider.Usage{TotalTokens: 12},
+	}
+	if e.TurnID != "turn-parent" || e.ParentTurnID != "turn-parent" || e.RequestID != "request-child-1" {
+		t.Fatalf("usage attribution = %+v", e)
+	}
+	record := TurnRecord{TurnID: e.TurnID, Tokens: 12, Cost: 0.000012, Currency: "$", CostAvailable: true}
+	if record.Tokens != 12 || record.Cost != 0.000012 || record.Currency != "$" || !record.CostAvailable {
+		t.Fatalf("turn cost record = %+v", record)
+	}
+}
+
 // --- Tool struct ---
 
 func TestToolStruct(t *testing.T) {

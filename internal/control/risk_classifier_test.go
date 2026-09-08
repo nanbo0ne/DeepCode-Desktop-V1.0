@@ -74,6 +74,23 @@ func TestProviderRiskClassifierUsesIsolatedStrictRequest(t *testing.T) {
 	}
 }
 
+func TestProviderRiskClassifierEmitsAttributedUsageReceipt(t *testing.T) {
+	p := &classifierProvider{
+		text:  `{"level":"low","reason":"read only"}`,
+		usage: &provider.Usage{PromptTokens: 10, CompletionTokens: 3, TotalTokens: 13},
+	}
+	var got event.Event
+	sink := event.FuncSink(func(e event.Event) { got = e })
+	pricing := &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"}
+	c := NewProviderRiskClassifier(p).WithTelemetry(sink, pricing, "https://api.deepseek.com")
+	if _, err := c.AssessWithParentTurn(context.Background(), permission.RiskInput{Tool: "read_file"}, "turn-parent"); err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != event.Usage || got.RequestID == "" || got.ParentTurnID != "turn-parent" || got.ProviderEndpoint != "https://api.deepseek.com" || got.Usage == nil {
+		t.Fatalf("risk usage receipt = %+v", got)
+	}
+}
+
 type riskStreamProvider struct{ chunks chan provider.Chunk }
 
 func (p riskStreamProvider) Name() string { return "risk-stream" }

@@ -1,0 +1,25 @@
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+--- FAIL: TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier (5.62s)
+    app_test.go:2000: Host.Failures() = [], want codegraph failure recorded for missing runtime
+    temphelper_test.go:32: robustTempDir: cleanup did not converge for C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-4162233793: unlinkat C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-4162233793\.codegraph\codegraph.db: The process cannot access the file because it is being used by another process.
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+warning: bash sandbox requested but unavailable on this platform; running bash unconfined
+FAIL
+FAIL	github.com/nanbo0ne/O.R.C.A-for-Windows/desktop	40.507s
+FAIL

@@ -1,0 +1,632 @@
+[
+  {
+    "scenario": "settings-error",
+    "body": "加载中…",
+    "crash": 0,
+    "errorUI": [],
+    "buttons": [],
+    "errors": [],
+    "screenshot": "settings-error.png"
+  },
+  {
+    "scenario": "local-null",
+    "body": "本地 AI\n硬件与运行器\n未检测到独立显卡 · 0GB 内存\n推荐：暂不推荐本地模型\n安装 llama.cpp\n运行器独立安装，服务仅监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models",
+    "crash": 0,
+    "errorUI": [],
+    "buttons": [
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "local-error",
+    "body": "本地 AI\n读取本地 AI 状态失败：Error: AUDIT_CATALOG_FAILURE重试",
+    "crash": 0,
+    "errorUI": [
+      "读取本地 AI 状态失败：Error: AUDIT_CATALOG_FAILURE重试"
+    ],
+    "buttons": [
+      {
+        "label": "重试",
+        "disabled": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "install-error",
+    "body": "本地 AI\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：暂不推荐本地模型\n安装 llama.cpp\n运行器独立安装，服务仅监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n下载",
+    "crash": 1,
+    "errorUI": [],
+    "buttons": [
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": false
+      }
+    ],
+    "errors": [
+      "AUDIT_DISK_FULL"
+    ],
+    "screenshot": "install-error.png"
+  },
+  {
+    "scenario": "paused-download",
+    "body": "本地 AI\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：暂不推荐本地模型\n安装 llama.cpp\n运行器独立安装，服务仅监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n10%\n镜像\n0 MB / 0 MB\n准备中\n下载",
+    "crash": 0,
+    "errorUI": [],
+    "buttons": [
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": true
+      }
+    ],
+    "errors": [],
+    "screenshot": "paused-download.png"
+  },
+  {
+    "scenario": "cancelled-download",
+    "body": "本地 AI\n硬件与运行器\n未检测到独立显卡 · 16GB 内存\n推荐：暂不推荐本地模型\n安装 llama.cpp\n运行器独立安装，服务仅监听本机；卸载运行器不会删除模型文件。\n模型库\n目录：D:/synthetic-models\nSynthetic ModelAudit fixture视觉 · 工具 · test\n10%\n镜像\n0 MB / 0 MB\n准备中\n下载",
+    "crash": 0,
+    "errorUI": [],
+    "buttons": [
+      {
+        "label": "安装 llama.cpp",
+        "disabled": false
+      },
+      {
+        "label": "下载",
+        "disabled": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "running-controls",
+    "states": [
+      {
+        "stage": "pause",
+        "label": "恢复"
+      },
+      {
+        "stage": "resume",
+        "label": "暂停"
+      },
+      {
+        "stage": "escape",
+        "runningCount": 0
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "browser-device-scale",
+    "viewport": {
+      "w": 1366,
+      "h": 900,
+      "dpr": 1
+    },
+    "style": "modern",
+    "layout": "layout layout--workspace-open",
+    "overflow": 0,
+    "overlaps": [],
+    "clipped": [],
+    "main": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "welcome": {
+      "x": 391,
+      "y": 229.5625,
+      "w": 540,
+      "h": 318.859375,
+      "right": 931,
+      "bottom": 548.421875
+    },
+    "transcript": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "card": {
+      "x": 280,
+      "y": 756,
+      "w": 762,
+      "h": 106,
+      "right": 1042,
+      "bottom": 862
+    },
+    "actions": {
+      "x": 808.28125,
+      "y": 815,
+      "w": 232.71875,
+      "h": 46,
+      "right": 1041,
+      "bottom": 861
+    },
+    "welcomeCenterDelta": 0,
+    "scrollRightDelta": 0,
+    "actionsRightInset": 1,
+    "buttons": [
+      {
+        "text": "",
+        "class": "composer__input",
+        "rect": {
+          "x": 296,
+          "y": 770,
+          "w": 730,
+          "h": 22,
+          "right": 1026,
+          "bottom": 792
+        }
+      },
+      {
+        "text": "协作方式",
+        "class": "composer-action-trigger",
+        "rect": {
+          "x": 291,
+          "y": 821,
+          "w": 32,
+          "h": 32,
+          "right": 323,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "工具权限（Ctrl/Cmd+Y 切换完全访问权限）",
+        "class": "composer-modern-access",
+        "rect": {
+          "x": 333,
+          "y": 822,
+          "w": 61,
+          "h": 30,
+          "right": 394,
+          "bottom": 852
+        }
+      },
+      {
+        "text": "DeepSeek-R1",
+        "class": "modelsw__trigger",
+        "rect": {
+          "x": 808.28125,
+          "y": 821,
+          "w": 108.6875,
+          "h": 32,
+          "right": 916.96875,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "auto",
+        "class": "modelsw__trigger effortsw__trigger ",
+        "rect": {
+          "x": 928.96875,
+          "y": 821,
+          "w": 58.03125,
+          "h": 32,
+          "right": 987,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "",
+        "class": "composer__btn composer__btn--send",
+        "rect": {
+          "x": 999,
+          "y": 820,
+          "w": 34,
+          "h": 34,
+          "right": 1033,
+          "bottom": 854
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "browser-device-scale",
+    "viewport": {
+      "w": 1366,
+      "h": 900,
+      "dpr": 1.25
+    },
+    "style": "modern",
+    "layout": "layout layout--workspace-open",
+    "overflow": 0,
+    "overlaps": [],
+    "clipped": [],
+    "main": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "welcome": {
+      "x": 391,
+      "y": 229.5625,
+      "w": 540,
+      "h": 318.859375,
+      "right": 931,
+      "bottom": 548.421875
+    },
+    "transcript": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "card": {
+      "x": 280,
+      "y": 756,
+      "w": 762,
+      "h": 106,
+      "right": 1042,
+      "bottom": 862
+    },
+    "actions": {
+      "x": 808.28125,
+      "y": 815,
+      "w": 232.71875,
+      "h": 46,
+      "right": 1041,
+      "bottom": 861
+    },
+    "welcomeCenterDelta": 0,
+    "scrollRightDelta": 0,
+    "actionsRightInset": 1,
+    "buttons": [
+      {
+        "text": "",
+        "class": "composer__input",
+        "rect": {
+          "x": 296,
+          "y": 770,
+          "w": 730,
+          "h": 22,
+          "right": 1026,
+          "bottom": 792
+        }
+      },
+      {
+        "text": "协作方式",
+        "class": "composer-action-trigger",
+        "rect": {
+          "x": 291,
+          "y": 821,
+          "w": 32,
+          "h": 32,
+          "right": 323,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "工具权限（Ctrl/Cmd+Y 切换完全访问权限）",
+        "class": "composer-modern-access",
+        "rect": {
+          "x": 333,
+          "y": 822,
+          "w": 61,
+          "h": 30,
+          "right": 394,
+          "bottom": 852
+        }
+      },
+      {
+        "text": "DeepSeek-R1",
+        "class": "modelsw__trigger",
+        "rect": {
+          "x": 808.28125,
+          "y": 821,
+          "w": 108.6875,
+          "h": 32,
+          "right": 916.96875,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "auto",
+        "class": "modelsw__trigger effortsw__trigger ",
+        "rect": {
+          "x": 928.96875,
+          "y": 821,
+          "w": 58.03125,
+          "h": 32,
+          "right": 987,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "",
+        "class": "composer__btn composer__btn--send",
+        "rect": {
+          "x": 999,
+          "y": 820,
+          "w": 34,
+          "h": 34,
+          "right": 1033,
+          "bottom": 854
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "browser-device-scale",
+    "viewport": {
+      "w": 1366,
+      "h": 900,
+      "dpr": 1.5
+    },
+    "style": "modern",
+    "layout": "layout layout--workspace-open",
+    "overflow": 0,
+    "overlaps": [],
+    "clipped": [],
+    "main": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "welcome": {
+      "x": 391,
+      "y": 229.5625,
+      "w": 540,
+      "h": 318.859375,
+      "right": 931,
+      "bottom": 548.421875
+    },
+    "transcript": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "card": {
+      "x": 280,
+      "y": 756,
+      "w": 762,
+      "h": 106,
+      "right": 1042,
+      "bottom": 862
+    },
+    "actions": {
+      "x": 808.28125,
+      "y": 815,
+      "w": 232.71875,
+      "h": 46,
+      "right": 1041,
+      "bottom": 861
+    },
+    "welcomeCenterDelta": 0,
+    "scrollRightDelta": 0,
+    "actionsRightInset": 1,
+    "buttons": [
+      {
+        "text": "",
+        "class": "composer__input",
+        "rect": {
+          "x": 296,
+          "y": 770,
+          "w": 730,
+          "h": 22,
+          "right": 1026,
+          "bottom": 792
+        }
+      },
+      {
+        "text": "协作方式",
+        "class": "composer-action-trigger",
+        "rect": {
+          "x": 291,
+          "y": 821,
+          "w": 32,
+          "h": 32,
+          "right": 323,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "工具权限（Ctrl/Cmd+Y 切换完全访问权限）",
+        "class": "composer-modern-access",
+        "rect": {
+          "x": 333,
+          "y": 822,
+          "w": 61,
+          "h": 30,
+          "right": 394,
+          "bottom": 852
+        }
+      },
+      {
+        "text": "DeepSeek-R1",
+        "class": "modelsw__trigger",
+        "rect": {
+          "x": 808.28125,
+          "y": 821,
+          "w": 108.6875,
+          "h": 32,
+          "right": 916.96875,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "auto",
+        "class": "modelsw__trigger effortsw__trigger ",
+        "rect": {
+          "x": 928.96875,
+          "y": 821,
+          "w": 58.03125,
+          "h": 32,
+          "right": 987,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "",
+        "class": "composer__btn composer__btn--send",
+        "rect": {
+          "x": 999,
+          "y": 820,
+          "w": 34,
+          "h": 34,
+          "right": 1033,
+          "bottom": 854
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "browser-device-scale",
+    "viewport": {
+      "w": 1366,
+      "h": 900,
+      "dpr": 2
+    },
+    "style": "modern",
+    "layout": "layout layout--workspace-open",
+    "overflow": 0,
+    "overlaps": [],
+    "clipped": [],
+    "main": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "welcome": {
+      "x": 391,
+      "y": 229.5625,
+      "w": 540,
+      "h": 318.859375,
+      "right": 931,
+      "bottom": 548.421875
+    },
+    "transcript": {
+      "x": 264,
+      "y": 46,
+      "w": 794,
+      "h": 698,
+      "right": 1058,
+      "bottom": 744
+    },
+    "card": {
+      "x": 280,
+      "y": 756,
+      "w": 762,
+      "h": 106,
+      "right": 1042,
+      "bottom": 862
+    },
+    "actions": {
+      "x": 808.28125,
+      "y": 815,
+      "w": 232.71875,
+      "h": 46,
+      "right": 1041,
+      "bottom": 861
+    },
+    "welcomeCenterDelta": 0,
+    "scrollRightDelta": 0,
+    "actionsRightInset": 1,
+    "buttons": [
+      {
+        "text": "",
+        "class": "composer__input",
+        "rect": {
+          "x": 296,
+          "y": 770,
+          "w": 730,
+          "h": 22,
+          "right": 1026,
+          "bottom": 792
+        }
+      },
+      {
+        "text": "协作方式",
+        "class": "composer-action-trigger",
+        "rect": {
+          "x": 291,
+          "y": 821,
+          "w": 32,
+          "h": 32,
+          "right": 323,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "工具权限（Ctrl/Cmd+Y 切换完全访问权限）",
+        "class": "composer-modern-access",
+        "rect": {
+          "x": 333,
+          "y": 822,
+          "w": 61,
+          "h": 30,
+          "right": 394,
+          "bottom": 852
+        }
+      },
+      {
+        "text": "DeepSeek-R1",
+        "class": "modelsw__trigger",
+        "rect": {
+          "x": 808.28125,
+          "y": 821,
+          "w": 108.6875,
+          "h": 32,
+          "right": 916.96875,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "auto",
+        "class": "modelsw__trigger effortsw__trigger ",
+        "rect": {
+          "x": 928.96875,
+          "y": 821,
+          "w": 58.03125,
+          "h": 32,
+          "right": 987,
+          "bottom": 853
+        }
+      },
+      {
+        "text": "",
+        "class": "composer__btn composer__btn--send",
+        "rect": {
+          "x": 999,
+          "y": 820,
+          "w": 34,
+          "h": 34,
+          "right": 1033,
+          "bottom": 854
+        }
+      }
+    ]
+  }
+]

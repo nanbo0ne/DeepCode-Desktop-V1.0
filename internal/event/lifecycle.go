@@ -88,7 +88,10 @@ func (s *lifecycleSink) Emit(e Event) {
 
 	if e.Kind == TurnStarted {
 		if s.turnID == "" {
-			s.turnID = lifecycleID("turn")
+			s.turnID = e.TurnID
+			if s.turnID == "" {
+				s.turnID = lifecycleID("turn")
+			}
 			s.tools = map[string]string{}
 		}
 		e.TurnID = s.turnID

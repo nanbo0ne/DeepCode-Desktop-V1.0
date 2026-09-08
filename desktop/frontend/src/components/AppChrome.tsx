@@ -317,7 +317,6 @@ function ModernAppChrome(props: AppChromeProps) {
             <ModernMenuItem onClose={() => setOpenMenu(null)} onClick={onOpenBots} icon={<Bot size={15} />}>{t("topbar.bot")}</ModernMenuItem>
             <ModernMenuItem onClose={() => setOpenMenu(null)} onClick={onOpenAutomations} icon={<CalendarClock size={15} />}>{t("topbar.automation")}</ModernMenuItem>
             <ModernMenuItem onClose={() => setOpenMenu(null)} onClick={onOpenToolLibrary} icon={<Library size={15} />}>{t("topbar.toolLibrary")}</ModernMenuItem>
-            <ModernMenuItem onClose={() => setOpenMenu(null)} onClick={() => onOpenSettings?.("localAI")} icon={<Sparkles size={15} />}>{t("modernMenu.localAI")}</ModernMenuItem>
           </ModernMenu>
           <ModernMenu label={t("modernMenu.settings")} menuKey="settings" open={openMenu === "settings"} summaryRef={settingsRef} onOpen={setOpenMenu} onClose={() => setOpenMenu(null)} onMove={moveMenu}>
             <ModernMenuItem onClose={() => setOpenMenu(null)} onClick={() => onOpenSettings?.("general")} icon={<Settings size={15} />}>{t("modernMenu.general")}</ModernMenuItem>

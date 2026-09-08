@@ -517,7 +517,7 @@ export function ProjectTree({
     const q = query.trim().toLowerCase();
     if (!q) return tree;
     const matches = (node: ProjectNode) =>
-      [node.label, node.root, node.topicId].some((value) => (value ?? "").toLowerCase().includes(q));
+      [node.kind === "orca_topic" ? "ORCA Agent" : node.label, node.root, node.topicId].some((value) => (value ?? "").toLowerCase().includes(q));
     const filterNode = (node: ProjectNode): ProjectNode | null => {
       const children = asArray(node.children)
         .map(filterNode)
@@ -606,7 +606,7 @@ export function ProjectTree({
       const accentStyle = projectAccentStyle(node.projectColor, scope === "global" ? "var(--project-tree-global-accent)" : undefined);
       const active = topicIsActive(node, activeScope, activeWorkspaceRoot, activeTopicId);
       const loading = loadingTopicId === node.topicId;
-      const label = (node.label || node.topicId || "Untitled").replace(/^●\s*/, "");
+      const label = node.kind === "orca_topic" ? t("newSession.automation") : (node.label || node.topicId || "Untitled").replace(/^●\s*/, "");
       const meta = topicMetaLine(node, t);
       const status = topicStatus(node);
       const statusLabel = topicStatusLabel(node, t);

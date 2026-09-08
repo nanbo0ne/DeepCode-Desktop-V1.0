@@ -57,14 +57,17 @@ type WorkspaceTab struct {
 	saveAgain bool
 
 	// readTelemetry tracks files read during this tab's session.
-	readTelemetry        []readFileRecord
-	usageTelemetry       sessionUsageStats
-	usageTelemetryEvents []usageTelemetryEvent
-	turnTelemetry        []turnTelemetryRecord
-	runtimeSwitches      []RuntimeSwitchRecord
-	riskReviews          []event.RiskReviewAudit
-	currentTelemetryTurn int
-	telemMu              sync.Mutex
+	readTelemetry          []readFileRecord
+	usageTelemetry         sessionUsageStats
+	usageTelemetryEvents   []usageTelemetryEvent
+	turnTelemetry          []turnTelemetryRecord
+	pendingChildTurns      map[string]map[string]struct{}
+	unknownChildTurns      map[string]bool
+	runtimeSwitches        []RuntimeSwitchRecord
+	riskReviews            []event.RiskReviewAudit
+	currentTelemetryTurn   int
+	currentTelemetryTurnID string
+	telemMu                sync.Mutex
 
 	model            string // active model ref (for meta)
 	effort           *string
@@ -220,6 +223,8 @@ type sessionUsageStats struct {
 
 type usageTelemetryEvent struct {
 	Turn             int     `json:"turn"`
+	TurnID           string  `json:"turnId,omitempty"`
+	RequestID        string  `json:"requestId,omitempty"`
 	PromptTokens     int     `json:"promptTokens"`
 	CompletionTokens int     `json:"completionTokens"`
 	TotalTokens      int     `json:"totalTokens"`
@@ -311,11 +316,21 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 		return
 	}
 	u := e.Usage
+	requestID := strings.TrimSpace(e.RequestID)
 	t.telemMu.Lock()
+	if requestID != "" {
+		for _, previous := range t.usageTelemetryEvents {
+			if previous.RequestID == requestID {
+				t.telemMu.Unlock()
+				return
+			}
+		}
+	}
 	previousRequests := t.usageTelemetry.RequestCount
+	officialCost := requestID != "" && officialDeepSeekPricing(e.Pricing, e.ProviderEndpoint) && usageCostBreakdownAvailable(u)
 	t.usageTelemetry.PromptTokens += u.PromptTokens
 	t.usageTelemetry.CompletionTokens += u.CompletionTokens
-	t.usageTelemetry.TotalTokens += u.TotalTokens
+	t.usageTelemetry.TotalTokens += usageTotalTokens(u)
 	t.usageTelemetry.ReasoningTokens += u.ReasoningTokens
 	if e.SessionHit+e.SessionMiss > 0 {
 		t.usageTelemetry.CacheHitTokens = e.SessionHit
@@ -328,13 +343,15 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 	if e.Pricing != nil {
 		cost := e.Pricing.Cost(u)
 		currency := e.Pricing.Symbol()
-		t.usageTelemetry.SessionCost += cost
-		t.usageTelemetry.SessionCostUsd = t.usageTelemetry.SessionCost
 		if previousRequests == 0 {
-			t.usageTelemetry.CostAvailable = true
+			t.usageTelemetry.CostAvailable = officialCost
 			t.usageTelemetry.SessionCurrency = currency
-		} else if t.usageTelemetry.SessionCurrency != currency {
+		} else if !officialCost || t.usageTelemetry.SessionCurrency != currency {
 			t.usageTelemetry.CostAvailable = false
+		}
+		if t.usageTelemetry.SessionCurrency == currency {
+			t.usageTelemetry.SessionCost += cost
+			t.usageTelemetry.SessionCostUsd = t.usageTelemetry.SessionCost
 		}
 	} else {
 		t.usageTelemetry.CostAvailable = false
@@ -347,24 +364,165 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 	}
 	t.usageTelemetryEvents = append(t.usageTelemetryEvents, usageTelemetryEvent{
 		Turn:             t.currentTelemetryTurn,
+		TurnID:           usageTurnID(e, t.currentTelemetryTurnID),
+		RequestID:        requestID,
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
-		TotalTokens:      u.TotalTokens,
+		TotalTokens:      usageTotalTokens(u),
 		ReasoningTokens:  u.ReasoningTokens,
 		CacheHitTokens:   u.CacheHitTokens,
 		CacheMissTokens:  u.CacheMissTokens,
 		SessionCost:      cost,
-		CostAvailable:    e.Pricing != nil,
+		CostAvailable:    officialCost,
 		SessionCostUsd:   cost,
 		SessionCurrency:  currency,
 	})
-	if len(t.turnTelemetry) > 0 && e.TurnID != "" {
-		turn := &t.turnTelemetry[len(t.turnTelemetry)-1]
-		if turn.TurnID == e.TurnID {
-			turn.Tokens += u.TotalTokens
+	turnID := usageTurnID(e, t.currentTelemetryTurnID)
+	if turnID != "" {
+		for index := range t.turnTelemetry {
+			turn := &t.turnTelemetry[index]
+			if turn.TurnID != turnID {
+				continue
+			}
+			turn.RequestCount++
+			turn.Tokens += usageTotalTokens(u)
+			if requestID != "" && officialDeepSeekPricing(e.Pricing, e.ProviderEndpoint) && usageCostBreakdownAvailable(u) {
+				if turn.RequestCount == 1 {
+					turn.CostAvailable = true
+					turn.Currency = e.Pricing.Symbol()
+				} else if !turn.CostAvailable || turn.Currency != e.Pricing.Symbol() {
+					turn.CostAvailable = false
+				}
+				if turn.Currency == e.Pricing.Symbol() {
+					turn.Cost += e.Pricing.Cost(u)
+				}
+			} else {
+				// Known tokens are retained, but an unpriced request makes the
+				// turn cost partial and therefore not displayable as authoritative.
+				turn.CostAvailable = false
+			}
+			if t.turnCostBlockedLocked(turnID) {
+				turn.CostAvailable = false
+			}
+			break
 		}
 	}
+	if t.anyCostBlockedLocked() {
+		t.usageTelemetry.CostAvailable = false
+	}
 	t.telemMu.Unlock()
+}
+
+// recordChildState tracks background work that outlives the provider call that
+// launched it. A parent TurnDone cannot claim authoritative cost while a child
+// is still unsettled; a settled child can clear that block only when its sink
+// observed at least one usage receipt.
+func (t *WorkspaceTab) recordChildState(e event.Event) {
+	turnID := usageTurnID(e, "")
+	childID := strings.TrimSpace(e.ChildID)
+	if turnID == "" || childID == "" {
+		return
+	}
+	t.telemMu.Lock()
+	defer t.telemMu.Unlock()
+	switch e.Kind {
+	case event.ChildStarted:
+		if t.pendingChildTurns == nil {
+			t.pendingChildTurns = make(map[string]map[string]struct{})
+		}
+		if t.pendingChildTurns[turnID] == nil {
+			t.pendingChildTurns[turnID] = make(map[string]struct{})
+		}
+		t.pendingChildTurns[turnID][childID] = struct{}{}
+		t.usageTelemetry.CostAvailable = false
+		for index := range t.turnTelemetry {
+			if t.turnTelemetry[index].TurnID == turnID {
+				t.turnTelemetry[index].CostAvailable = false
+				break
+			}
+		}
+	case event.ChildDone:
+		children := t.pendingChildTurns[turnID]
+		if children == nil {
+			return
+		}
+		if _, ok := children[childID]; !ok {
+			return
+		}
+		delete(children, childID)
+		if len(children) == 0 {
+			delete(t.pendingChildTurns, turnID)
+		}
+		if !e.ChildUsageReported {
+			if t.unknownChildTurns == nil {
+				t.unknownChildTurns = make(map[string]bool)
+			}
+			t.unknownChildTurns[turnID] = true
+		}
+		t.recomputeTurnCostLocked(turnID)
+		t.refreshSessionCostAvailabilityLocked()
+	}
+}
+
+func (t *WorkspaceTab) turnCostBlockedLocked(turnID string) bool {
+	return len(t.pendingChildTurns[turnID]) > 0 || t.unknownChildTurns[turnID]
+}
+
+func (t *WorkspaceTab) anyCostBlockedLocked() bool {
+	if len(t.unknownChildTurns) > 0 {
+		return true
+	}
+	for _, children := range t.pendingChildTurns {
+		if len(children) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *WorkspaceTab) anyCostBlocked() bool {
+	t.telemMu.Lock()
+	defer t.telemMu.Unlock()
+	return t.anyCostBlockedLocked()
+}
+
+func (t *WorkspaceTab) recomputeTurnCostLocked(turnID string) {
+	available := false
+	seen := false
+	currency := ""
+	for _, receipt := range t.usageTelemetryEvents {
+		if receipt.TurnID != turnID {
+			continue
+		}
+		seen = true
+		if !receipt.CostAvailable || receipt.SessionCurrency == "" || (currency != "" && receipt.SessionCurrency != currency) {
+			available = false
+			break
+		}
+		if currency == "" {
+			currency = receipt.SessionCurrency
+		}
+		available = true
+	}
+	available = seen && available && !t.turnCostBlockedLocked(turnID)
+	for index := range t.turnTelemetry {
+		if t.turnTelemetry[index].TurnID == turnID {
+			t.turnTelemetry[index].CostAvailable = available
+			break
+		}
+	}
+}
+
+func (t *WorkspaceTab) refreshSessionCostAvailabilityLocked() {
+	if t.anyCostBlockedLocked() {
+		t.usageTelemetry.CostAvailable = false
+		return
+	}
+	stats := usageStatsFromEvents(t.usageTelemetryEvents)
+	t.usageTelemetry.CostAvailable = stats.CostAvailable
+	if stats.SessionCurrency != "" {
+		t.usageTelemetry.SessionCurrency = stats.SessionCurrency
+	}
 }
 
 func (t *WorkspaceTab) recordLifecycle(e event.Event, now int64, checkpointTurn int) {
@@ -374,6 +532,7 @@ func (t *WorkspaceTab) recordLifecycle(e event.Event, now int64, checkpointTurn 
 	t.telemMu.Lock()
 	defer t.telemMu.Unlock()
 	if e.Kind == event.TurnStarted {
+		t.currentTelemetryTurnID = e.TurnID
 		if len(t.turnTelemetry) == 0 || t.turnTelemetry[len(t.turnTelemetry)-1].TurnID != e.TurnID {
 			t.turnTelemetry = append(t.turnTelemetry, turnTelemetryRecord{TurnID: e.TurnID, CheckpointTurn: checkpointTurn, State: event.TurnStateInProgress, StartedAt: now})
 		}
@@ -405,6 +564,14 @@ func (t *WorkspaceTab) recordLifecycle(e event.Event, now int64, checkpointTurn 
 		turn.CompletedAt = now
 		if now >= turn.StartedAt {
 			turn.ElapsedMs = now - turn.StartedAt
+		}
+		if e.Err != nil || e.Outcome == event.TurnOutcomeFailed || e.Outcome == event.TurnOutcomeCancelled || e.Outcome == event.TurnOutcomeInterrupted {
+			// A request can fail or be cancelled without a final usage receipt.
+			// Preserve known totals, but never present a partial turn as priced.
+			turn.CostAvailable = false
+		}
+		if t.currentTelemetryTurnID == e.TurnID {
+			t.currentTelemetryTurnID = ""
 		}
 	}
 }
@@ -476,7 +643,7 @@ func (t *WorkspaceTab) telemetrySnapshot() tabTelemetrySnapshot {
 		}
 	}
 	usage.activeTurnStartedAt = 0
-	return tabTelemetrySnapshot{Version: 6, ReadFiles: records, Usage: usage, UsageEvents: events, Turns: turns, RuntimeSwitches: runtimeSwitches, RiskReviews: riskReviews}
+	return tabTelemetrySnapshot{Version: 7, ReadFiles: records, Usage: usage, UsageEvents: events, Turns: turns, RuntimeSwitches: runtimeSwitches, RiskReviews: riskReviews}
 }
 
 func (t *WorkspaceTab) rewindTelemetryBefore(turn int) {
@@ -519,32 +686,53 @@ func (t *WorkspaceTab) rewindTelemetryBefore(turn int) {
 	t.riskReviews = filteredReviews
 	t.usageTelemetry = usageStatsFromEvents(filteredEvents)
 	t.currentTelemetryTurn = turn
+	t.currentTelemetryTurnID = ""
 }
 
 func usageStatsFromEvents(events []usageTelemetryEvent) sessionUsageStats {
 	var usage sessionUsageStats
-	for index, ev := range events {
+	seenRequests := make(map[string]struct{}, len(events))
+	accepted := 0
+	for _, ev := range events {
+		if ev.RequestID != "" {
+			if _, seen := seenRequests[ev.RequestID]; seen {
+				continue
+			}
+			seenRequests[ev.RequestID] = struct{}{}
+		}
 		usage.PromptTokens += ev.PromptTokens
 		usage.CompletionTokens += ev.CompletionTokens
-		usage.TotalTokens += ev.TotalTokens
+		usage.TotalTokens += firstNonZeroInt(ev.TotalTokens, ev.PromptTokens+ev.CompletionTokens)
 		usage.ReasoningTokens += ev.ReasoningTokens
 		usage.CacheHitTokens += ev.CacheHitTokens
 		usage.CacheMissTokens += ev.CacheMissTokens
 		usage.RequestCount++
-		usage.SessionCost += ev.SessionCost
-		usage.SessionCostUsd += firstNonZeroFloat(ev.SessionCostUsd, ev.SessionCost)
-		priced := ev.CostAvailable || ev.SessionCurrency != ""
-		if index == 0 {
+		priced := ev.CostAvailable
+		if accepted == 0 {
 			usage.CostAvailable = priced
 			usage.SessionCurrency = ev.SessionCurrency
 		} else if !priced || usage.SessionCurrency == "" || usage.SessionCurrency != ev.SessionCurrency {
 			usage.CostAvailable = false
 		}
+		if usage.SessionCurrency != "" && usage.SessionCurrency == ev.SessionCurrency {
+			usage.SessionCost += ev.SessionCost
+			usage.SessionCostUsd += firstNonZeroFloat(ev.SessionCostUsd, ev.SessionCost)
+		}
+		accepted++
 	}
 	return usage
 }
 
 func firstNonZeroFloat(values ...float64) float64 {
+	for _, v := range values {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func firstNonZeroInt(values ...int) int {
 	for _, v := range values {
 		if v != 0 {
 			return v
@@ -575,9 +763,17 @@ func (s *tabEventSink) RecordRiskReviewAudit(audit event.RiskReviewAudit) {
 }
 
 func (s *tabEventSink) Emit(e event.Event) {
+	if e.Kind == event.ChildStarted || e.Kind == event.ChildDone {
+		// Child lifecycle is an internal accounting receipt. It must not become a
+		// frontend event, but it must be persisted so a parent finishing at the
+		// same time cannot expose pending cost.
+		s.recordChildTelemetry(e)
+		return
+	}
+	var tab *WorkspaceTab
 	if s.app != nil {
 		s.app.mu.RLock()
-		tab := s.app.tabs[s.tabID]
+		tab = s.app.tabs[s.tabID]
 		var ctrl *control.Controller
 		if tab != nil {
 			ctrl = tab.Ctrl
@@ -597,9 +793,16 @@ func (s *tabEventSink) Emit(e event.Event) {
 		case event.TurnDone:
 			s.recordTurnDone()
 		}
+		if tab != nil && e.Kind == event.TurnDone {
+			e = tab.annotateTurnDone(e)
+		}
 	}
 	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, eventChannel, toWireTab(e, s.tabID))
+		wire := toWireTab(e, s.tabID)
+		if tab != nil && e.Kind == event.Usage && tab.anyCostBlocked() {
+			wire = hideWireUsageCost(wire)
+		}
+		runtime.EventsEmit(s.ctx, eventChannel, wire)
 	}
 	if s.app != nil {
 		if status, update := topicActivityStatusFromEvent(e); update && s.app.setTabActivityStatus(s.tabID, status) {
@@ -754,6 +957,17 @@ func (s *tabEventSink) recordUsageTelemetry(e event.Event) {
 	}
 }
 
+func (s *tabEventSink) recordChildTelemetry(e event.Event) {
+	tab, sp := s.telemetryTab()
+	if tab == nil {
+		return
+	}
+	tab.recordChildState(e)
+	if sp != "" {
+		_ = saveTelemetry(sp+".telemetry.json", tab.telemetrySnapshot())
+	}
+}
+
 func (s *tabEventSink) telemetryTab() (*WorkspaceTab, string) {
 	if s.app == nil {
 		return nil, ""
@@ -791,6 +1005,16 @@ func toWireTab(e event.Event, tabID string) wireEventTab {
 		SessionCurrency:   "",
 		SessionCostUsd:    0, // deprecated compatibility alias
 	}
+}
+
+func hideWireUsageCost(w wireEventTab) wireEventTab {
+	if w.Usage != nil {
+		w.Usage.Cost = 0
+		w.Usage.CostUSD = 0
+		w.Usage.Currency = ""
+		w.Usage.CostAvailable = false
+	}
+	return w
 }
 
 // wireEventTab extends wireEvent with tab routing info. The frontend reducer
@@ -3141,7 +3365,7 @@ func (a *App) tabTelemetryPath(tabID string) string {
 
 func saveTelemetry(path string, snapshot tabTelemetrySnapshot) error {
 	if snapshot.Version == 0 {
-		snapshot.Version = 6
+		snapshot.Version = 7
 	}
 	if snapshot.ReadFiles == nil {
 		snapshot.ReadFiles = []readFileRecord{}
@@ -3169,14 +3393,6 @@ func loadTelemetry(path string) tabTelemetrySnapshot {
 		}
 		if snapshot.Usage.SessionCost == 0 && snapshot.Usage.SessionCostUsd > 0 {
 			snapshot.Usage.SessionCost = snapshot.Usage.SessionCostUsd
-		}
-		if !snapshot.Usage.CostAvailable && snapshot.Usage.SessionCurrency != "" {
-			snapshot.Usage.CostAvailable = true
-		}
-		for i := range snapshot.UsageEvents {
-			if !snapshot.UsageEvents[i].CostAvailable && snapshot.UsageEvents[i].SessionCurrency != "" {
-				snapshot.UsageEvents[i].CostAvailable = true
-			}
 		}
 		return snapshot
 	}

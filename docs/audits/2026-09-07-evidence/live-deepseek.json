@@ -1,0 +1,161 @@
+[
+  {
+    "name": "models",
+    "status": 200,
+    "ms": 149,
+    "models": [
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash-vision-exp"
+    ]
+  },
+  {
+    "name": "balance",
+    "status": 200,
+    "ms": 114,
+    "available": true,
+    "currencies": [
+      "CNY"
+    ]
+  },
+  {
+    "name": "flash-text",
+    "status": 200,
+    "ms": 476,
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "AUDIT_OK"
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 9,
+      "completion_tokens": 4,
+      "total_tokens": 13,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 9
+    }
+  },
+  {
+    "name": "pro-stream",
+    "status": 200,
+    "ms": 532,
+    "sseDone": true,
+    "chunks": 7,
+    "hasContent": false,
+    "tail": "8757646,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"a307abda487cd1b463329ccb945ce396\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_OK\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"96cb2ff8-7423-4780-8659-3c18beb773eb\",\"object\":\"chat.completion.chunk\",\"created\":1788757646,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"a307abda487cd1b463329ccb945ce396\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":4,\"total_tokens\":13,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":9}}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "name": "flash-tool-call",
+    "status": 200,
+    "ms": 735,
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "index": 0,
+              "id": "call_00_rSu5tkc191cAQ6W52KK90526",
+              "type": "function",
+              "function": {
+                "name": "audit_echo",
+                "arguments": "{\"value\": \"ORCA_37\"}"
+              }
+            }
+          ]
+        },
+        "logprobs": null,
+        "finish_reason": "tool_calls"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 291,
+      "completion_tokens": 48,
+      "total_tokens": 339,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 291
+    }
+  },
+  {
+    "name": "vision-ocr",
+    "status": 200,
+    "ms": 485,
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "ORCA 37"
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 123,
+      "completion_tokens": 4,
+      "total_tokens": 127,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 123
+    }
+  },
+  {
+    "name": "flash-tool-result",
+    "status": 200,
+    "ms": 475,
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "ORCA_37"
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 86,
+      "completion_tokens": 4,
+      "total_tokens": 90,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 86
+    }
+  },
+  {
+    "name": "pro-stream-assembled",
+    "status": 200,
+    "content": "AUDIT_OK",
+    "done": true,
+    "usage": {
+      "prompt_tokens": 9,
+      "completion_tokens": 4,
+      "total_tokens": 13,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 9
+    }
+  }
+]

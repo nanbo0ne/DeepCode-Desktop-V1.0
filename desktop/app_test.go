@@ -355,8 +355,13 @@ api_key_env = "DEEPSEEK_API_KEY"
 	}
 }
 
-func TestSettingsSurfacesOfficialProviderTemplatesSeparately(t *testing.T) {
+func TestSettingsSurfacesDeepSeekOnlySelectableProviderCatalog(t *testing.T) {
 	isolateDesktopUserDirs(t)
+
+	catalog := config.SelectableProviderPresetCatalog()
+	if len(catalog) != 1 || catalog[0].ID != "deepseek" {
+		t.Fatalf("selectable provider catalog = %+v, want DeepSeek only", catalog)
+	}
 
 	got := NewApp().Settings()
 	providers := providerAccessSet(providerNamesFromView(got.Providers))
@@ -364,8 +369,8 @@ func TestSettingsSurfacesOfficialProviderTemplatesSeparately(t *testing.T) {
 	if providers["mimo-api"] {
 		t.Fatalf("mimo-api should not be mixed into configured providers: %+v", got.Providers)
 	}
-	if !official["deepseek"] || !official["mimo-api"] || !official["mimo-token-plan"] {
-		t.Fatalf("official providers = %+v, want deepseek, mimo-api, and mimo-token-plan", got.OfficialProviders)
+	if len(got.OfficialProviders) != 1 || !official["deepseek"] {
+		t.Fatalf("official providers = %+v, want DeepSeek only", got.OfficialProviders)
 	}
 }
 
@@ -529,10 +534,20 @@ api_key_env = "DEEPSEEK_API_KEY"
 	}
 }
 
-func TestSettingsInfersConfiguredBuiltInsWithoutConfigFile(t *testing.T) {
+func TestSettingsInfersConfiguredBuiltInsWithExplicitProviderConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	t.Setenv("DEEPSEEK_API_KEY", "sk-test")
 	t.Setenv("MIMO_TOKEN_PLAN_API_KEY", "sk-test")
+
+	cfg := config.Default()
+	mimo, ok := config.ProviderPresetByID("mimo-token-plan")
+	if !ok {
+		t.Fatal("historical mimo-token-plan preset missing")
+	}
+	cfg.Providers = append(cfg.Providers, mimo.Entry)
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatalf("save explicit provider config: %v", err)
+	}
 
 	got := NewApp().Settings()
 	providers := map[string]ProviderView{}
@@ -710,6 +725,10 @@ func TestSetModelForTabRejectsProviderOutsideAccess(t *testing.T) {
 	cfg := config.Default()
 	cfg.DefaultModel = "deepseek-flash/deepseek-v4-flash"
 	cfg.Desktop.ProviderAccess = []string{"deepseek-flash"}
+	cfg.Providers = append(cfg.Providers, config.ProviderEntry{
+		Name: "mimo-flash", Kind: "openai", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1",
+		Model: "mimo-v2.5", APIKeyEnv: "MIMO_API_KEY", ContextWindow: 1_000_000, NoProxy: true,
+	})
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("save config: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/jobs"
@@ -68,12 +69,15 @@ type TaskTool struct {
 	subagentModel     string
 	subagentEffort    string
 	resolveProvider   func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error)
+	providerEndpoint  string
+	resolveEndpoint   func(modelRef, effort string) string
 	transcripts       *SubagentStore
 	workspaceRoot     string
 	baseModel         string
 	baseEffort        string
 	identityProfile   func(modelRef, effort string) (string, string)
 	visionModel       string
+	visionFallback    string
 	visionMode        string
 	visionCapability  func(modelRef string) string
 	imageLoader       func(context.Context, provider.ImageContent) (provider.ImageContent, error)
@@ -126,6 +130,20 @@ func (t *TaskTool) WithTranscriptIdentityResolver(resolve func(modelRef, effort 
 	return t
 }
 
+// WithProviderEndpoint records the concrete endpoint used by the default
+// subagent provider for provenance-aware cost attribution.
+func (t *TaskTool) WithProviderEndpoint(endpoint string) *TaskTool {
+	t.providerEndpoint = strings.TrimSpace(endpoint)
+	return t
+}
+
+// WithProviderEndpointResolver supplies the concrete endpoint for an explicit
+// subagent model override without changing the provider resolver contract.
+func (t *TaskTool) WithProviderEndpointResolver(resolve func(modelRef, effort string) string) *TaskTool {
+	t.resolveEndpoint = resolve
+	return t
+}
+
 // WithVisionDefault configures the model reference used for image-bearing task
 // calls that do not provide an explicit model. It never changes the ordinary
 // subagent default and is consulted only when the task includes images.
@@ -134,8 +152,15 @@ func (t *TaskTool) WithVisionDefault(modelRef string) *TaskTool {
 	return t
 }
 
+// WithVisionFallback accepts only a host-verified official fallback, distinct
+// from the explicit vision-role override passed to WithVisionDefault.
+func (t *TaskTool) WithVisionFallback(modelRef string) *TaskTool {
+	t.visionFallback = strings.TrimSpace(modelRef)
+	return t
+}
+
 func (t *TaskTool) WithVision(mode string, capability func(string) string, loader func(context.Context, provider.ImageContent) (provider.ImageContent, error)) *TaskTool {
-	t.visionMode, t.visionCapability, t.imageLoader = strings.TrimSpace(mode), capability, loader
+	t.visionMode, t.visionCapability, t.imageLoader = strings.ToLower(strings.TrimSpace(mode)), capability, loader
 	return t
 }
 
@@ -156,7 +181,7 @@ func (t *TaskTool) Schema() json.RawMessage {
   "run_in_background":{"type":"boolean","description":"Run the sub-agent asynchronously: returns a job id immediately and keeps working across turns. Use only when the user explicitly wants background work or when the sub-task is independent of the current answer. If the current answer needs this research, do not final-answer after starting it; call wait first to collect the result. You'll be notified when it finishes."},
   "model":{"type":"string","description":"Optional model override for the sub-agent (a configured provider/model name)."},
   "effort":{"type":"string","description":"Optional reasoning effort for the sub-agent (e.g. high, max)."},
-  "images":{"type":"array","items":{"type":"string"},"description":"Optional current-user image names or snapshot paths. Only request these when visual inspection is necessary and the selected sub-agent model supports vision."},
+  "images":{"type":"array","maxItems":8,"items":{"type":"string"},"description":"Optional current-user image names/snapshot paths or workspace image paths (including generated frames). Workspace images require host read and selected-model image-send approval. Only request these when visual inspection is necessary and the selected sub-agent model supports vision."},
   "continue_from":{"type":"string","description":"Optional subagent transcript reference to continue in place. The current kind, prompt persona, tools, model, effort, and workspace must match the saved transcript."},
   "fork_from":{"type":"string","description":"Optional subagent transcript reference to copy into a new transcript before running this task. Mutually exclusive with continue_from."}
 },
@@ -181,7 +206,7 @@ func (t *TaskTool) ResolveProfile(args json.RawMessage) *event.Profile {
 	}
 	if len(p.Images) > 0 && strings.TrimSpace(p.Model) == "" &&
 		strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" &&
-		strings.TrimSpace(t.visionModel) == "" {
+		t.defaultImageModel() == "" {
 		return nil
 	}
 	model, effort := t.effectiveProfileForImages(p.Model, p.Effort, len(p.Images) > 0)
@@ -198,8 +223,8 @@ func (t *TaskTool) effectiveProfile(model, effort string) (string, string) {
 func (t *TaskTool) effectiveProfileForImages(model, effort string, hasImages bool) (string, string) {
 	model = strings.TrimSpace(model)
 	effort = strings.TrimSpace(effort)
-	if model == "" && hasImages && strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" && t.visionModel != "" {
-		model = t.visionModel
+	if model == "" && hasImages && t.visionMode != "off" {
+		model = t.defaultImageModel()
 	}
 	if model == "" {
 		model = strings.TrimSpace(t.subagentModel)
@@ -208,6 +233,16 @@ func (t *TaskTool) effectiveProfileForImages(model, effort string, hasImages boo
 		effort = strings.TrimSpace(t.subagentEffort)
 	}
 	return model, effort
+}
+
+func (t *TaskTool) defaultImageModel() string {
+	if t.visionModel != "" {
+		return t.visionModel
+	}
+	if t.baseModel != "" && t.visionCapability != nil && t.visionCapability(t.baseModel) == "supported" {
+		return t.baseModel
+	}
+	return t.visionFallback
 }
 
 func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
@@ -231,7 +266,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 	if len(p.Images) > 0 && strings.TrimSpace(p.Model) == "" &&
 		strings.ToLower(strings.TrimSpace(t.visionMode)) != "off" &&
-		strings.TrimSpace(t.visionModel) == "" {
+		t.defaultImageModel() == "" {
 		return "", fmt.Errorf("image task requires a configured vision model; set agent.subagent_models[%q] or provide an explicit model", "vision")
 	}
 
@@ -257,6 +292,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", err
 	}
 	parentID, parent, _, _ := CallContext(ctx)
+	parentTurnID, _ := ParentTurn(ctx)
 	run, err := t.prepareTranscriptRun(subReg, modelRef, effortRef, ParentSession(ctx), parentID, p.ContinueFrom, p.ForkFrom)
 	if err != nil {
 		return "", err
@@ -279,7 +315,19 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			}
 			return "", fmt.Errorf("background execution is not available in this context")
 		}
-		nested := subSinkFor(parentID, parent)
+		nested := subSinkFor(parentID, parent, parentTurnID)
+		childID := event.NewRequestID()
+		var childUsageReported atomic.Bool
+		if parent != nil && strings.TrimSpace(parentTurnID) != "" {
+			parent.Emit(event.Event{Kind: event.ChildStarted, TurnID: parentTurnID, ParentTurnID: parentTurnID, ChildID: childID})
+		}
+		childSink := event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Usage {
+				childUsageReported.Store(true)
+				e.ChildID = childID
+			}
+			nested.Emit(e)
+		})
 		label := p.Description
 		if label == "" {
 			label = "task"
@@ -291,8 +339,13 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			}
 		}
 		job := jm.Start("task", label, func(jobCtx context.Context, _ io.Writer) (string, error) {
+			defer func() {
+				if parent != nil && strings.TrimSpace(parentTurnID) != "" {
+					parent.Emit(event.Event{Kind: event.ChildDone, TurnID: parentTurnID, ParentTurnID: parentTurnID, ChildID: childID, ChildUsageReported: childUsageReported.Load()})
+				}
+			}()
 			defer run.Release()
-			answer, err := t.runSubSession(jobCtx, p.Prompt, selectedImages, subReg, nested, maxSteps, prov, pricing, ctxWin, run.Session)
+			answer, err := t.runSubSession(jobCtx, p.Prompt, selectedImages, subReg, childSink, maxSteps, prov, pricing, t.subagentEndpoint(modelRef, effortRef), ctxWin, run.Session)
 			if err != nil {
 				return FormatSubagentResult("", run.Ref, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
@@ -309,7 +362,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 
 	// Foreground: run synchronously, nesting events under this call.
 	defer run.Release()
-	answer, err := t.runSubSession(ctx, p.Prompt, selectedImages, subReg, subSink(ctx), maxSteps, prov, pricing, ctxWin, run.Session)
+	answer, err := t.runSubSession(ctx, p.Prompt, selectedImages, subReg, subSink(ctx), maxSteps, prov, pricing, t.subagentEndpoint(modelRef, effortRef), ctxWin, run.Session)
 	if err != nil {
 		return "", errors.Join(err, t.transcripts.SaveFailed(run))
 	}
@@ -320,6 +373,13 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return FormatSubagentResult(answer, run.Ref, false), nil
 	}
 	return answer, nil
+}
+
+func (t *TaskTool) subagentEndpoint(modelRef, effort string) string {
+	if t.resolveEndpoint != nil {
+		return strings.TrimSpace(t.resolveEndpoint(modelRef, effort))
+	}
+	return strings.TrimSpace(t.providerEndpoint)
 }
 
 func (t *TaskTool) prepareTranscriptRun(subReg *tool.Registry, modelRef, effortRef, parentSession, parentID, continueFrom, forkFrom string) (*SubagentRun, error) {
@@ -471,18 +531,19 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 	return prov, pricing, ctxWin, nil
 }
 
-func (t *TaskTool) runSubSession(ctx context.Context, prompt string, images []provider.ImageContent, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session) (string, error) {
+func (t *TaskTool) runSubSession(ctx context.Context, prompt string, images []provider.ImageContent, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, endpoint string, ctxWin int, sess *Session) (string, error) {
 	return RunSubAgentWithRichSession(ctx, prov, subReg, sess, RichInput{Text: prompt, Images: images}, Options{
 		MaxSteps:          maxSteps,
 		Temperature:       t.temperature,
 		Pricing:           pricing,
+		ProviderEndpoint:  endpoint,
 		Gate:              t.gate,
 		ContextWindow:     ctxWin,
 		SoftCompactRatio:  t.softCompactRatio,
 		CompactRatio:      t.compactRatio,
 		CompactForceRatio: t.compactForceRatio,
 		ArchiveDir:        t.archiveDir,
-		ImageLoader:       t.imageLoader,
+		ImageLoader:       frozenTaskImageLoader(images),
 	}, sink)
 }
 
@@ -540,11 +601,22 @@ func (t *TaskTool) selectImages(ctx context.Context, names []string, modelRef st
 	if t.visionMode == "auto" && (t.visionCapability == nil || t.visionCapability(identity) != "supported") {
 		return nil, fmt.Errorf("model %q is not confirmed to support vision; choose a supported model, re-run its vision check, or use vision mode on", identity)
 	}
+	if len(names) > 8 {
+		return nil, fmt.Errorf("a task can include at most 8 images")
+	}
+	if resolve, ok := ctx.Value(taskImageResolverKey{}).(TaskImageResolver); ok && resolve != nil {
+		identity, _ = t.effectiveIdentity(modelRef, "")
+		return resolve(ctx, names, identity)
+	}
 	available := TurnImages(ctx)
 	selected := make([]provider.ImageContent, 0, len(names))
+	var totalBytes int64
 	seen := map[string]bool{}
 	for _, name := range names {
 		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, fmt.Errorf("image name must not be empty")
+		}
 		var found *provider.ImageContent
 		for i := range available {
 			if name == available[i].Path || name == available[i].Name {
@@ -560,6 +632,9 @@ func (t *TaskTool) selectImages(ctx context.Context, names []string, modelRef st
 		}
 		seen[found.Path] = true
 		image := *found
+		if err := t.checkImagePermission(ctx, "read_file", image.Path); err != nil {
+			return nil, err
+		}
 		if t.imageLoader == nil {
 			return nil, fmt.Errorf("image loading is unavailable for subagents")
 		}
@@ -567,7 +642,19 @@ func (t *TaskTool) selectImages(ctx context.Context, names []string, modelRef st
 		if err != nil {
 			return nil, fmt.Errorf("image %q: %w", name, err)
 		}
+		// The legacy loader is host-supplied, but still cannot exceed the task's
+		// byte budget even when metadata understates the encoded payload size.
+		encodedSize := int64(len(hydrated.Data))*3/4 - int64(len(hydrated.Data)-len(strings.TrimRight(hydrated.Data, "=")))
+		bytes := max(hydrated.Size, encodedSize)
+		totalBytes += bytes
+		if bytes > 10*1024*1024 || totalBytes > 20*1024*1024 {
+			return nil, fmt.Errorf("task images exceed the 10 MB image or 20 MB total budget")
+		}
 		selected = append(selected, hydrated)
+	}
+	identity, _ = t.effectiveIdentity(modelRef, "")
+	if err := t.checkImagePermission(ctx, "image_send", identity); err != nil {
+		return nil, err
 	}
 	return selected, nil
 }
@@ -581,14 +668,16 @@ func NestedSink(ctx context.Context, fallback event.Sink) event.Sink {
 	if !ok || parent == nil {
 		return fallback
 	}
-	return subSinkFor(parentID, parent)
+	parentTurnID, _ := ParentTurn(ctx)
+	return subSinkFor(parentID, parent, parentTurnID)
 }
 
 // subSink forwards a sub-agent's tool dispatch/result events to the parent's
 // event stream, tagged with the parent task call's ID so a frontend nests them
-// under it. The sub-agent's own turn/usage/text/reasoning events are dropped —
-// only its tool activity (the part worth seeing live) and its final answer
-// (returned by Execute) reach the parent. The forwarded call IDs are namespaced
+// under it. The sub-agent's own turn/text/reasoning events are dropped;
+// usage receipts are forwarded for parent-turn accounting, while tool activity
+// (the part worth seeing live) and the final answer (returned by Execute) reach
+// the parent. The forwarded call IDs are namespaced
 // with the parent ID so a sub-agent call can never collide with a parent call in
 // the frontend's dispatch→result matching. Falls back to Discard when there's no
 // parent stream (the headless run loop, or a direct Execute in tests).
@@ -597,13 +686,14 @@ func subSink(ctx context.Context) event.Sink {
 	if !ok || parent == nil {
 		return event.Discard
 	}
-	return subSinkFor(parentID, parent)
+	parentTurnID, _ := ParentTurn(ctx)
+	return subSinkFor(parentID, parent, parentTurnID)
 }
 
 // subSinkFor builds the nesting sink from an already-captured parent ID + stream,
 // for the background path where the job runs under a context that no longer
 // carries the call context. Falls back to Discard when there's no parent stream.
-func subSinkFor(parentID string, parent event.Sink) event.Sink {
+func subSinkFor(parentID string, parent event.Sink, parentTurnID ...string) event.Sink {
 	if parent == nil {
 		return event.Discard
 	}
@@ -612,6 +702,11 @@ func subSinkFor(parentID string, parent event.Sink) event.Sink {
 		case event.ToolDispatch, event.ToolResult:
 			e.Tool.ParentID = parentID
 			e.Tool.ID = parentID + "/" + e.Tool.ID
+			parent.Emit(e)
+		case event.Usage:
+			if len(parentTurnID) > 0 && strings.TrimSpace(parentTurnID[0]) != "" {
+				e.ParentTurnID = strings.TrimSpace(parentTurnID[0])
+			}
 			parent.Emit(e)
 		}
 	})

@@ -84,6 +84,38 @@ func TestCoordinatorHandsPlanToExecutor(t *testing.T) {
 	}
 }
 
+func TestCoordinatorPlannerUsageReceiptCarriesRequestAndEndpoint(t *testing.T) {
+	planner := &mockProvider{name: "planner", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "plan"},
+		{Type: provider.ChunkUsage, Usage: &provider.Usage{TotalTokens: 11}},
+		{Type: provider.ChunkDone},
+	}}
+	exec := &mockProvider{name: "executor", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "done"},
+		{Type: provider.ChunkDone},
+	}}
+	var events []event.Event
+	sink := event.Lifecycle(event.FuncSink(func(e event.Event) { events = append(events, e) }))
+	executor := New(exec, tool.NewRegistry(), NewSession("exec-sys"), Options{}, sink)
+	coord := NewCoordinator(planner, NewSession("planner-sys"), nil, nil, Options{ProviderEndpoint: "https://api.deepseek.com"}, executor, 0, sink, nil)
+	if err := coord.Run(context.Background(), "plan it"); err != nil {
+		t.Fatal(err)
+	}
+	var usage event.Event
+	for _, e := range events {
+		if e.Kind == event.Usage {
+			usage = e
+			break
+		}
+	}
+	if usage.RequestID == "" || usage.ProviderEndpoint != "https://api.deepseek.com" || usage.TurnID == "" {
+		t.Fatalf("planner usage = %+v", usage)
+	}
+	if planner.lastReq.RequestID != usage.RequestID {
+		t.Fatalf("planner request id = %q, usage id = %q", planner.lastReq.RequestID, usage.RequestID)
+	}
+}
+
 // TestHandoffTaskRecoversOriginalInput guards the dual-model auto-title path
 // (#3860): previews must surface the user's words, not handoff boilerplate.
 func TestHandoffTaskRecoversOriginalInput(t *testing.T) {

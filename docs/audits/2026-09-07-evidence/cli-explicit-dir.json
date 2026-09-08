@@ -1,0 +1,6 @@
+{
+  "code": 0,
+  "stdout": "\u001b[2m  ▎ thinking\u001b[0m\n  · 10018 tok · in 9946 (9856 cached / 90 new) · out 72 (24 reasoning) · $0.0001\n  -> read_file {\"path\": \"audit-fixture.txt\"}\nORCA_READ_37\n  · 10051 tok · in 10044 (9984 cached / 60 new) · out 7 · $0.0001\n",
+  "stderr": "warning: bash not found on PATH; the shell tool will run commands under Windows PowerShell. Install Git for Windows or WSL to use bash.\n",
+  "expected": "ORCA_CHILD_84"
+}

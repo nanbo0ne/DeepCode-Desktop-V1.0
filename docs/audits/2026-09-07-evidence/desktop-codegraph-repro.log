@@ -1,0 +1,11 @@
+=== RUN   TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier
+    app_test.go:2000: Host.Failures() = [], want codegraph failure recorded for missing runtime
+    temphelper_test.go:32: robustTempDir: cleanup did not converge for C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-766613521: unlinkat C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-766613521\.codegraph\codegraph.db: The process cannot access the file because it is being used by another process.
+--- FAIL: TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier (4.41s)
+=== RUN   TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier
+    app_test.go:2000: Host.Failures() = [], want codegraph failure recorded for missing runtime
+    temphelper_test.go:32: robustTempDir: cleanup did not converge for C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-372733372: unlinkat C:\Users\16260\AppData\Local\Temp\deepseek-orca-test-372733372\.codegraph\codegraph.db: The process cannot access the file because it is being used by another process.
+--- FAIL: TestSetMCPServerTierEnablesCodegraphAndIgnoresLegacyTier (4.17s)
+FAIL
+FAIL	github.com/nanbo0ne/O.R.C.A-for-Windows/desktop	8.910s
+FAIL

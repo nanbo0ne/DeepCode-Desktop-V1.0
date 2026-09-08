@@ -221,16 +221,16 @@ func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
 			`Preinstalled WebView2 is required`,
 		},
 		"official_baseline": {
-			`https://api.github.com/repos/nanbo0ne/O.R.C.A-for-Windows/releases/tags/desktop-v3.0.2`,
-			`https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.2/`,
-			`$release.tag_name -cne 'desktop-v3.0.2' -or $release.draft -or $release.prerelease`,
+			`https://api.github.com/repos/nanbo0ne/O.R.C.A-for-Windows/releases/tags/desktop-v3.0.3`,
+			`https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/`,
+			`$release.tag_name -cne 'desktop-v3.0.3' -or $release.draft -or $release.prerelease`,
 			`$assetName = 'O.R.C.A-for-Windows-windows-amd64-installer.exe'`,
 			`@($assetName, 'SHA256SUMS.txt')`,
 			`$assets.Count -ne 1`,
 			`$checksumRows.Count -ne 1`,
 			`[regex]::Escape($assetName)`,
 			`$oldHash -ine $checksumRows[0].Groups[1].Value -or $oldHash -cne $pinnedOldHash`,
-			`5bf27fd4d958fc389a2ef320e401d05875d379b4d96c4ac64a8e8288ea48894d`,
+			`7437055c8680e564311c3455f5d6d1ddea06e9a1b69ee2e56d3e52960b9cc75b`,
 			`Invoke-WebRequest -Uri $direct -OutFile $destination -TimeoutSec 120`,
 		},
 		"bounded_silent_processes": {
@@ -245,7 +245,7 @@ func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
 			`$process.ExitCode -ne 0`,
 			`Owned-Path 'upgrade target with spaces'`,
 			`Owned-Path 'fresh target with spaces'`,
-			`Invoke-BoundedProcess $oldInstaller "/S /D=$upgradeDir" 'install-302'`,
+			`Invoke-BoundedProcess $oldInstaller "/S /D=$upgradeDir" 'install-303'`,
 			`Invoke-BoundedProcess $newInstaller '/S' 'upgrade-current'`,
 			`Invoke-BoundedProcess $newInstaller "/S /D=$freshDir" 'install-fresh'`,
 			`Invoke-BoundedProcess $uninstaller "/S _?=$target" $Label`,
@@ -267,7 +267,7 @@ func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
 			`models\synthetic-tiny.gguf`,
 			`$markerHashes[$safe] = Get-SHA256 $safe`,
 			`(Get-SHA256 $path) -cne $markerHashes[$path]`,
-			`Assert-Markers 'installed-302'`,
+			`Assert-Markers 'installed-303'`,
 			`Assert-Markers 'upgraded-current'`,
 			`Assert-Markers $Label`,
 			`Invoke-DefaultUninstall $freshDir 'uninstall-fresh'`,
@@ -287,7 +287,7 @@ func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
 			`$key.GetValue('DisplayVersion')`,
 			`GetVersionInfo($installedApp).ProductVersion`,
 			`$location -ine $target`,
-			`Assert-Installation $upgradeDir '3.0.2' 'installed-302'`,
+			`Assert-Installation $upgradeDir '3.0.3' 'installed-303'`,
 			`Assert-Installation $upgradeDir $productVersion 'upgraded-current'`,
 			`Assert-CurrentPayload $freshDir 'fresh-directory'`,
 			`Assert-CurrentPayload $upgradeDir 'upgraded-current'`,
@@ -317,7 +317,7 @@ func TestWindowsInstallerAcceptanceSourceContracts(t *testing.T) {
 	guard := strings.Index(script, "$env:GITHUB_ACTIONS -cne 'true'")
 	functions := strings.Index(script, "function Get-PlainPath")
 	firstWrite := strings.Index(script, "[void][IO.Directory]::CreateDirectory($ownedRoot)")
-	checksum := strings.Index(script, "throw 'Official 3.0.2 installer SHA256 mismatch.'")
+	checksum := strings.Index(script, "throw 'Official 3.0.3 installer SHA256 mismatch.'")
 	install := strings.Index(script, `Invoke-BoundedProcess $oldInstaller "/S /D=$upgradeDir"`)
 	if guard < 0 || functions <= guard || firstWrite <= functions || checksum < 0 || install <= checksum {
 		t.Fatal("runner guards must precede side effects; baseline verification must precede installation")

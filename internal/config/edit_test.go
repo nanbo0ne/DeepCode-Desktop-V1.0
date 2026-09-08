@@ -14,6 +14,7 @@ import (
 
 func TestSetDefaultModel(t *testing.T) {
 	c := Default()
+	configureTestMimo(t, c)
 	if err := c.SetDefaultModel("mimo-pro"); err != nil {
 		t.Fatalf("set valid default: %v", err)
 	}
@@ -48,6 +49,11 @@ func TestDesktopProcessDisplayAndVisionSettings(t *testing.T) {
 	c.Desktop.ProcessDisplayMode = ProcessDisplayStandard
 	if got := c.DesktopProcessDisplayMode(); got != ProcessDisplayCompact {
 		t.Fatalf("legacy standard mode = %q, want compact", got)
+	}
+	c.Desktop.ProcessDisplayMode = ProcessDisplayDetailed
+	c.Desktop.ExpandThinking = true
+	if got := c.DesktopProcessDisplayMode(); got != ProcessDisplayCompact {
+		t.Fatalf("legacy detailed mode = %q, want compact until explicitly set", got)
 	}
 	if err := c.SetProcessDisplayMode(ProcessDisplayCompact); err != nil {
 		t.Fatal(err)
@@ -432,16 +438,16 @@ func TestResolveOfficialDeepSeekModelPricing(t *testing.T) {
 	if !ok || flash.Price == nil {
 		t.Fatalf("ResolveModel flash pricing = %+v, %v", flash, ok)
 	}
-	if flash.Price.CacheHit != 0.007 || flash.Price.Input != 0.22 || flash.Price.Output != 0.66 || flash.Price.Currency != "$" {
-		t.Fatalf("flash off-peak pricing = %+v, want cache_hit 0.007 input 0.22 output 0.66 USD", flash.Price)
+	if flash.Price.CacheHit != 0.05 || flash.Price.Input != 1.5 || flash.Price.Output != 4.5 || flash.Price.Currency != "¥" {
+		t.Fatalf("flash off-peak pricing = %+v, want cache_hit 0.05 input 1.5 output 4.5 CNY", flash.Price)
 	}
 
 	pro, ok := c.ResolveModel("deepseek/deepseek-v4-pro")
 	if !ok || pro.Price == nil {
 		t.Fatalf("ResolveModel pro pricing = %+v, %v", pro, ok)
 	}
-	if pro.Price.CacheHit != 0.022 || pro.Price.Input != 0.66 || pro.Price.Output != 1.98 || pro.Price.Currency != "$" {
-		t.Fatalf("pro off-peak pricing = %+v, want cache_hit 0.022 input 0.66 output 1.98 USD", pro.Price)
+	if pro.Price.CacheHit != 0.15 || pro.Price.Input != 4.5 || pro.Price.Output != 13.5 || pro.Price.Currency != "¥" {
+		t.Fatalf("pro off-peak pricing = %+v, want cache_hit 0.15 input 4.5 output 13.5 CNY", pro.Price)
 	}
 	vision, ok := c.ResolveModel("deepseek/deepseek-v4-flash-vision-exp")
 	if !ok || vision.Price == nil || vision.Price.CacheHit != flash.Price.CacheHit || vision.Price.Input != flash.Price.Input || vision.Price.Output != flash.Price.Output {
@@ -449,15 +455,15 @@ func TestResolveOfficialDeepSeekModelPricing(t *testing.T) {
 	}
 	beijing := time.FixedZone("test-beijing", 8*60*60)
 	flashPeak := flash.Price.SnapshotAt(time.Date(2026, time.August, 17, 10, 0, 0, 0, beijing))
-	if flashPeak.CacheHit != 0.014 || flashPeak.Input != 0.44 || flashPeak.Output != 1.32 {
-		t.Fatalf("flash peak pricing = %+v, want cache_hit 0.014 input 0.44 output 1.32", flashPeak)
+	if flashPeak.CacheHit != 0.10 || flashPeak.Input != 3 || flashPeak.Output != 9 {
+		t.Fatalf("flash peak pricing = %+v, want cache_hit 0.10 input 3 output 9", flashPeak)
 	}
 	proPeak := pro.Price.SnapshotAt(time.Date(2026, time.August, 17, 15, 0, 0, 0, beijing))
-	if proPeak.CacheHit != 0.044 || proPeak.Input != 1.32 || proPeak.Output != 3.96 {
-		t.Fatalf("pro peak pricing = %+v, want cache_hit 0.044 input 1.32 output 3.96", proPeak)
+	if proPeak.CacheHit != 0.30 || proPeak.Input != 9 || proPeak.Output != 27 {
+		t.Fatalf("pro peak pricing = %+v, want cache_hit 0.30 input 9 output 27", proPeak)
 	}
 	weekend := flash.Price.SnapshotAt(time.Date(2026, time.August, 22, 10, 0, 0, 0, beijing))
-	if weekend.CacheHit != 0.007 || weekend.Input != 0.22 || weekend.Output != 0.66 {
+	if weekend.CacheHit != 0.05 || weekend.Input != 1.5 || weekend.Output != 4.5 {
 		t.Fatalf("weekend pricing = %+v, want Flash off-peak prices", weekend)
 	}
 }
@@ -803,7 +809,11 @@ func TestClearPluginAuthentication(t *testing.T) {
 // re-decodes the file to confirm the changes survived a write/read cycle.
 func TestSaveToRoundTrips(t *testing.T) {
 	c := Default()
+	configureTestMimo(t, c)
 	if err := c.SetDefaultModel("mimo-pro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetExpandThinking(true); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.SetPlannerModel("deepseek-pro"); err != nil {
@@ -851,6 +861,9 @@ func TestSaveToRoundTrips(t *testing.T) {
 	if _, ok := got.Provider("local"); !ok {
 		t.Error("added provider 'local' missing after round-trip")
 	}
+	if mimo, ok := got.Provider("mimo-pro"); !ok || mimo.Default != "mimo-v2.5-pro" || len(mimo.Models) != 2 {
+		t.Errorf("explicit MiMo provider not preserved after round-trip: %+v", mimo)
+	}
 	if got.Permissions.Mode != "deny" {
 		t.Errorf("mode = %q", got.Permissions.Mode)
 	}
@@ -865,6 +878,36 @@ func TestSaveToRoundTrips(t *testing.T) {
 	}
 	if got.Plugins[0].AutoStart == nil || *got.Plugins[0].AutoStart {
 		t.Errorf("auto_start should round-trip false, got %+v", got.Plugins[0].AutoStart)
+	}
+}
+
+func TestSaveToUserScopeRoundTripsExplicitMimoAndShowReasoning(t *testing.T) {
+	c := Default()
+	configureTestMimo(t, c)
+	if err := c.SetDefaultModel("mimo-pro/mimo-v2.5-pro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetExpandThinking(true); err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "deepseek-orca.toml")
+	if err := c.SaveToScope(path, RenderScopeUser); err != nil {
+		t.Fatalf("SaveToScope: %v", err)
+	}
+
+	var got Config
+	if _, err := toml.DecodeFile(path, &got); err != nil {
+		t.Fatalf("saved user config does not parse: %v", err)
+	}
+	if got.DefaultModel != "mimo-pro/mimo-v2.5-pro" {
+		t.Fatalf("default_model = %q, want explicit MiMo model", got.DefaultModel)
+	}
+	if mimo, ok := got.Provider("mimo-pro"); !ok || mimo.Default != "mimo-v2.5-pro" || len(mimo.Models) != 2 {
+		t.Fatalf("explicit MiMo provider not preserved: %+v", mimo)
+	}
+	if got.Desktop.ShowReasoning == nil || !*got.Desktop.ShowReasoning || got.DesktopProcessDisplayMode() != ProcessDisplayDetailed {
+		t.Fatalf("show_reasoning = %+v, process_display_mode = %q", got.Desktop.ShowReasoning, got.DesktopProcessDisplayMode())
 	}
 }
 

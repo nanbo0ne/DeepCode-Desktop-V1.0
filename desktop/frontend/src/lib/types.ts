@@ -114,6 +114,12 @@ export interface WireEvent {
   itemType?: TurnItemType;
   itemStatus?: TurnItemStatus;
   outcome?: TurnOutcome;
+  // TurnDone carries the backend-authoritative aggregate for this turn. The
+  // cost flag is deliberately separate so clients never infer official pricing.
+  turnTokens?: number;
+  turnCost?: number;
+  turnCurrency?: string;
+  turnCostAvailable?: boolean;
   text?: string;
   reasoning?: string;
   level?: "info" | "warn";
@@ -274,6 +280,9 @@ export interface HistoryMessage {
   outcome?: TurnOutcome;
   elapsedMs?: number;
   tokens?: number;
+  cost?: number;
+  currency?: string;
+  costAvailable?: boolean;
   finalMessageId?: string;
   switchId?: string;
   switchFromMode?: PromptMode;
@@ -1031,6 +1040,7 @@ export interface UpdateInfo {
   downloadUrl: string;
   assetSize: number;
   source?: string;
+  sources?: string[];
   err?: string;
 }
 
@@ -1043,5 +1053,10 @@ export interface UpdateProgress {
   err?: string;
   version?: string;
   canSelfUpdate?: boolean;
+  source?: string;
+  sources?: string[];
+  speedBps?: number;
+  etaSeconds?: number;
+  suggestAlternate?: boolean;
 }
 

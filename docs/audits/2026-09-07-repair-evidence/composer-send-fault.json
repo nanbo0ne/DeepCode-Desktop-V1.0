@@ -1,0 +1,50 @@
+{
+  "scenario": "real-composer-send-reject-and-retry",
+  "screenshots": 0,
+  "passed": true,
+  "afterReject": {
+    "text": "keep this draft",
+    "attachmentNames": [
+      "draft-proof.txt"
+    ],
+    "failedBubble": "draft-proof.txtTXT · 文件keep this draft发送失败 — 消息未送达",
+    "failureStatus": "发送失败 — 消息未送达: AUDIT_SYNTHETIC_BACKEND_REJECT",
+    "crashOverlay": false,
+    "calls": [
+      {
+        "method": "SubmitDisplayToTab",
+        "args": [
+          "tab_global",
+          "keep this draft @[draft-proof.txt](.orca/attachments/mock-draft-proof.txt)",
+          "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"draft-proof.txt\" path=\".orca/attachments/mock-draft-proof.txt\" />\n</attachments>\nkeep this draft\n@.orca/attachments/mock-draft-proof.txt"
+        ]
+      }
+    ]
+  },
+  "retryEnabled": true,
+  "afterRetry": {
+    "text": "",
+    "draftAttachmentCount": 0,
+    "calls": [
+      {
+        "method": "SubmitDisplayToTab",
+        "args": [
+          "tab_global",
+          "keep this draft @[draft-proof.txt](.orca/attachments/mock-draft-proof.txt)",
+          "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"draft-proof.txt\" path=\".orca/attachments/mock-draft-proof.txt\" />\n</attachments>\nkeep this draft\n@.orca/attachments/mock-draft-proof.txt"
+        ]
+      },
+      {
+        "method": "SubmitDisplayToTab",
+        "args": [
+          "tab_global",
+          "keep this draft @[draft-proof.txt](.orca/attachments/mock-draft-proof.txt)",
+          "<attachments count=\"1\">\n  <attachment index=\"1\" name=\"draft-proof.txt\" path=\".orca/attachments/mock-draft-proof.txt\" />\n</attachments>\nkeep this draft\n@.orca/attachments/mock-draft-proof.txt"
+        ]
+      }
+    ],
+    "failedBubbleCount": 1,
+    "crashOverlay": false
+  },
+  "pageErrors": []
+}

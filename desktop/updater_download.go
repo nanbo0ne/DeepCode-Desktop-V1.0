@@ -129,25 +129,52 @@ func validateUpdateAsset(ver string, asset update.Asset) error {
 	return nil
 }
 
-// Partial bytes are untrusted and stay in a digest-specific directory until both checks pass.
+type packageSource struct {
+	name string
+	url  string
+	sig  string
+}
+
+type packageTransferStats struct {
+	Received         int64
+	Total            int64
+	SpeedBPS         int64
+	ETASeconds       int64
+	SuggestAlternate bool
+}
+
+// downloadPackage keeps the original test/helper contract. The updater app uses
+// downloadPackageWithSource so it can report which mirror is active and expose
+// transfer measurements without adding a separate speed probe.
 func downloadPackage(ctx context.Context, c *http.Client, asset update.Asset, dir string, progress func(string, int64, int64), verify func(io.Reader, []byte) error) (string, error) {
+	return downloadPackageWithSource(ctx, c, asset, dir, "", func(_ string, phase string, stats packageTransferStats) {
+		if progress != nil {
+			progress(phase, stats.Received, stats.Total)
+		}
+	}, verify)
+}
+
+func downloadPackageWithSource(ctx context.Context, c *http.Client, asset update.Asset, dir, preferredSource string, progress func(string, string, packageTransferStats), verify func(io.Reader, []byte) error) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	part := filepath.Join(dir, "payload.part")
 	var lastErr error
-	for _, source := range []struct{ url, sig string }{{asset.URL, asset.Sig}, {asset.FallbackURL, asset.FallbackSig}} {
-		if source.url == "" {
-			continue
-		}
+	for _, source := range orderedPackageSources(asset, preferredSource) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		lastErr = transferPackage(ctx, c, source.url, part, asset.Size, func(n int64) { progress("downloading", n, asset.Size) })
+		lastErr = transferPackageWithStats(ctx, c, source.url, part, asset.Size, func(stats packageTransferStats) {
+			if progress != nil {
+				progress(source.name, "downloading", stats)
+			}
+		})
 		if lastErr != nil {
 			continue
 		}
-		progress("verifying", asset.Size, asset.Size)
+		if progress != nil {
+			progress(source.name, "verifying", packageTransferStats{Received: asset.Size, Total: asset.Size})
+		}
 		sigCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		sig, err := fetchLimited(sigCtx, c, source.sig, 8192)
 		cancel()
@@ -182,7 +209,91 @@ func downloadPackage(ctx context.Context, c *http.Client, asset update.Asset, di
 	return "", fmt.Errorf("update download failed: %w", lastErr)
 }
 
+func orderedPackageSources(asset update.Asset, preferred string) []packageSource {
+	all := []packageSource{
+		{name: updateSourceName(asset.URL, updateSourceMac), url: asset.URL, sig: asset.Sig},
+		{name: updateSourceName(asset.FallbackURL, updateSourceGitHub), url: asset.FallbackURL, sig: asset.FallbackSig},
+	}
+	ordered := make([]packageSource, 0, len(all))
+	for _, source := range all {
+		if source.url != "" && source.name == preferred {
+			ordered = append(ordered, source)
+		}
+	}
+	for _, source := range all {
+		if source.url == "" || source.name == preferred {
+			continue
+		}
+		ordered = append(ordered, source)
+	}
+	return ordered
+}
+
+func updateSourceName(address, fallback string) string {
+	u, err := url.Parse(address)
+	if err == nil {
+		switch u.Hostname() {
+		case "github.com":
+			return updateSourceGitHub
+		case "orca.aichat.diy":
+			return updateSourceMac
+		}
+	}
+	// Local test transports use the manifest slot; production URLs are validated.
+	return fallback
+}
+
 func transferPackage(parent context.Context, c *http.Client, address, filename string, size int64, progress func(int64)) error {
+	return transferPackageWithStats(parent, c, address, filename, size, func(stats packageTransferStats) {
+		if progress != nil {
+			progress(stats.Received)
+		}
+	})
+}
+
+const (
+	lowThroughputThreshold = int64(128 << 10)
+	lowThroughputDuration  = 30 * time.Second
+)
+
+type transferSpeedTracker struct {
+	startedAt        time.Time
+	initial          int64
+	lowSince         time.Time
+	suggestAlternate bool
+}
+
+func (t *transferSpeedTracker) stats(received, total int64) packageTransferStats {
+	stats := packageTransferStats{Received: received, Total: total}
+	elapsed := time.Since(t.startedAt)
+	transferred := received - t.initial
+	if elapsed > 0 && transferred > 0 {
+		speed := float64(transferred) / elapsed.Seconds()
+		stats.SpeedBPS = int64(speed)
+		remaining := total - received
+		if remaining > 0 && speed > 0 {
+			stats.ETASeconds = int64(float64(remaining) / speed)
+			if float64(stats.ETASeconds)*speed < float64(remaining) {
+				stats.ETASeconds++
+			}
+		}
+		if speed < float64(lowThroughputThreshold) {
+			if t.lowSince.IsZero() {
+				t.lowSince = time.Now()
+			}
+			if time.Since(t.lowSince) >= lowThroughputDuration {
+				t.suggestAlternate = true
+			}
+		} else {
+			t.lowSince = time.Time{}
+			t.suggestAlternate = false
+		}
+	}
+	stats.SuggestAlternate = t.suggestAlternate
+	return stats
+}
+
+func transferPackageWithStats(parent context.Context, c *http.Client, address, filename string, size int64, progress func(packageTransferStats)) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	// Reset on every received chunk, rather than imposing a short limit on a large download.
@@ -207,6 +318,7 @@ func transferPackage(parent context.Context, c *http.Client, address, filename s
 	if offset == size {
 		return nil
 	}
+	tracker := transferSpeedTracker{startedAt: time.Now(), initial: offset}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return err
@@ -240,7 +352,9 @@ func transferPackage(parent context.Context, c *http.Client, address, filename s
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return err
 	}
-	progress(offset)
+	if progress != nil {
+		progress(tracker.stats(offset, size))
+	}
 	buf := make([]byte, 128<<10)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -256,7 +370,9 @@ func transferPackage(parent context.Context, c *http.Client, address, filename s
 				return err
 			}
 			offset += int64(n)
-			progress(offset)
+			if progress != nil {
+				progress(tracker.stats(offset, size))
+			}
 		}
 		if readErr == io.EOF {
 			break

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const css = readFileSync(join(root, "styles.css"), "utf8");
+const statusBar = readFileSync(join(root, "components", "StatusBar.tsx"), "utf8");
 const chrome = readFileSync(join(root, "components", "AppChrome.tsx"), "utf8");
 const app = readFileSync(join(root, "App.tsx"), "utf8");
 const composer = readFileSync(join(root, "components", "Composer.tsx"), "utf8");
@@ -43,6 +44,23 @@ check(
 );
 check(app.includes("topicbar__overflow-menu") && css.includes(".topicbar__action--direct-utility"), "topic actions expose a narrow overflow menu");
 check(css.includes(".statusbar {\n    max-width: none;\n    gap: 6px;\n    overflow: hidden"), "narrow status bar cannot wrap or overflow");
+check(
+  statusBar.includes('uiStyle === "classic" ? "statusbar__details--classic"') &&
+    css.includes("container-name: statusbar;") &&
+    css.includes("@container statusbar (max-width: 760px)") &&
+    css.includes(".statusbar__details--classic") &&
+    css.includes(".statusbar:has(.statusbar__details--classic[open])") &&
+    css.includes(".statusbar__group--primary,") &&
+    css.includes(".statusbar__compact"),
+  "classic status metrics compact by statusbar container and retain secondary details",
+);
+check(
+  statusBar.includes("function currencySymbol(currency?: string): string | null") &&
+    statusBar.includes("if (!value) return null;") &&
+    statusBar.includes("return value;") &&
+    statusBar.includes("costAvailable && costLabel !== null"),
+  "unknown or missing currencies never masquerade as RMB in the status bar",
+);
 check(
   css.includes(".footer-shelves > .todobar {\n  flex: 0 0 auto;\n  width: min(520px, 100%);") &&
     css.includes("min-width: min(300px, 100%);\n  max-width: 100%;\n  margin-inline: auto;"),
@@ -138,6 +156,10 @@ check(
   css.includes("width: auto;\n  max-width: min(280px, 34cqw);") &&
     css.includes("max-width: 148px;\n  flex: 0 1 auto;"),
   "Modern run status uses intrinsic width so controls remain grouped at the right edge",
+);
+check(
+  css.includes(':root[data-ui-style="classic"] .composer-runstatus {\n  width: min(360px, 40cqw);'),
+  "Classic run status follows the Composer width when both sidebars are open",
 );
 check(
     composer.includes('composer-runstatus__primary--${hasDraftContent ? "send" : "stop"}') &&

@@ -1,0 +1,72 @@
+{
+  ".layout": {
+    "x": 0,
+    "y": 0,
+    "w": 1366,
+    "h": 900,
+    "bottom": 900,
+    "gridRows": "46px 854px",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".modern-chrome": {
+    "x": 0,
+    "y": 0,
+    "w": 1366,
+    "h": 76,
+    "bottom": 76,
+    "gridRows": "32px 44px",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".sidebar": {
+    "x": 0,
+    "y": 46,
+    "w": 264,
+    "h": 854,
+    "bottom": 900,
+    "gridRows": "none",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".sidebar__new": {
+    "x": 10,
+    "y": 56,
+    "w": 243,
+    "h": 40,
+    "bottom": 96,
+    "gridRows": "none",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".sidebar__nav": {
+    "x": 10,
+    "y": 779,
+    "w": 243,
+    "h": 113,
+    "bottom": 892,
+    "gridRows": "none",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".statusbar": {
+    "x": 0,
+    "y": 870,
+    "w": 1366,
+    "h": 30,
+    "bottom": 900,
+    "gridRows": "none",
+    "chrome": "46px",
+    "status": "0px"
+  },
+  ".chat-pane": {
+    "x": 264,
+    "y": 46,
+    "w": 794,
+    "h": 854,
+    "bottom": 900,
+    "gridRows": "none",
+    "chrome": "46px",
+    "status": "0px"
+  }
+}

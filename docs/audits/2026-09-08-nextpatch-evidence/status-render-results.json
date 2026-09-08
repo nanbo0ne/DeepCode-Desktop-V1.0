@@ -1,0 +1,606 @@
+[
+  {
+    "lang": "zh",
+    "width": 1240,
+    "forced": false,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 604,
+      "h": 24,
+      "right": 900
+    },
+    "clientWidth": 604,
+    "scrollWidth": 604,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 93.125,
+        "h": 16.1875,
+        "right": 527.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 543.46875,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 575.5
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "zh",
+    "width": 1240,
+    "forced": true,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 956
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 93.125,
+        "h": 16.1875,
+        "right": 527.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 543.46875,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 575.5
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "zh",
+    "width": 1366,
+    "forced": false,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 730,
+      "h": 24,
+      "right": 1026
+    },
+    "clientWidth": 730,
+    "scrollWidth": 730,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 93.125,
+        "h": 16.1875,
+        "right": 527.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 543.46875,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 575.5
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "zh",
+    "width": 1366,
+    "forced": true,
+    "rect": {
+      "x": 331,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 991
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 331,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 419.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 429.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 453.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 469.34375,
+        "y": 693.90625,
+        "w": 93.125,
+        "h": 16.1875,
+        "right": 562.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 578.46875,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 610.5
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "zh",
+    "width": 1920,
+    "forced": false,
+    "rect": {
+      "x": 496,
+      "y": 697.8125,
+      "w": 920,
+      "h": 16.1875,
+      "right": 1416
+    },
+    "clientWidth": 920,
+    "scrollWidth": 920,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 496,
+        "y": 697.8125,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 584.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--primary",
+        "x": 594.34375,
+        "y": 697.8125,
+        "w": 247.828125,
+        "h": 16.1875,
+        "right": 842.171875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 870.171875,
+        "y": 697.8125,
+        "w": 163.296875,
+        "h": 16.1875,
+        "right": 1033.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 1061.46875,
+        "y": 697.8125,
+        "w": 180.53125,
+        "h": 16.1875,
+        "right": 1242
+      },
+      {
+        "cls": "statusbar__brand",
+        "x": 1252,
+        "y": 699.40625,
+        "w": 164,
+        "h": 13,
+        "right": 1416
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "zh",
+    "width": 1920,
+    "forced": true,
+    "rect": {
+      "x": 626,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 1286
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 626,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 714.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 724.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 748.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 764.34375,
+        "y": 693.90625,
+        "w": 93.125,
+        "h": 16.1875,
+        "right": 857.46875
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 873.46875,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 905.5
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1240,
+    "forced": false,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 604,
+      "h": 24,
+      "right": 900
+    },
+    "clientWidth": 604,
+    "scrollWidth": 604,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 78.21875,
+        "h": 16.1875,
+        "right": 512.5625
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 528.5625,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 560.59375
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1240,
+    "forced": true,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 956
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 78.21875,
+        "h": 16.1875,
+        "right": 512.5625
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 528.5625,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 560.59375
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1366,
+    "forced": false,
+    "rect": {
+      "x": 296,
+      "y": 690,
+      "w": 730,
+      "h": 24,
+      "right": 1026
+    },
+    "clientWidth": 730,
+    "scrollWidth": 730,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 296,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 384.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 394.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 418.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 434.34375,
+        "y": 693.90625,
+        "w": 78.21875,
+        "h": 16.1875,
+        "right": 512.5625
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 528.5625,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 560.59375
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1366,
+    "forced": true,
+    "rect": {
+      "x": 331,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 991
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 331,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 419.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 429.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 453.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 469.34375,
+        "y": 693.90625,
+        "w": 78.21875,
+        "h": 16.1875,
+        "right": 547.5625
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 563.5625,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 595.59375
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1920,
+    "forced": false,
+    "rect": {
+      "x": 496,
+      "y": 697.8125,
+      "w": 920,
+      "h": 16.1875,
+      "right": 1416
+    },
+    "clientWidth": 920,
+    "scrollWidth": 920,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 496,
+        "y": 697.8125,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 584.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--primary",
+        "x": 594.34375,
+        "y": 697.8125,
+        "w": 257.6875,
+        "h": 16.1875,
+        "right": 852.03125
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 880.03125,
+        "y": 697.8125,
+        "w": 152.25,
+        "h": 16.1875,
+        "right": 1032.28125
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 1060.28125,
+        "y": 697.8125,
+        "w": 181.71875,
+        "h": 16.1875,
+        "right": 1242
+      },
+      {
+        "cls": "statusbar__brand",
+        "x": 1252,
+        "y": 699.40625,
+        "w": 164,
+        "h": 13,
+        "right": 1416
+      }
+    ],
+    "overlaps": []
+  },
+  {
+    "lang": "en",
+    "width": 1920,
+    "forced": true,
+    "rect": {
+      "x": 626,
+      "y": 690,
+      "w": 660,
+      "h": 24,
+      "right": 1286
+    },
+    "clientWidth": 660,
+    "scrollWidth": 660,
+    "children": [
+      {
+        "cls": "statusbar__group statusbar__group--model",
+        "x": 626,
+        "y": 693.90625,
+        "w": 88.34375,
+        "h": 16.1875,
+        "right": 714.34375
+      },
+      {
+        "cls": "statusbar__details statusbar__details--classic",
+        "x": 724.34375,
+        "y": 690,
+        "w": 24,
+        "h": 24,
+        "right": 748.34375
+      },
+      {
+        "cls": "statusbar__group statusbar__group--context",
+        "x": 764.34375,
+        "y": 693.90625,
+        "w": 78.21875,
+        "h": 16.1875,
+        "right": 842.5625
+      },
+      {
+        "cls": "statusbar__group statusbar__group--account",
+        "x": 858.5625,
+        "y": 693.90625,
+        "w": 32.03125,
+        "h": 16.1875,
+        "right": 890.59375
+      }
+    ],
+    "overlaps": []
+  }
+]

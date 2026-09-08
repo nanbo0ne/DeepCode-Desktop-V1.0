@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
+import { memo, useDeferredValue } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,37 +8,6 @@ import "katex/dist/katex.min.css";
 import { CodeViewer } from "./CodeViewer";
 import { normalizeMath } from "./mathNormalize";
 import { openExternal } from "../lib/bridge";
-
-const STREAMING_RENDER_INTERVAL_MS = 200;
-
-function useThrottledText(text: string, enabled: boolean): string {
-  const [shown, setShown] = useState(text);
-  const latest = useRef(text);
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => {
-    latest.current = text;
-    if (!enabled) {
-      if (timer.current !== null) {
-        window.clearTimeout(timer.current);
-        timer.current = null;
-      }
-      setShown(text);
-      return;
-    }
-    if (timer.current !== null) return;
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      setShown(latest.current);
-    }, STREAMING_RENDER_INTERVAL_MS);
-  }, [enabled, text]);
-
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
-
-  return enabled ? shown : text;
-}
 
 const components: Components = {
   pre: ({ children }) => <>{children}</>,
@@ -78,8 +47,8 @@ export const Markdown = memo(function Markdown({
   text: string;
   showCursor?: boolean;
 }) {
-  const throttled = useThrottledText(text, Boolean(showCursor));
-  const deferred = useDeferredValue(throttled);
+  // Controller events are already frame-batched; do not delay each fragment again.
+  const deferred = useDeferredValue(text);
 
   return (
     <div className="md">

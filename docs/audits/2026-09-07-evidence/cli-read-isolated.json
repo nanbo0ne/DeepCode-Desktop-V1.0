@@ -1,0 +1,8 @@
+{
+  "name": "cli-read-isolated",
+  "code": 0,
+  "signal": null,
+  "ms": 1766,
+  "stdout": "\u001b[2m  ▎ thinking\u001b[0m\n  · 10038 tok · in 9958 (0 cached / 9958 new) · out 80 (32 reasoning) · $0.0022\n  -> read_file {\"path\": \"audit-fixture.txt\"}\n\u001b[2m  ▎ thinking\u001b[0m\nThe marker is: ORCA_READ_37\n  · 10085 tok · in 10064 (9984 cached / 80 new) · out 21 (10 reasoning) · $0.0001\n",
+  "stderr": "warning: bash not found on PATH; the shell tool will run commands under Windows PowerShell. Install Git for Windows or WSL to use bash.\n"
+}

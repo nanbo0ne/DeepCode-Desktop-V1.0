@@ -101,40 +101,19 @@ function buildTurn(items: readonly Item[], completed: boolean): TimelineSegment[
   }
   if (stats) out.push({ kind: "stats", item: stats });
 
-  let finalAssistantIndex = -1;
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (item.kind === "assistant" && item.final && item.text.trim() !== "") {
-      finalAssistantIndex = index;
-    }
-  }
-
-  const processItems: TimelineProcessItem[] = [];
-  let finalAssistant: Extract<Item, { kind: "assistant" }> | undefined;
-  items.forEach((item, index) => {
+  items.forEach((item) => {
     if (item.kind === "user" || item.kind === "turn_stats") return;
     if (item.kind === "assistant") {
-      const isFinal = index === finalAssistantIndex;
-      if (item.reasoning || item.streaming) processItems.push({ ...item, text: "" });
-      if (isFinal) {
-        finalAssistant = { ...item, reasoning: "" };
-      } else if (item.text.trim() !== "") {
-        processItems.push({ ...item, reasoning: "" });
+      // Live text lives outside items until Message arrives. Mount its consumer
+      // even when this placeholder has no committed text or reasoning yet.
+      if (item.streaming || item.text.trim() || item.reasoning) {
+        out.push({ kind: "assistant", item });
       }
       return;
     }
-    if (visibleProcessItem(item)) processItems.push(item);
+    if (item.kind === "mode_switch") out.push({ kind: "mode_switch", item });
+    else if (visibleProcessItem(item)) pushProcess(out, item, completed);
   });
-
-  if (processItems.length > 0) {
-    out.push({
-      kind: "process",
-      id: `process-${processItems[0].id}`,
-      items: processItems,
-      completed,
-    });
-  }
-  if (finalAssistant) out.push({ kind: "assistant", item: finalAssistant });
   return out;
 }
 
@@ -174,7 +153,7 @@ export function buildTimelineSegments(items: readonly Item[], running: boolean):
   const out: TimelineSegment[] = [];
   groups.forEach((group) => {
     if (group.some((item) => item.kind === "user")) {
-      const explicitlyCompleted = !running && group.some((item) => item.kind === "turn_stats" && (item.outcome ?? (item.success ? "success" : "failed")) === "success");
+      const explicitlyCompleted = group.some((item) => item.kind === "turn_stats" && (item.outcome ?? (item.success ? "success" : "failed")) === "success");
       out.push(...buildTurn(group, explicitlyCompleted));
       return;
     }
@@ -182,8 +161,7 @@ export function buildTimelineSegments(items: readonly Item[], running: boolean):
       if (item.kind === "mode_switch") out.push({ kind: "mode_switch", item });
       else if (item.kind === "steer") out.push({ kind: "steer", item });
       else if (item.kind === "assistant") {
-        if (visibleProcessItem(item)) pushProcess(out, { ...item, text: "" }, true);
-        if (item.text.trim() !== "") out.push({ kind: "assistant", item: { ...item, reasoning: "" } });
+        if (item.streaming || item.reasoning || item.text.trim()) out.push({ kind: "assistant", item });
       } else if (visibleProcessItem(item)) pushProcess(out, item, true);
     }
   });

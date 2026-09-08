@@ -2733,23 +2733,21 @@ a[href] {
   margin-right: auto;
 }
 
-.transcript > .jump-bar,
-.transcript-content > .jump-bar {
+.transcript-shell > .jump-bar {
   max-width: none;
-  margin-left: auto;
-  margin-right: -48px;
+  margin: 0;
 }
 .jump-bar {
-  position: sticky;
+  position: absolute;
+  left: 0;
   top: 50%;
   z-index: var(--z-inline-sticky);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  width: 56px;
+  align-items: flex-start;
+  width: 28px;
   height: 240px;
-  margin-bottom: -240px;
-  padding: 0 12px;
+  padding: 0 7px;
   opacity: 0;
   pointer-events: none;
   transform: translate(4px, -50%);
@@ -2813,10 +2811,10 @@ a[href] {
 }
 .jump-preview {
   position: absolute;
-  right: 100%;
+  left: 100%;
   top: 0;
   max-width: 240px;
-  margin-right: 12px;
+  margin-left: 6px;
   padding: 4px 8px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4205,6 +4203,25 @@ a[href] {
   align-self: center;
   margin-inline: auto;
 }
+.footer > .todobar {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 40px));
+  margin: 0;
+  z-index: var(--z-inline-sticky);
+  background: transparent;
+  pointer-events: none;
+  animation: none;
+}
+.footer > .todobar .todobar__surface {
+  pointer-events: auto;
+  border-radius: 8px;
+}
+.main--has-todos .transcript {
+  padding-bottom: 76px;
+}
 .composer-wrap {
   position: relative;
   max-width: var(--maxw);
@@ -5536,11 +5553,14 @@ a[href] {
      (flex-shrink: 0) and only the model label ellipsizes to absorb the squeeze. */
   white-space: nowrap;
   overflow: hidden;
+  min-width: 0;
 }
 .statusbar__brand {
   display: block;
-  flex: 0 0 auto;
+  flex: 0 1 164px;
   width: 164px;
+  min-width: 0;
+  max-width: 164px;
   height: 13px;
   margin-left: auto;
   padding-left: 18px;
@@ -5576,6 +5596,13 @@ a[href] {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+}
+:root[data-ui-style="classic"] .statusbar__group > .tooltip-trigger {
+  min-width: 0;
+  overflow: hidden;
+}
+:root[data-ui-style="classic"] .statusbar__group > .tooltip-trigger > .stat {
+  min-width: 0;
 }
 .statusbar .modelsw {
   flex-shrink: 0;
@@ -13821,7 +13848,14 @@ a[href] {
     padding: 18px 16px 28px;
   }
   .jump-bar {
-    display: none;
+    width: 20px;
+    padding: 0 2px;
+  }
+  .jump-item {
+    width: 16px;
+  }
+  .jump-dot {
+    max-width: 16px;
   }
   .footer {
     padding: 10px 16px 8px;
@@ -20104,6 +20138,7 @@ a[href] {
   z-index: var(--z-dock);
   max-width: none;
   width: auto;
+  min-width: 0;
   height: 30px;
   min-height: 30px;
   margin: 0;
@@ -20149,6 +20184,122 @@ a[href] {
 
 :root[data-theme-style] .statusbar__compact b.statusbar__compact-value--critical {
   color: var(--danger);
+}
+
+/* Classic status metrics share a fixed bottom rail with the whole app. The
+   rail is also a container so a narrow chat pane can compact itself even when
+   the window viewport is still wide enough to satisfy a media query. */
+:root[data-ui-style="classic"] .statusbar {
+  container-type: inline-size;
+  container-name: statusbar;
+}
+.statusbar__details--classic {
+  display: none;
+}
+
+.statusbar__details--classic > summary {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  list-style: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.statusbar__details--classic > summary::-webkit-details-marker {
+  display: none;
+}
+
+.statusbar__details--classic[open] > summary {
+  color: var(--accent);
+}
+
+.statusbar__details--classic .statusbar__metrics {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-popover);
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 4px 12px;
+  min-width: 168px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: var(--shadow-2);
+}
+
+.statusbar__details--classic .statusbar__metrics dt,
+.statusbar__details--classic .statusbar__metrics dd {
+  margin: 0;
+  color: var(--fg-dim);
+}
+
+.statusbar__details--classic .statusbar__metrics dd {
+  color: var(--fg);
+  text-align: right;
+}
+
+.statusbar:has(.statusbar__details--classic[open]) {
+  overflow: visible;
+}
+
+@container statusbar (max-width: 900px) {
+  .statusbar__brand,
+  .statusbar__group--jobs,
+  .statusbar__balance,
+  .statusbar__plan,
+  .statusbar__approval {
+    display: none;
+  }
+
+  .statusbar__group--account {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .statusbar__group--account > .tooltip-trigger {
+    flex: 0 1 auto;
+  }
+}
+
+@container statusbar (max-width: 760px) {
+  .statusbar {
+    gap: 6px;
+  }
+
+  .statusbar__group + .statusbar__group {
+    margin-left: 6px;
+    padding-left: 6px;
+  }
+
+  .statusbar__details--classic {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 24px;
+  }
+
+  .statusbar__group--primary,
+  .statusbar__compact {
+    display: none;
+  }
+}
+
+@container statusbar (max-width: 520px) {
+  .statusbar__group--model {
+    flex: 1 1 0;
+  }
+
+  .statusbar__model {
+    max-width: 24cqi;
+  }
+
+  .statusbar__cost .stat__label {
+    display: none;
+  }
 }
 
 :root[data-theme-style] .management-modal-backdrop,
@@ -22566,6 +22717,10 @@ a[href] {
 :root[data-ui-style="classic"] .composer-meta--classic,
 :root[data-ui-style="classic"] .composer-card__actions--classic {
   color: #4f5d73;
+}
+
+:root[data-ui-style="classic"] .composer-runstatus {
+  width: min(360px, 40cqw);
 }
 
 :root[data-ui-style="classic"] .composer-meta--classic .modelsw__trigger,

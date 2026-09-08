@@ -98,6 +98,11 @@ const (
 	ItemStarted
 	ItemDelta
 	ItemCompleted
+	// ChildStarted and ChildDone delimit a background child attached to the
+	// parent turn. They are internal telemetry receipts; desktop sinks consume
+	// them without forwarding them to the user-facing event stream.
+	ChildStarted
+	ChildDone
 )
 
 type TurnState string
@@ -159,6 +164,10 @@ type TurnRecord struct {
 	CompletedAt    int64       `json:"completedAt,omitempty"`
 	ElapsedMs      int64       `json:"elapsedMs,omitempty"`
 	Tokens         int         `json:"tokens,omitempty"`
+	RequestCount   int         `json:"requestCount,omitempty"`
+	Cost           float64     `json:"cost,omitempty"`
+	Currency       string      `json:"currency,omitempty"`
+	CostAvailable  bool        `json:"costAvailable"`
 	FinalItemID    string      `json:"finalItemId,omitempty"`
 	FinalMessageID string      `json:"finalMessageId,omitempty"`
 	Items          []TurnItem  `json:"items,omitempty"`
@@ -279,8 +288,22 @@ type CacheDiagnostics struct {
 // Event is one increment in a turn's event stream. Read the field(s) documented
 // for Kind; the others are zero.
 type Event struct {
-	Kind             Kind
-	TurnID           string
+	Kind   Kind
+	TurnID string
+	// ParentTurnID attributes usage emitted by a child or auxiliary reviewer to
+	// the user-facing host turn. TurnID remains the ordinary lifecycle identity.
+	ParentTurnID string
+	// RequestID identifies the provider request represented by a Usage event.
+	// Desktop telemetry uses it to deduplicate repeated usage receipts.
+	RequestID string
+	// ChildID identifies one background child for ChildStarted/ChildDone and its
+	// forwarded usage receipts. ChildUsageReported is set on ChildDone only.
+	ChildID            string
+	ChildUsageReported bool
+	// ProviderEndpoint is the actual configured request endpoint, retained for
+	// provenance checks. A model name alone is not sufficient to establish
+	// official pricing.
+	ProviderEndpoint string
 	ItemID           string
 	MessageID        string
 	FinalItemID      string
@@ -307,6 +330,11 @@ type Event struct {
 	Compaction   Compaction // Compaction
 	RetryAttempt int        // Retrying: 1-based attempt about to be made
 	RetryMax     int        // Retrying: total attempts before giving up
+	// Turn* is populated by the desktop sink on TurnDone from its turn ledger.
+	TurnTokens        int
+	TurnCost          float64
+	TurnCurrency      string
+	TurnCostAvailable bool
 }
 
 // ReadinessAuditSink is an optional sink capability. Sinks that do not care
@@ -347,6 +375,10 @@ func RecordRiskReviewAudit(s Sink, audit RiskReviewAudit) {
 		recorder.RecordRiskReviewAudit(audit)
 	}
 }
+
+// NewRequestID returns a request receipt identity generated at request start.
+// Durable sinks use it to deduplicate replayed usage receipts.
+func NewRequestID() string { return lifecycleID("req") }
 
 // Sink consumes a turn's events. The agent calls Emit serially from its run
 // loop (tool execution may fan out across goroutines, but emission does not),

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/permission"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/tool"
 )
@@ -115,7 +116,7 @@ func TestTaskToolRejectsImplicitImageRoutingWithoutVisionDefault(t *testing.T) {
 	}}
 	task := newTestTaskTool(t, sub, tool.NewRegistry(), "sys", "qwen-general", "", func(model, _ string) (provider.Provider, *provider.Pricing, int, error) {
 		return sub, nil, 0, nil
-	}).WithVision("auto", func(string) string { return "supported" }, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
+	}).WithVision("auto", func(string) string { return "unknown" }, func(_ context.Context, image provider.ImageContent) (provider.ImageContent, error) {
 		image.Data = "hydrated"
 		return image, nil
 	})
@@ -490,6 +491,6 @@ func subagentRefFromOutput(t *testing.T, out string) string {
 
 func newTestTaskTool(t *testing.T, prov provider.Provider, reg *tool.Registry, sysPrompt, subagentModel, subagentEffort string, resolve func(string, string) (provider.Provider, *provider.Pricing, int, error)) *TaskTool {
 	t.Helper()
-	return NewTaskTool(prov, nil, reg, 20, 0, 0, 0, 0, 0.0, "", sysPrompt, nil, subagentModel, subagentEffort, resolve).
+	return NewTaskTool(prov, nil, reg, 20, 0, 0, 0, 0, 0.0, "", sysPrompt, permission.NewGate(permission.New("allow", nil, nil, nil), nil), subagentModel, subagentEffort, resolve).
 		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 }

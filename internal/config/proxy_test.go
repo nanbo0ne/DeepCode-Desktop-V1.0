@@ -3,7 +3,9 @@ package config
 import "testing"
 
 func TestDirectProxyHostsFromNoProxyProviders(t *testing.T) {
-	spec := Default().NetworkProxySpec()
+	c := Default()
+	configureTestMimo(t, c)
+	spec := c.NetworkProxySpec()
 	hasMimo := false
 	for _, h := range spec.DirectHosts {
 		if h == "token-plan-cn.xiaomimimo.com" {
@@ -23,6 +25,7 @@ func TestExplicitProxyOverridesProviderNoProxy(t *testing.T) {
 	// every provider, including no_proxy ones like mimo, so it isn't unreachable
 	// behind the proxy (#3635).
 	c := Default()
+	configureTestMimo(t, c)
 	c.Network.ProxyMode = "custom"
 	spec := c.NetworkProxySpec()
 	for _, h := range spec.DirectHosts {

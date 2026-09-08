@@ -380,7 +380,7 @@ func (c *Controller) prepareVisionImage(path string) (provider.ImageContent, err
 	if err != nil {
 		return provider.ImageContent{}, err
 	}
-	return provider.ImageContent{Path: storedPath, Name: filepath.Base(path), MediaType: mime, Size: int64(len(raw))}, nil
+	return provider.ImageContent{Path: storedPath, Name: filepath.Base(path), MediaType: mime, Size: int64(len(raw)), Data: base64.StdEncoding.EncodeToString(raw)}, nil
 }
 
 func LoadImageContent(ctx context.Context, workspaceRoot string, image provider.ImageContent) (provider.ImageContent, error) {

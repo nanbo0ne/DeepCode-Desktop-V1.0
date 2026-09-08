@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aead.dev/minisign"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/desktop/internal/update"
@@ -191,6 +192,145 @@ func TestPackageFallbackAndVerificationFailure(t *testing.T) {
 				t.Fatal("invalid installer exists")
 			}
 		})
+	}
+}
+
+func TestPackageSourceSelectionAndCrossSourceResume(t *testing.T) {
+	data := bytes.Repeat([]byte("cross-source-resume"), 512)
+	sig, verify := packageFixture(t, data)
+
+	t.Run("preferred fallback", func(t *testing.T) {
+		var requests []string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests = append(requests, r.URL.Path)
+			if strings.HasSuffix(r.URL.Path, ".minisig") {
+				_, _ = w.Write(sig)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(data)
+		}))
+		defer server.Close()
+
+		asset := fixtureAsset(data, server.URL+"/primary/setup.exe")
+		asset.FallbackURL = server.URL + "/fallback/setup.exe"
+		asset.FallbackSig = asset.FallbackURL + ".minisig"
+		if _, err := downloadPackageWithSource(context.Background(), server.Client(), asset, t.TempDir(), updateSourceGitHub, nil, verify); err != nil {
+			t.Fatal(err)
+		}
+		if len(requests) == 0 || requests[0] != "/fallback/setup.exe" {
+			t.Fatalf("requests = %v, want fallback source first", requests)
+		}
+	})
+
+	t.Run("resume after primary failure", func(t *testing.T) {
+		const firstChunk = 777
+		var requests []string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests = append(requests, r.URL.Path+" "+r.Header.Get("Range"))
+			if strings.HasSuffix(r.URL.Path, ".minisig") {
+				_, _ = w.Write(sig)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			if r.URL.Path == "/primary/setup.exe" {
+				w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+				_, _ = w.Write(data[:firstChunk])
+				return
+			}
+			var start int
+			if _, err := fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-", &start); err != nil || start != firstChunk {
+				http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(data)-1, len(data)))
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write(data[start:])
+		}))
+		defer server.Close()
+
+		asset := fixtureAsset(data, server.URL+"/primary/setup.exe")
+		asset.FallbackURL = server.URL + "/fallback/setup.exe"
+		asset.FallbackSig = asset.FallbackURL + ".minisig"
+		filename, err := downloadPackageWithSource(context.Background(), server.Client(), asset, t.TempDir(), updateSourceMac, nil, verify)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filename)
+		if err != nil || !bytes.Equal(got, data) {
+			t.Fatalf("cross-source payload mismatch: %v", err)
+		}
+		if len(requests) < 2 || !strings.Contains(requests[1], "/fallback/setup.exe bytes=777-") {
+			t.Fatalf("requests = %v, want fallback resume", requests)
+		}
+	})
+}
+
+func TestTransferStatsReportETAAndSustainedLowThroughput(t *testing.T) {
+	now := time.Now()
+	tracker := transferSpeedTracker{
+		startedAt: now.Add(-40 * time.Second),
+		initial:   0,
+		lowSince:  now.Add(-31 * time.Second),
+	}
+	stats := tracker.stats(1024, 10<<10)
+	if stats.SpeedBPS <= 0 || stats.ETASeconds <= 0 {
+		t.Fatalf("stats = %+v, want speed and ETA", stats)
+	}
+	if !stats.SuggestAlternate {
+		t.Fatalf("stats = %+v, want sustained-low-throughput suggestion", stats)
+	}
+}
+
+func TestTransferStatsPreserveProgressOnNetworkFailure(t *testing.T) {
+	data := bytes.Repeat([]byte("partial"), 256)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+		_, _ = w.Write(data[:len(data)/2])
+	}))
+	defer server.Close()
+
+	var last packageTransferStats
+	err := transferPackageWithStats(context.Background(), server.Client(), server.URL, filepath.Join(t.TempDir(), "payload.part"), int64(len(data)), func(stats packageTransferStats) {
+		last = stats
+	})
+	if err == nil {
+		t.Fatal("truncated response should fail")
+	}
+	if last.Received == 0 || last.Total != int64(len(data)) {
+		t.Fatalf("last stats = %+v, want received bytes and total after failure", last)
+	}
+}
+
+func TestSetUpdateSourceChangesRuntimeSelectionOnly(t *testing.T) {
+	asset := update.Asset{
+		URL:         "https://orca.aichat.diy/releases/desktop-v3.0.4/setup.exe",
+		FallbackURL: "https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/setup.exe",
+	}
+	a := &App{updatePending: &pendingDesktopUpdate{manifest: update.Manifest{
+		Platforms: map[string]update.Asset{
+			update.CurrentPlatform():               asset,
+			update.CurrentPlatform() + "-portable": asset,
+		},
+	}}}
+	if err := a.SetUpdateSource(updateSourceGitHub); err != nil {
+		t.Fatal(err)
+	}
+	if a.updatePending.source != updateSourceGitHub || a.GetUpdateStatus().Source != updateSourceGitHub {
+		t.Fatalf("source selection = pending=%q status=%q", a.updatePending.source, a.GetUpdateStatus().Source)
+	}
+}
+
+func TestUpdateSourcesUseHostNotManifestPosition(t *testing.T) {
+	asset := update.Asset{URL: "https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.4/setup.exe"}
+	sources := updateAssetSources(asset)
+	if len(sources) != 1 || sources[0] != updateSourceGitHub {
+		t.Fatalf("GitHub-only manifest mislabeled: %v", sources)
+	}
+	asset.FallbackURL = "https://orca.aichat.diy/releases/desktop-v3.0.4/setup.exe"
+	ordered := orderedPackageSources(asset, updateSourceMac)
+	if len(ordered) != 2 || ordered[0].url != asset.FallbackURL || ordered[0].name != updateSourceMac {
+		t.Fatalf("mirror selection ignored actual hosts: %+v", ordered)
 	}
 }
 

@@ -1,0 +1,22 @@
+=== RUN   TestAuditStopDoesNotCancelInFlightAction
+--- PASS: TestAuditStopDoesNotCancelInFlightAction (0.10s)
+=== RUN   TestAuditOutOfOrderObserveRewindsCurrentGeneration
+--- PASS: TestAuditOutOfOrderObserveRewindsCurrentGeneration (0.00s)
+=== RUN   TestReproAnthropicCleanEOFWithoutMessageStop
+--- PASS: TestReproAnthropicCleanEOFWithoutMessageStop (0.00s)
+=== RUN   TestReproRiskClassifierFailureFailsOpen
+--- PASS: TestReproRiskClassifierFailureFailsOpen (0.00s)
+=== RUN   TestReproReadinessGenericVerificationSatisfiesEveryProjectCheck
+--- PASS: TestReproReadinessGenericVerificationSatisfiesEveryProjectCheck (0.00s)
+=== RUN   TestReproStaleQualifiedModelFallsAcrossProviders
+--- PASS: TestReproStaleQualifiedModelFallsAcrossProviders (0.00s)
+=== RUN   TestProjectDotEnvLeaksAcrossLoadForRootCalls
+--- PASS: TestProjectDotEnvLeaksAcrossLoadForRootCalls (0.01s)
+=== RUN   TestStaleV11MigrationLockSkipsMigration
+--- PASS: TestStaleV11MigrationLockSkipsMigration (0.01s)
+=== RUN   TestWindowsConfigRootIsAppDataOrca
+--- PASS: TestWindowsConfigRootIsAppDataOrca (0.00s)
+=== RUN   TestMigrationDoesNotRetryCredentialsAfterConfigWriteFailure
+--- PASS: TestMigrationDoesNotRetryCredentialsAfterConfigWriteFailure (0.01s)
+PASS
+ok  	github.com/nanbo0ne/O.R.C.A-for-Windows/.tmp/audit-2026-09-07	0.383s

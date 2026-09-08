@@ -37,6 +37,9 @@ func TestWindowsReleaseRequiresTwoStageSignPathSigning(t *testing.T) {
 	if got := strings.Count(workflow, "if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'"); got < 6 {
 		t.Fatalf("SignPath-gated Windows step count = %d, want at least 6", got)
 	}
+	if strings.Contains(workflow, "DeepSeek-Orca-windows-") {
+		t.Fatal("signing workflow must not sign or publish legacy artifact aliases")
+	}
 }
 
 func TestSignPathArtifactConfigurationSignsPEFiles(t *testing.T) {

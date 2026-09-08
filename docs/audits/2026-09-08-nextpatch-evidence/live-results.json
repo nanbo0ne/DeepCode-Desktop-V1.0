@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-09-08",
+  "scope": "Independent local evidence review of two existing live acceptance reports; no additional live calls or changes to original runs.",
+  "overall_result": "All four bounded acceptance scenarios passed after a harness-only generated-image retry. The initial harness failure is retained below.",
+  "sanitization": {
+    "credentials_included": false,
+    "raw_user_text_included": false,
+    "raw_model_text_included": false,
+    "raw_tool_arguments_or_outputs_included": false,
+    "image_bytes_included": false,
+    "session_and_request_identifiers_included": false,
+    "source_paths_are_worktree_relative": true,
+    "billing_estimates_omitted": "Product cost telemetry was not independently verified against provider billing. Token receipts are summarized instead."
+  },
+  "sources": {
+    "initial_report": {
+      "path": ".tmp/nextpatch-2026-09-08/live/runs/run-3541928522/results.json",
+      "sha256": "35cbf3cce9eb89e71b1e6745d23ac973feec27a0d28d7d63a1f6f2771b95f6a0"
+    },
+    "retry_report": {
+      "path": ".tmp/nextpatch-2026-09-08/live/runs/run-2902807228/results.json",
+      "sha256": "6f9adaaf65f1c16e62cf6913106b26adeb8aabcf8e8b48e097de2a572350257a"
+    },
+    "acceptance_budget": {
+      "path": ".tmp/nextpatch-2026-09-08/live/runs/run-3541928522/results.json.generated-budget.json",
+      "sha256": "5d577bbafb11627f41c3734c21bdaad9c95ad55ba4b5ceffd470d2d8089ced22",
+      "original_report_hash_matches": true,
+      "initial_calls": 10,
+      "additional_reserved_calls": 4
+    },
+    "retry_parent_transcript": {
+      "path": ".tmp/nextpatch-2026-09-08/live/runs/run-2902807228/main-generated-task-vision/sessions/usage.jsonl",
+      "sha256": "485130d5afc4ab41eb6eb0de2f2e1a4f7b1e3c45bae93f51892288485cfada1f"
+    },
+    "retry_child_transcript": {
+      "location": "Retry run isolated subagent transcript selected through the parent task result and completed subagent metadata.",
+      "sha256": "72fe340e25895e0f52497fda32ae1d3fea5a4cce85b2792a362038691cb1cc53"
+    }
+  },
+  "routing_and_limits": {
+    "upstream_endpoint": "https://api.deepseek.com/chat/completions",
+    "parent_model": "deepseek/deepseek-v4-flash",
+    "vision_model": "deepseek/deepseek-v4-flash-vision-exp",
+    "transport": "Authenticated loopback relay to the pinned upstream endpoint; relay counts outgoing HTTP requests including retries.",
+    "capability_selection": "Isolated manual capability overrides and an explicit vision-role model; not a capability probe or official fallback-selection test.",
+    "image_policy": "Only exact synthetic PNG fixture bytes may be sent, and only to the selected Vision model.",
+    "host_policy": "The retry exposes one schema-enumerated command selecting an immutable harness-owned PowerShell script executed by the real native host_command tool.",
+    "permission_scope": "Isolated explicit host-operation, read, task and selected-provider image-send permissions; no product permission relaxation or automation-fullaccess change.",
+    "other_tools": "Other assembled capabilities are explicitly denied; the relay presents only task and the bounded host command.",
+    "total_http_call_limit": 20,
+    "consumed_http_calls": 14,
+    "unused_budget": 6,
+    "further_live_calls_authorized": false,
+    "request_deadline_ms": 150000,
+    "scenario_cancel_deadline_ms": 150000,
+    "cancellation_receipt_grace_ms": 5000,
+    "maximum_recorded_http_duration_ms": 89963,
+    "all_recorded_http_durations_within_limit": true,
+    "all_recorded_http_statuses_200": true,
+    "cumulative_call_numbers_contiguous": true,
+    "flash_http_calls": 11,
+    "vision_http_calls": 3,
+    "image_bearing_http_calls": 3,
+    "images_sent_to_flash": 0,
+    "user_images_or_computer_use_used": false,
+    "credential_handling": "Stdin-only credential input; real credential retained in relay memory rather than tool context or configuration."
+  },
+  "timing_definition": "First delta is the first parent-visible text delta, not an HTTP header, reasoning delta, or the child model's first token. Commit is the parent final-answer commit. Null commit values mean no commit occurred.",
+  "runs": [
+    {
+      "run": "run-3541928522",
+      "kind": "initial_four_scenario_run",
+      "http_calls": 10,
+      "scenarios": [
+        {
+          "name": "text",
+          "outcome": "success",
+          "reported_verified": true,
+          "http_call_numbers": [1],
+          "elapsed_ms": 1073,
+          "first_delta_ms": 1046,
+          "first_commit_ms": 1073,
+          "text_delta_count": 5,
+          "commit_count": 1,
+          "calls_at_first_delta": 1,
+          "calls_at_first_commit": 1,
+          "usage": {"receipts": 1, "child_receipts": 0, "prompt_tokens": 3353, "completion_tokens": 28, "total_tokens": 3381}
+        },
+        {
+          "name": "direct-vision",
+          "outcome": "success",
+          "reported_verified": true,
+          "http_call_numbers": [2],
+          "elapsed_ms": 2054,
+          "first_delta_ms": 1971,
+          "first_commit_ms": 2054,
+          "text_delta_count": 16,
+          "commit_count": 1,
+          "calls_at_first_delta": 1,
+          "calls_at_first_commit": 1,
+          "usage": {"receipts": 1, "child_receipts": 0, "prompt_tokens": 3539, "completion_tokens": 83, "total_tokens": 3622}
+        },
+        {
+          "name": "flash-attachment-task-vision",
+          "outcome": "success",
+          "reported_verified": true,
+          "http_call_numbers": [3, 4, 5],
+          "elapsed_ms": 6626,
+          "first_delta_ms": 6546,
+          "first_commit_ms": 6626,
+          "text_delta_count": 18,
+          "commit_count": 1,
+          "calls_at_first_delta": 3,
+          "calls_at_first_commit": 3,
+          "usage": {"receipts": 3, "child_receipts": 1, "prompt_tokens": 7984, "completion_tokens": 492, "total_tokens": 8476}
+        },
+        {
+          "name": "main-generated-task-vision",
+          "outcome": "failed",
+          "reported_verified": false,
+          "http_call_numbers": [6, 7, 8, 9, 10],
+          "elapsed_ms": 147553,
+          "first_delta_ms": 46946,
+          "first_commit_ms": null,
+          "text_delta_count": 482,
+          "commit_count": 0,
+          "calls_at_first_delta": 3,
+          "calls_at_first_commit": null,
+          "host_command_dispatches": 3,
+          "task_dispatches": 0,
+          "vision_requests": 0,
+          "failure_class": "harness_command_contract_rejection",
+          "failure_summary": "The original exact long-command wrapper rejected the supplied command before native execution; final readiness rejected the latest failed host action. No generated frame or Vision delegation occurred.",
+          "diagnostic_limit": "The original run did not retain raw tool arguments or a session transcript, so the precise argument mismatch cannot be determined from its evidence.",
+          "usage": {"receipts": 5, "child_receipts": 0, "prompt_tokens": 56136, "completion_tokens": 15487, "total_tokens": 71623}
+        }
+      ]
+    },
+    {
+      "run": "run-2902807228",
+      "kind": "generated_only_retry_after_harness_contract_fix",
+      "http_calls": 4,
+      "previously_consumed_calls": 10,
+      "cumulative_reserved_calls": 14,
+      "scenarios": [
+        {
+          "name": "main-generated-task-vision",
+          "outcome": "success",
+          "reported_verified": true,
+          "independent_evidence_consistent_with_pass": true,
+          "http_call_numbers": [11, 12, 13, 14],
+          "elapsed_ms": 5228,
+          "first_delta_ms": 5135,
+          "first_commit_ms": 5221,
+          "text_delta_count": 18,
+          "commit_count": 1,
+          "final_item_and_message_ids_present": true,
+          "calls_at_first_delta": 4,
+          "calls_at_first_commit": 4,
+          "tool_order": ["host_command", "task"],
+          "native_host_result_done_without_error": true,
+          "task_result_without_error": true,
+          "usage": {"receipts": 4, "child_receipts": 1, "prompt_tokens": 14602, "completion_tokens": 331, "total_tokens": 14933}
+        }
+      ]
+    }
+  ],
+  "http_receipts": [
+    {"number": 1, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 1071},
+    {"number": 2, "model_role": "vision", "images": 1, "status": 200, "elapsed_ms": 2050},
+    {"number": 3, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 2782},
+    {"number": 4, "model_role": "vision", "images": 1, "status": 200, "elapsed_ms": 3128},
+    {"number": 5, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 697},
+    {"number": 6, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 18902},
+    {"number": 7, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 22849},
+    {"number": 8, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 6715},
+    {"number": 9, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 89963},
+    {"number": 10, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 9110},
+    {"number": 11, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 1665},
+    {"number": 12, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 1401},
+    {"number": 13, "model_role": "vision", "images": 1, "status": 200, "elapsed_ms": 720},
+    {"number": 14, "model_role": "flash", "images": 0, "status": 200, "elapsed_ms": 956}
+  ],
+  "usage_totals_including_failed_attempt": {
+    "receipts": 14,
+    "unique_request_ids": 14,
+    "child_receipts": 2,
+    "prompt_tokens": 85614,
+    "completion_tokens": 16421,
+    "total_tokens": 102035
+  },
+  "independent_retry_checks": {
+    "generated_file": ".tmp/nextpatch-2026-09-08/live/runs/run-2902807228/main-generated-task-vision/frame.png",
+    "generated_file_sha256": "25ec62f7a60f515707b0396bfad32d34db5242232b2beeab7533259c128b4577",
+    "attachment_snapshot_sha256": "25ec62f7a60f515707b0396bfad32d34db5242232b2beeab7533259c128b4577",
+    "generated_file_snapshot_and_report_fixture_hashes_match": true,
+    "parent_user_message_has_images": false,
+    "native_host_result_precedes_task_dispatch_in_transcript": true,
+    "child_transcript_user_images": 1,
+    "child_image_media_type": "image/png",
+    "child_image_path_points_to_matching_snapshot": true,
+    "child_metadata_status": "completed",
+    "child_metadata_model": "deepseek/deepseek-v4-flash-vision-exp",
+    "child_parent_tool_call_id_matches_parent_task": true,
+    "child_final_answer_matches_parent_task_result": true,
+    "child_final_answer_and_parent_final_answer_match_expected_synthetic_fields": true,
+    "expected_fixture_identifier_present_in_parent_text_before_task_result": false,
+    "expected_fixture_identifier_or_marker_answer_present_in_child_system_or_user_text": false,
+    "vision_http_call_number": 13,
+    "vision_http_images": 1,
+    "vision_http_status": 200
+  },
+  "false_pass_review": {
+    "scope": "Current harness verifier and recorded local reports, parent/child transcripts, metadata, artifact hashes, and budget ledger; not an independent provider wire capture or visual-capability benchmark.",
+    "observed_false_pass_in_this_retry": false,
+    "findings": [
+      {
+        "severity": "medium",
+        "source": ".tmp/nextpatch-2026-09-08/live/main.go:457",
+        "finding": "Answer verification uses substring presence, not exact structured field validation. Negated or contradictory answers can satisfy it; a fixed repeated fixture also cannot rule out guessing.",
+        "this_run_assessment": "The actual child answer and final parent answer independently match the expected synthetic fields without contradiction. The expected identifier was absent from pre-result parent text and child input text. This supports this bounded result, not general visual accuracy."
+      },
+      {
+        "severity": "medium",
+        "source": ".tmp/nextpatch-2026-09-08/live/main.go:457",
+        "finding": "The verifier checks tool dispatch names, an image-bearing HTTP 200 and at least one usage receipt, rather than requiring successful ordered tool results, matched parent-child linkage, or complete per-call usage coverage. Generated file-byte equality is separately checked, but Verified alone is still insufficient evidence of the whole causal chain.",
+        "this_run_assessment": "Independent review confirmed a successful native host result before the task, completed linked child metadata, the matching image snapshot in the child transcript, the child answer returned through task, a committed final answer, and four unique usage receipts for the four retry calls."
+      }
+    ],
+    "coverage_limits": [
+      "Manual capability overrides and an explicit Vision role do not test automatic capability probing or official fallback selection.",
+      "The generated image comes from a deterministic harness-owned script invoked by the main model, not unrestricted model-authored image-generation code.",
+      "Live execution uses isolated explicit allows; ask/deny/auto boundary behavior is covered by separate hermetic tests, not these live reports.",
+      "An image-bearing request and correct static-fixture answer establish bounded integration evidence, not proof that a model attended to pixels or broad image-reasoning correctness."
+    ],
+    "product_or_harness_changes_during_this_review": false
+  }
+}

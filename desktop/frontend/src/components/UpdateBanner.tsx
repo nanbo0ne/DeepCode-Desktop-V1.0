@@ -35,6 +35,11 @@ function normalizeProgress(value: UpdateProgress | null | undefined, version: st
     ...(value.err ? { err: value.err } : {}),
     version: value.version || version,
     ...(typeof value.canSelfUpdate === "boolean" ? { canSelfUpdate: value.canSelfUpdate } : {}),
+    source: value.source,
+    sources: value.sources,
+    speedBps: Number.isFinite(value.speedBps) ? Math.max(0, value.speedBps!) : 0,
+    etaSeconds: Number.isFinite(value.etaSeconds) ? Math.max(0, value.etaSeconds!) : 0,
+    suggestAlternate: value.suggestAlternate === true,
   };
 }
 
@@ -81,6 +86,17 @@ export function UpdateBanner({ info, platform, onDismiss }: { info: UpdateInfo; 
   const percent = progress ? progressPercent(progress, info.assetSize) : 0;
   const selfUpdate = platform === "windows" && (progress?.canSelfUpdate ?? info.canSelfUpdate);
   const canDownload = info.canDownload === true;
+  const sources = (progress?.sources ?? info.sources ?? []).filter((source) => source === "mac" || source === "github");
+  const changeSource = async (source: string) => {
+    if (running || actionBusy) return;
+    setActionBusy(true);
+    try {
+      await app.SetUpdateSource(source);
+      await refreshStatus();
+    } catch (error) {
+      setCurrentProgress({ phase: "error", version: updateVersion, received: progress?.received ?? 0, total: progress?.total ?? info.assetSize, err: errorText(error) });
+    } finally { setActionBusy(false); }
+  };
   const statusLabel = useMemo(() => {
     switch (phase) {
       case "downloading": return t("update.downloading");
@@ -175,9 +191,18 @@ export function UpdateBanner({ info, platform, onDismiss }: { info: UpdateInfo; 
       <div className="orca-update-banner__body">
         <div className="orca-update-banner__heading">
           <strong>{t("update.available", { version: updateVersion })}</strong>
-          {info.source && <span className="orca-update-banner__source">{info.source}</span>}
+          {(progress?.source || info.source) && <span className="orca-update-banner__source">{(progress?.source || info.source) === "mac" ? t("update.source.mac") : "GitHub"}</span>}
         </div>
         <div className="orca-update-banner__status">{message}</div>
+        {canDownload && phase !== "ready" && (
+          <div className="orca-update-banner__transfer">
+            {sources.length > 1 && <select aria-label={t("update.source")} value={progress?.source || info.source || sources[0]} disabled={running || actionBusy} onChange={(event) => void changeSource(event.target.value)}>
+              {sources.map((source) => <option key={source} value={source}>{source === "mac" ? t("update.source.mac") : "GitHub"}</option>)}
+            </select>}
+            {phase === "downloading" && (progress?.speedBps ?? 0) > 0 && <span>{(progress!.speedBps! / 1024).toFixed(0)} KiB/s{(progress?.etaSeconds ?? 0) > 0 ? ` · ${t("update.remaining", { n: Math.ceil(progress!.etaSeconds! / 60) })}` : ""}</span>}
+          </div>
+        )}
+        {phase === "downloading" && progress?.suggestAlternate && sources.length > 1 && <div className="orca-update-banner__status">{t("update.slowSource")}</div>}
         {progress && (running || phase === "ready" || phase === "error" || phase === "cancelled") && (
           <div className="orca-update-banner__progress-row">
             <div className="orca-update-banner__progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>

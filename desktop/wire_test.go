@@ -110,18 +110,73 @@ func TestToWireUsage(t *testing.T) {
 	}
 }
 
-func TestToWireUsageWithPricing(t *testing.T) {
+func TestToWireUsageWithUnverifiedPricingHidesCost(t *testing.T) {
 	e := event.Event{
 		Kind:    event.Usage,
 		Usage:   &provider.Usage{CacheHitTokens: 1_000_000, CacheMissTokens: 0, CompletionTokens: 0},
 		Pricing: &provider.Pricing{CacheHit: 1.0, Input: 2.0, Output: 10.0},
 	}
 	w := toWire(e)
-	if w.Usage == nil || w.Usage.Cost != 1.0 || w.Usage.CostUSD != 1.0 {
-		t.Errorf("cost = %+v, want cost and compat costUsd of 1.0", w.Usage)
+	if w.Usage == nil || w.Usage.Cost != 0 || w.Usage.CostUSD != 0 || w.Usage.Currency != "" || w.Usage.CostAvailable {
+		t.Errorf("unverified cost = %+v, want hidden", w.Usage)
 	}
-	if w.Usage.Currency != "¥" {
-		t.Errorf("currency = %q, want ¥", w.Usage.Currency)
+}
+
+func TestToWireUsageWithOfficialDeepSeekSource(t *testing.T) {
+	w := toWire(event.Event{
+		Kind: event.Usage, RequestID: "req-official", ProviderEndpoint: "https://api.deepseek.com/v1",
+		Usage:   &provider.Usage{CacheHitTokens: 1_000_000},
+		Pricing: &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	if w.Usage == nil || w.Usage.Cost != 0.007 || w.Usage.CostUSD != 0.007 || w.Usage.Currency != "$" || !w.Usage.CostAvailable {
+		t.Fatalf("official cost = %+v, want verified official cost", w.Usage)
+	}
+}
+
+func TestToWireUsageWithOfficialDeepSeekBaseURLTrailingSlash(t *testing.T) {
+	w := toWire(event.Event{
+		Kind: event.Usage, RequestID: "req-official-root", ProviderEndpoint: "https://api.deepseek.com/",
+		Usage:   &provider.Usage{CacheHitTokens: 1_000_000},
+		Pricing: &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	})
+	if w.Usage == nil || w.Usage.Cost != 0.007 || w.Usage.Currency != "$" || !w.Usage.CostAvailable {
+		t.Fatalf("official trailing-slash cost = %+v, want verified official cost", w.Usage)
+	}
+}
+
+func TestToWireUsageIncludesRequestID(t *testing.T) {
+	w := toWire(event.Event{
+		Kind:      event.Usage,
+		RequestID: "req-123",
+		Usage:     &provider.Usage{TotalTokens: 3},
+	})
+	if w.Usage == nil || w.Usage.RequestID != "req-123" {
+		t.Fatalf("usage request id = %+v", w.Usage)
+	}
+}
+
+func TestHideWireUsageCost(t *testing.T) {
+	w := hideWireUsageCost(toWireTab(event.Event{
+		Kind: event.Usage, RequestID: "req-pending", ProviderEndpoint: "https://api.deepseek.com/",
+		Usage:   &provider.Usage{CacheHitTokens: 1_000_000},
+		Pricing: &provider.Pricing{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "$"},
+	}, "tab"))
+	if w.Usage == nil || w.Usage.Cost != 0 || w.Usage.CostUSD != 0 || w.Usage.Currency != "" || w.Usage.CostAvailable {
+		t.Fatalf("hidden pending usage cost = %+v, want unavailable", w.Usage)
+	}
+}
+
+func TestToWireTurnDoneIncludesAuthoritativeTurnStats(t *testing.T) {
+	w := toWire(event.Event{
+		Kind:              event.TurnDone,
+		TurnID:            "turn-1",
+		TurnTokens:        321,
+		TurnCost:          0.0042,
+		TurnCurrency:      "$",
+		TurnCostAvailable: true,
+	})
+	if w.Kind != "turn_done" || w.TurnTokens != 321 || w.TurnCost != 0.0042 || w.TurnCurrency != "$" || !w.TurnCostAvailable {
+		t.Fatalf("turn_done stats = %+v", w)
 	}
 }
 
@@ -174,9 +229,9 @@ func TestToWireSteer(t *testing.T) {
 }
 
 func TestKindNamesComplete(t *testing.T) {
-	// Steer is the last Kind; every value through it must have a wire name,
-	// or toWire emits kind:"" and the frontend reducer falls through to undefined.
-	for k := event.Kind(0); k <= event.Steer; k++ {
+	// Every event kind must have a wire name, or toWire emits kind:"" and the
+	// frontend reducer falls through to undefined.
+	for k := event.Kind(0); k <= event.ChildDone; k++ {
 		if kindNames[k] == "" {
 			t.Errorf("kind %d has no wire name — toWire would emit kind:\"\"", k)
 		}

@@ -2842,7 +2842,7 @@ export default function App() {
             <div className="banner banner--error">{t("topbar.startupError", { msg: state.meta.startupErr })}</div>
           )}
 
-          <main className="main">
+          <main className={`main${showTodos ? " main--has-todos" : ""}`}>
             {(state.loading && !state.meta) || (state.meta?.ready === false && !state.meta?.startupErr) ? (
               <div className="loading-screen">
                 <div className="loading-screen__spinner" />
@@ -2870,6 +2870,7 @@ export default function App() {
           </main>
 
           <footer className="footer" ref={footerRef}>
+            {showTodos && <TodoPanel todoId={todoItem!.id} todos={todos} onDismiss={() => setDismissedTodo(todoItem!.id)} />}
             <div className="footer-shelves">
               {automationAccessRequired && (
                 <div className="automation-access-prompt" data-ui-surface="panel" role="alert">
@@ -2909,7 +2910,6 @@ export default function App() {
                 </div>
                 </div>
               )}
-              {showTodos && <TodoPanel todoId={todoItem!.id} todos={todos} onDismiss={() => setDismissedTodo(todoItem!.id)} />}
               {state.approval && (
                 <ApprovalModal
                 approval={state.approval}

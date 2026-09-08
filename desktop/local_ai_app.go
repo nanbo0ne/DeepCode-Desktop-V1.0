@@ -85,7 +85,7 @@ func (a *App) GetLocalAICatalog() LocalAICatalogView {
 		modelsDir = cfg.LocalAI.ModelsDir
 	}
 	return normalizeLocalAICatalogView(LocalAICatalogView{
-		Supported: runtime.GOOS == "windows", Platform: runtime.GOOS,
+		Supported: runtime.GOOS == "windows" && localai.LocalAIEnabled, Platform: runtime.GOOS,
 		Models: localai.ModelCatalog(), Runtimes: localai.RuntimeCatalog(),
 		InstalledModels: manager.InstalledModels(), Runtime: runtimePtr,
 		Downloads: manager.Tasks(), Status: a.localServer.Status(), Hardware: hardware,
@@ -113,6 +113,9 @@ func normalizeLocalAICatalogView(view LocalAICatalogView) LocalAICatalogView {
 }
 
 func (a *App) StartLocalRuntimeInstall(runtimeID string) (localai.DownloadTask, error) {
+	if err := localai.RequireEnabled(); err != nil {
+		return localai.DownloadTask{}, err
+	}
 	if runtime.GOOS != "windows" {
 		return localai.DownloadTask{}, fmt.Errorf("本地推理首版仅支持 Windows")
 	}
@@ -123,14 +126,22 @@ func (a *App) StartLocalRuntimeInstall(runtimeID string) (localai.DownloadTask, 
 }
 
 func (a *App) StartLocalModelDownload(modelID string) (localai.DownloadTask, error) {
+	if err := localai.RequireEnabled(); err != nil {
+		return localai.DownloadTask{}, err
+	}
 	if runtime.GOOS != "windows" {
 		return localai.DownloadTask{}, fmt.Errorf("本地推理首版仅支持 Windows")
 	}
 	return a.localAIManager().StartModelDownload(strings.TrimSpace(modelID))
 }
 
-func (a *App) PauseLocalDownload(taskID string) error  { return a.localAIManager().Pause(taskID) }
-func (a *App) ResumeLocalDownload(taskID string) error { return a.localAIManager().Resume(taskID) }
+func (a *App) PauseLocalDownload(taskID string) error { return a.localAIManager().Pause(taskID) }
+func (a *App) ResumeLocalDownload(taskID string) error {
+	if err := localai.RequireEnabled(); err != nil {
+		return err
+	}
+	return a.localAIManager().Resume(taskID)
+}
 func (a *App) CancelLocalDownload(taskID string) error { return a.localAIManager().Cancel(taskID) }
 
 func (a *App) StopLocalRuntime() error {
@@ -221,6 +232,9 @@ func (a *App) localRuntimeInstalled() bool {
 }
 
 func (a *App) registerInstalledLocalModels() error {
+	if err := localai.RequireEnabled(); err != nil {
+		return nil
+	}
 	models := a.localAIManager().InstalledModels()
 	return a.applyConfigOnly(func(c *config.Config) error {
 		if len(models) == 0 {
@@ -267,6 +281,9 @@ func (a *App) prepareLocalRuntimeProviders(ctx context.Context, cfg *config.Conf
 	}
 	if len(localIDs) == 0 {
 		return nil, nil
+	}
+	if err := localai.RequireEnabled(); err != nil {
+		return nil, err
 	}
 	if len(localIDs) > 1 {
 		return nil, fmt.Errorf("一个 Controller 不能同时常驻多个本地大模型；请将主模型、planner 和 subagent 设为同一本地模型")
@@ -344,6 +361,9 @@ func (a *App) SetComputerControlModel(modelRef string) error {
 			entry, ok := c.ResolveModel(modelRef)
 			if !ok {
 				return fmt.Errorf("unknown computer control model %q", modelRef)
+			}
+			if entry.Name == localai.ProviderID {
+				return localai.RequireEnabled()
 			}
 			modelRef = entry.Name + "/" + entry.Model
 		}

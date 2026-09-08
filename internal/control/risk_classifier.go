@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
+	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/event"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/nilutil"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/permission"
 	"github.com/nanbo0ne/O.R.C.A-for-Windows/internal/provider"
@@ -21,7 +23,10 @@ Use medium for bounded writes or process/network changes that are reversible and
 Use low for read-only or routine, narrowly-scoped, easily reversible operations.`
 
 type ProviderRiskClassifier struct {
-	prov provider.Provider
+	prov             provider.Provider
+	usageSink        event.Sink
+	pricing          *provider.Pricing
+	providerEndpoint string
 }
 
 func NewProviderRiskClassifier(prov provider.Provider) *ProviderRiskClassifier {
@@ -31,17 +36,37 @@ func NewProviderRiskClassifier(prov provider.Provider) *ProviderRiskClassifier {
 	return &ProviderRiskClassifier{prov: prov}
 }
 
+// WithTelemetry enables request-scoped risk usage receipts while preserving
+// the narrow RiskClassifier interface used by alternate reviewers.
+func (c *ProviderRiskClassifier) WithTelemetry(sink event.Sink, pricing *provider.Pricing, endpoint string) *ProviderRiskClassifier {
+	if c == nil {
+		return c
+	}
+	c.usageSink = sink
+	c.pricing = pricing
+	c.providerEndpoint = strings.TrimSpace(endpoint)
+	return c
+}
+
 func (c *ProviderRiskClassifier) Assess(ctx context.Context, input permission.RiskInput) (permission.RiskAssessment, error) {
+	return c.AssessWithParentTurn(ctx, input, "")
+}
+
+// AssessWithParentTurn attributes the isolated request to the active host turn.
+func (c *ProviderRiskClassifier) AssessWithParentTurn(ctx context.Context, input permission.RiskInput, parentTurnID string) (permission.RiskAssessment, error) {
 	if c == nil || nilutil.IsNil(c.prov) {
 		return permission.RiskAssessment{}, fmt.Errorf("risk classifier is not initialized")
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	requestID := event.NewRequestID()
+	requestPricing := c.pricing.SnapshotAt(time.Now())
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return permission.RiskAssessment{}, fmt.Errorf("encode risk input: %w", err)
 	}
 	ch, err := c.prov.Stream(ctx, provider.Request{
+		RequestID: requestID,
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: riskClassifierPrompt},
 			{Role: provider.RoleUser, Content: string(payload)},
@@ -56,6 +81,7 @@ func (c *ProviderRiskClassifier) Assess(ctx context.Context, input permission.Ri
 
 	var text strings.Builder
 	completed := false
+	var usage *provider.Usage
 read:
 	for {
 		var chunk provider.Chunk
@@ -74,6 +100,8 @@ read:
 				return permission.RiskAssessment{}, fmt.Errorf("decode risk classifier response: output exceeds limit")
 			}
 			text.WriteString(chunk.Text)
+		case provider.ChunkUsage:
+			usage = chunk.Usage
 		case provider.ChunkError:
 			if chunk.Err == nil {
 				return permission.RiskAssessment{}, fmt.Errorf("risk classifier stream failed")
@@ -82,6 +110,9 @@ read:
 		case provider.ChunkDone:
 			completed = true
 		}
+	}
+	if usage != nil && c.usageSink != nil {
+		c.usageSink.Emit(event.Event{Kind: event.Usage, ParentTurnID: strings.TrimSpace(parentTurnID), RequestID: requestID, ProviderEndpoint: c.providerEndpoint, Usage: usage, Pricing: requestPricing})
 	}
 	if !completed {
 		return permission.RiskAssessment{}, fmt.Errorf("decode risk classifier response: incomplete stream")

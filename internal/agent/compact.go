@@ -509,7 +509,17 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 	if strings.TrimSpace(instructions) != "" {
 		sys += "\n\nAdditional focus for this CONTEXT CHECKPOINT (prioritize keeping this):\n" + strings.TrimSpace(instructions)
 	}
+	requestID := event.NewRequestID()
+	requestPricing := a.pricing.SnapshotAt(time.Now())
+	var usage *provider.Usage
+	defer func() {
+		if usageHasTokens(usage) {
+			parentTurnID, _ := ParentTurn(ctx)
+			a.sink.Emit(event.Event{Kind: event.Usage, ParentTurnID: parentTurnID, RequestID: requestID, ProviderEndpoint: a.providerEndpoint, Usage: usage, Pricing: requestPricing})
+		}
+	}()
 	ch, err := a.prov.Stream(ctx, provider.Request{
+		RequestID: requestID,
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: sys},
 			{Role: provider.RoleUser, Content: renderTranscript(region)},
@@ -525,6 +535,8 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 		switch chunk.Type {
 		case provider.ChunkText:
 			b.WriteString(chunk.Text)
+		case provider.ChunkUsage:
+			usage = chunk.Usage
 		case provider.ChunkError:
 			return "", chunk.Err
 		}

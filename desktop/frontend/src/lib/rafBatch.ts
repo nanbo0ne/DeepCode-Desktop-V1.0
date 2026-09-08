@@ -12,9 +12,17 @@ interface BatchHandle<T> {
 export function createRafBatch<T>(flush: Flush<T>): BatchHandle<T> {
   let buffer: T[] = [];
   let scheduled: number | null = null;
+  let deadline: ReturnType<typeof setTimeout> | null = null;
+
+  const unschedule = () => {
+    if (scheduled !== null && typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(scheduled);
+    if (deadline !== null) clearTimeout(deadline);
+    scheduled = null;
+    deadline = null;
+  };
 
   const run = () => {
-    scheduled = null;
+    unschedule();
     // Snapshot + clear before flushing so a re-entrant push() lands next frame.
     const out = buffer;
     buffer = [];
@@ -24,21 +32,14 @@ export function createRafBatch<T>(flush: Flush<T>): BatchHandle<T> {
   const handle: BatchHandle<T> = {
     push(item: T) {
       buffer.push(item);
-      if (scheduled === null && typeof requestAnimationFrame !== "undefined") {
-        scheduled = requestAnimationFrame(run);
-      } else if (scheduled === null) {
-        // No rAF (SSR / JSDOM) — fall back to a microtask.
-        scheduled = 1;
-        Promise.resolve().then(run);
+      if (deadline === null) {
+        // WebViews may delay rAF while occluded. Do not retain deltas until a
+        // final Message event just because no animation frame was delivered.
+        deadline = setTimeout(run, 50);
+        if (typeof requestAnimationFrame !== "undefined") scheduled = requestAnimationFrame(run);
       }
     },
     drain() {
-      if (scheduled !== null) {
-        if (typeof cancelAnimationFrame !== "undefined" && scheduled !== 1) {
-          cancelAnimationFrame(scheduled);
-        }
-        scheduled = null;
-      }
       run();
     },
     size() {
