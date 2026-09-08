@@ -68,6 +68,13 @@ func consumeRestartWaitArg(args []string) ([]string, time.Duration) {
 	return clean, wait
 }
 
+func desktopWindowTitle(goos string) string {
+	if goos == "windows" {
+		return product.WindowsName
+	}
+	return product.Name
+}
+
 func desktopFrameless(goos, style string) bool {
 	return goos == "windows" && !strings.EqualFold(strings.TrimSpace(style), config.DesktopUIStyleClassic)
 }
@@ -114,7 +121,7 @@ func main() {
 	}
 
 	err := wails.Run(&options.App{
-		Title:     product.WindowsName,
+		Title:     desktopWindowTitle(runtime.GOOS),
 		Width:     width,
 		Height:    height,
 		MinWidth:  760,

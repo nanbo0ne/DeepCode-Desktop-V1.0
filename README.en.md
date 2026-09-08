@@ -13,7 +13,7 @@ Use the [Release page assets](https://github.com/nanbo0ne/O.R.C.A-for-Windows/re
 | Platform | Package | Notes |
 | --- | --- | --- |
 | Windows x64 | [Installer](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [Portable ZIP](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64.zip) | Cloud features and optional local AI; Computer Use temporarily disabled |
-| macOS Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-macos-universal.dmg) | Intel and Apple Silicon; local AI is platform-limited, Computer Use temporarily disabled |
+| macOS 12+ Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-macos-universal.dmg) | Intel and Apple Silicon; local AI is platform-limited, Computer Use temporarily disabled |
 | Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu; requires a matching WebKitGTK runtime; Computer Use temporarily disabled |
 
 - [Open the 3.0.3 release page, checksums, and final notes](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3)

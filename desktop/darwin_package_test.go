@@ -62,7 +62,7 @@ func TestDarwinBundleMetadataEscapesXML(t *testing.T) {
 					content.Write(text)
 				}
 			}
-			for _, value := range []string{want, project.Info.Copyright, "A & B <file>", project.Info.ProductVersion, "O.R.C.A."} {
+			for _, value := range []string{want, project.Info.Copyright, "A & B <file>", project.Info.ProductVersion, "O.R.C.A.", "12.0"} {
 				if !strings.Contains(content.String(), value) {
 					t.Fatalf("metadata did not survive XML round trip: %q", value)
 				}
@@ -79,6 +79,17 @@ func TestDarwinPackagingVerifiesMountedBundle(t *testing.T) {
 	for _, check := range []string{`plutil -lint "$app/Contents/Info.plist"`, `codesign --verify --deep --strict "$app"`, `bash "$ROOT/scripts/test-desktop-dmg.sh" "$dmg" "$numver" "$arch"`} {
 		if !strings.Contains(string(source), check) {
 			t.Errorf("missing macOS package validation: %s", check)
+		}
+	}
+	if strings.Contains(string(source), `"$dmg" "$dmgsrc" || true`) || !strings.Contains(string(source), `dmg="$staging/${ARTIFACT_BASE}-macos-universal.dmg"`) {
+		t.Fatal("DMG creation must use fresh staging and propagate failures")
+	}
+}
+
+func TestDesktopWindowTitleMatchesPlatform(t *testing.T) {
+	for goos, want := range map[string]string{"windows": "O.R.C.A. for Windows", "darwin": "O.R.C.A.", "linux": "O.R.C.A."} {
+		if got := desktopWindowTitle(goos); got != want {
+			t.Errorf("%s title = %q, want %q", goos, got, want)
 		}
 	}
 }

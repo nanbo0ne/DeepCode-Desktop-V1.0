@@ -13,8 +13,7 @@
 #            O.R.C.A-linux-<arch>.tar.gz                     (auxiliary bare binary archive)
 #
 # Usage: scripts/desktop-build.sh <os/arch> <version> [channel]
-#   e.g. scripts/desktop-build.sh darwin/arm64 v1.1.0
-#        scripts/desktop-build.sh darwin/arm64 v1.5.0-canary.20260608.42 canary
+#   e.g. scripts/desktop-build.sh darwin/universal v3.0.3
 set -euo pipefail
 
 PLATFORM="${1:?usage: desktop-build.sh <os/arch> <version> [channel]}"
@@ -23,6 +22,10 @@ CHANNEL="${3:-stable}"
 
 os="${PLATFORM%/*}"
 arch="${PLATFORM#*/}"
+if [ "$os" = darwin ] && [ "$arch" != universal ]; then
+	echo 'Release DMGs require darwin/universal (both updater architectures).' >&2
+	exit 1
+fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APPNAME="O.R.C.A"                  # user-facing app/bundle name
@@ -332,11 +335,11 @@ darwin)
 	fi
 	# A drag-to-Applications .dmg for the manifest and first-time human download.
 	# Named -universal so it is one artifact for both darwin manifest keys. The .zip
-	# remains an auxiliary app archive. create-dmg can exit nonzero
-	# while still writing the image, so gate on the file existing, not the exit code.
+	# remains an auxiliary app archive. Use a fresh output path so a failed
+	# same-version rebuild can never reuse a previously signed image.
 	dmgsrc=$(mktemp -d)
 	cp -R "$app" "$dmgsrc/${APPNAME}.app"
-	dmg="$ROOT/dist/${ARTIFACT_BASE}-macos-universal.dmg"
+	dmg="$staging/${ARTIFACT_BASE}-macos-universal.dmg"
 	create-dmg \
 		--volname "$APPNAME" \
 		--window-size 540 380 \
@@ -344,7 +347,7 @@ darwin)
 		--icon "${APPNAME}.app" 150 190 \
 		--app-drop-link 390 190 \
 		--no-internet-enable \
-		"$dmg" "$dmgsrc" || true
+		"$dmg" "$dmgsrc"
 	[ -f "$dmg" ] || { echo "create-dmg did not produce $dmg" >&2; exit 1; }
 	# The .dmg is a separately-downloaded artifact, so sign + notarize + staple the
 	# disk image itself too — the stapled .app inside isn't enough for the image.
@@ -356,7 +359,8 @@ darwin)
 			--issuer "$APPLE_API_ISSUER_ID" --wait
 		xcrun stapler staple "$dmg"
 	fi
-	bash "$ROOT/scripts/test-desktop-dmg.sh" "$dmg" "$numver" "$arch"
+	bash "$ROOT/scripts/test-desktop-dmg.sh" "$dmg" "$numver" "$arch" "$app/Contents/MacOS/Orca"
+	cp "$dmg" "$ROOT/dist/${ARTIFACT_BASE}-macos-universal.dmg"
 	rm -rf "$staging" "$dmgsrc"
 	;;
 windows)

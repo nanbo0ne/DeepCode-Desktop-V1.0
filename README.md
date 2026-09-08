@@ -13,7 +13,7 @@
 | 平台 | 包 | 说明 |
 | --- | --- | --- |
 | Windows x64 | [安装器](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64-installer.exe) · [便携版](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-for-Windows-windows-amd64.zip) | 云端功能与可选本地 AI；电脑操控暂时禁用 |
-| macOS Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-macos-universal.dmg) | Intel 与 Apple Silicon；本地 AI 受平台限制，电脑操控暂时禁用 |
+| macOS 12+ Universal | [DMG](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-macos-universal.dmg) | Intel 与 Apple Silicon；本地 AI 受平台限制，电脑操控暂时禁用 |
 | Linux x64 | [DEB](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/download/desktop-v3.0.3/O.R.C.A-linux-amd64.deb) | Debian / Ubuntu；需要匹配的 WebKitGTK 运行库，电脑操控暂时禁用 |
 
 - [查看 3.0.3 发布页、校验文件与正式说明](https://github.com/nanbo0ne/O.R.C.A-for-Windows/releases/tag/desktop-v3.0.3)

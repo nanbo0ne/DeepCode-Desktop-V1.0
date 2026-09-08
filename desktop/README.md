@@ -61,7 +61,7 @@ wails build
 go test ./...
 ```
 
-Windows 安装器还需要 NSIS。Windows 使用 Edge WebView2 Runtime；macOS 使用系统 WebKit；Linux 需要 GTK 和 WebKitGTK 开发/运行库。发行版使用 WebKitGTK 4.1 时，按本机 Wails/发行版配置使用 `-tags webkit2_41`：
+Windows 安装器还需要 NSIS。Windows 使用 Edge WebView2 Runtime；macOS 12 或更新版本使用系统 WebKit（[Go 工具链最低要求](https://go.dev/doc/go1.25#darwin)）；Linux 需要 GTK 和 WebKitGTK 开发/运行库。发行版使用 WebKitGTK 4.1 时，按本机 Wails/发行版配置使用 `-tags webkit2_41`：
 
 ```sh
 wails build -tags webkit2_41
@@ -170,7 +170,7 @@ Run kernel tests from the repository root:
 go test ./...
 ```
 
-The Windows installer also needs NSIS. Windows uses Edge WebView2 Runtime; macOS uses system WebKit; Linux needs GTK and WebKitGTK development/runtime libraries. On distributions using WebKitGTK 4.1, use the local Wails/distribution setting and, where required, `-tags webkit2_41`:
+The Windows installer also needs NSIS. Windows uses Edge WebView2 Runtime; macOS 12 or later uses system WebKit (the [Go toolchain minimum](https://go.dev/doc/go1.25#darwin)); Linux needs GTK and WebKitGTK development/runtime libraries. On distributions using WebKitGTK 4.1, use the local Wails/distribution setting and, where required, `-tags webkit2_41`:
 
 ```sh
 wails build -tags webkit2_41

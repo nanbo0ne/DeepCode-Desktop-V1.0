@@ -5,6 +5,7 @@ set -euo pipefail
 dmg="${1:?DMG path required}"
 version="${2:?numeric version required}"
 arch="${3:?architecture required}"
+expected_binary="${4:-}"
 [ "$(uname -s)" = Darwin ] || { echo 'DMG verification requires macOS' >&2; exit 1; }
 hdiutil verify "$dmg"
 mountpoint="$(mktemp -d "${TMPDIR:-/tmp}/orca-dmg-check.XXXXXX")"
@@ -28,6 +29,9 @@ plutil -lint "$plist"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$version" ]
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = Orca ]
 [ -x "$app/Contents/MacOS/Orca" ]
+if [ -n "$expected_binary" ]; then
+	cmp "$expected_binary" "$app/Contents/MacOS/Orca"
+fi
 [ -s "$app/Contents/Resources/iconfile.icns" ]
 [ -L "$mountpoint/Applications" ]
 [ "$(readlink "$mountpoint/Applications")" = /Applications ]
