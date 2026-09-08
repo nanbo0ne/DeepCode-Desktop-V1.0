@@ -36,9 +36,9 @@ fi
 [ -L "$mountpoint/Applications" ]
 [ "$(readlink "$mountpoint/Applications")" = /Applications ]
 case "$arch" in
-	universal) lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/Orca" ;;
-	amd64) lipo -verify_arch x86_64 "$app/Contents/MacOS/Orca" ;;
-	arm64) lipo -verify_arch arm64 "$app/Contents/MacOS/Orca" ;;
+	universal) lipo "$app/Contents/MacOS/Orca" -verify_arch x86_64 arm64 ;;
+	amd64) lipo "$app/Contents/MacOS/Orca" -verify_arch x86_64 ;;
+	arm64) lipo "$app/Contents/MacOS/Orca" -verify_arch arm64 ;;
 	*) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
 esac
 codesign --verify --deep --strict "$app"
