@@ -18,11 +18,11 @@ func TestReleaseChecksumsCoverPayloadAndExcludeManifest(t *testing.T) {
 	dir := t.TempDir()
 	want := ""
 	for _, name := range []string{"Orca installer.exe", "Orca.zip"} {
-		body := []byte("payload for " + name)
+		body := []byte("payload for " + name + "\x00\r\n\xff")
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0600); err != nil {
 			t.Fatal(err)
 		}
-		want += fmt.Sprintf("%x  %s\n", sha256.Sum256(body), name)
+		want += fmt.Sprintf("%x *%s\n", sha256.Sum256(body), name)
 	}
 	for range 2 {
 		cmd := exec.Command(bash, "../scripts/checksum-desktop-release.sh", filepath.ToSlash(dir))
@@ -47,6 +47,18 @@ func TestReleaseChecksumsAreGeneratedBeforePublication(t *testing.T) {
 	manifest := strings.Index(workflow, "- name: Generate manifest")
 	if checksums <= manifest || publish <= checksums {
 		t.Fatal("checksums must include the optional signed manifest and precede publication")
+	}
+}
+
+func TestReleaseChecksumsSupportNativeMacTool(t *testing.T) {
+	body, err := os.ReadFile("../scripts/checksum-desktop-release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"command -v sha256sum", "command -v shasum", "hash=(shasum -a 256)", `"${hash[@]}" --check SHA256SUMS.txt`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("portable checksum generation is missing %q", want)
+		}
 	}
 }
 

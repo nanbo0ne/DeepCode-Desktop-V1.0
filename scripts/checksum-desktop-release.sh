@@ -11,5 +11,13 @@ if ((${#files[@]} == 0)); then
   echo "No release files to checksum" >&2
   exit 1
 fi
-sha256sum -- "${files[@]}" > SHA256SUMS.txt
-sha256sum --check SHA256SUMS.txt
+if command -v sha256sum >/dev/null 2>&1; then
+	hash=(sha256sum)
+elif command -v shasum >/dev/null 2>&1; then
+	hash=(shasum -a 256)
+else
+	echo "SHA-256 verification requires sha256sum or shasum" >&2
+	exit 1
+fi
+"${hash[@]}" --binary -- "${files[@]}" > SHA256SUMS.txt
+"${hash[@]}" --check SHA256SUMS.txt
